@@ -1,0 +1,4 @@
+interface:
+  display_name: "LayoutLingua PDF Layout-Preserving Translator"
+  short_description: "Translate PDFs into multiple languages while preserving formulas, tables, and layouts"
+  default_prompt: "Use $layout-lingua to translate this PDF."

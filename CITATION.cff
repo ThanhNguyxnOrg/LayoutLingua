@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+title: LayoutLingua
+message: >-
+  If you use this software, please cite it as below.
+type: software
+authors:
+  - name: ThanhNguyxnOrg
+    website: 'https://github.com/ThanhNguyxnOrg'
+repository-code: 'https://github.com/ThanhNguyxnOrg/LayoutLingua'
+abstract: >-
+  Open-source multi-platform application and CLI tool that translates PDF documents
+  while preserving layout, mathematical formulas, tables, and typography formatting.
+keywords:
+  - pdf
+  - translation
+  - layout-preservation
+  - document-translation
+  - multilingual
+license: AGPL-3.0

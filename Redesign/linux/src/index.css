@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Cantarell:ital,wght@0,400;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: "Cantarell", "Inter", system-ui, sans-serif;
+
+  --color-adw-window: #1e1e1e;
+  --color-adw-headerbar: #2e2e2e;
+  --color-adw-card: #262626;
+  --color-adw-card-hover: #2c2c2c;
+  --color-adw-border: #303030;
+  --color-adw-accent: #3584e4;
+  --color-adw-accent-hover: #4a90e8;
+  --color-adw-fg: #ffffff;
+  --color-adw-dim: #9a9a9a;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Hide scrollbars until scrolling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: #4a4a4a transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+*:hover::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+}
+
+@keyframes adw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

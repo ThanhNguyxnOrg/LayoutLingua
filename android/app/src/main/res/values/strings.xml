@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LayoutLingua</string>
+    <string name="notification_channel_name">Translation Progress</string>
+    <string name="notification_channel_description">Shows progress when translating PDF documents.</string>
+    <string name="notification_translating_title">Translating PDF</string>
+    <string name="notification_cancel">Cancel</string>
+</resources>
