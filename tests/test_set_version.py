@@ -21,10 +21,14 @@ class SetVersionTests(unittest.TestCase):
             gradle_kts = android_dir / "build.gradle.kts"
             gradle_kts.write_text('val appVersionName = "0.1.0"\n', encoding="utf-8")
 
+            changelog = root / "CHANGELOG.md"
+            changelog.write_text('<img src="https://img.shields.io/badge/Version-v0.1.0-blue?style=flat-square" alt="Version 0.1.0">\n', encoding="utf-8")
+
             ver = set_version_in_root("v1.2.3", root=root)
             self.assertEqual(ver, "1.2.3")
             self.assertIn('APP_VERSION = "1.2.3"', update_py.read_text(encoding="utf-8"))
             self.assertIn('val appVersionName = "1.2.3"', gradle_kts.read_text(encoding="utf-8"))
+            self.assertIn('Version-v1.2.3-blue', changelog.read_text(encoding="utf-8"))
 
     def test_invalid_version_raises(self):
         with self.assertRaises(ValueError):

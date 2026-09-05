@@ -34,6 +34,16 @@ def set_version_in_root(version: str, root: Path | None = None) -> str:
             gradle_kts.write_text(new_content, encoding="utf-8")
             print(f"[OK] android/app/build.gradle.kts -> appVersionName = \"{clean}\"")
 
+    # 3. CHANGELOG.md badge
+    changelog = target_root / "CHANGELOG.md"
+    if changelog.is_file():
+        content = changelog.read_text(encoding="utf-8")
+        new_content, count1 = re.subn(r'img\.shields\.io/badge/Version-v[0-9.]+-blue', f'img.shields.io/badge/Version-v{clean}-blue', content)
+        new_content, count2 = re.subn(r'alt="Version [0-9.]+"', f'alt="Version {clean}"', new_content)
+        if count1 > 0 or count2 > 0:
+            changelog.write_text(new_content, encoding="utf-8")
+            print(f"[OK] CHANGELOG.md -> Version badge = \"v{clean}\"")
+
     return clean
 
 
