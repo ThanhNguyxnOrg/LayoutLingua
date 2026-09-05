@@ -126,15 +126,21 @@ cd android
 
 LayoutLingua follows the [Agent Skills](https://agentskills.io/) specification and integrates directly into AI coding tools (Claude Code, Codex, GitHub Copilot, Antigravity).
 
-### Install Globally
+### Install
+
+The `skills` CLI pulls directly from GitHub repositories or local directories (no npm publishing required):
 
 ```powershell
+# Install directly from GitHub:
 npx skills add ThanhNguyxnOrg/LayoutLingua -g --all
+
+# Or install from a local clone (offline / dev):
+npx skills add . -g --all
 ```
 
 ### Run from Prompts
 
-In your agent terminal:
+In your agent session or terminal:
 
 ```text
 /layout-lingua translate document.pdf into English

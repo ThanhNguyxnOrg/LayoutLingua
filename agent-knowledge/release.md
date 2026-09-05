@@ -38,11 +38,12 @@ an interface, not just a download:
 2. Push, create/update a PR, review exact head SHA, and merge to `main`.
 3. Update local `main` with `--ff-only` and verify a clean worktree.
 4. Create and push the matching annotated `v*` tag.
-5. Wait for `.github/workflows/release.yml` to finish all jobs:
-   Windows, macOS Apple Silicon, macOS Intel, then publish.
-6. Verify the release is neither draft nor prerelease and contains exactly:
-   `LayoutLingua-windows.zip`, `LayoutLingua-macos-apple-silicon.dmg`, and
-   `LayoutLingua-macos-intel.dmg`.
+5. Wait for `.github/workflows/release.yml` to finish all parallel jobs:
+   Windows, macOS (Apple Silicon & Intel), Linux, and Android.
+6. Verify the release contains all platform binaries:
+   `LayoutLingua-windows.zip`, `LayoutLingua-macos-apple-silicon.dmg`,
+   `LayoutLingua-macos-intel.dmg`, `LayoutLingua-linux-x86_64.tar.gz`,
+   and Android APK.
 7. Download artifacts and compare local SHA-256 values with GitHub digests.
 
 `.github/workflows/macos-artifacts.yml` is an on-demand/branch build and does

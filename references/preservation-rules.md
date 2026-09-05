@@ -28,8 +28,9 @@ The bundled core translates ordinary text while retaining document structures wh
 
 These classifications preserve the complete page layout instead of reflowing numbers into translated prose.
 
-## Vietnamese typesetting
+## Multi-lingual & Vietnamese typesetting
 
+- Multi-lingual font routing automatically maps CJK (Chinese, Japanese, Korean) to `SourceHanSerif` or system CJK fonts, Semitic/Cyrillic/Greek/Thai/Hindi to Google Noto typefaces, and Latin/European alphabets to high-legibility Unicode typefaces.
 - Vietnamese text uses a `1.2` line-height multiplier and is never typeset
   tighter than `1.10`. That floor is the measured ink of the output font:
   stacked tone marks reach `0.890` em above the baseline and dot-below vowels

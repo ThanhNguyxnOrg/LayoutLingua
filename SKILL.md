@@ -36,7 +36,7 @@ Default to Google. Offer handoff when the user asks for higher quality, rejects 
 
 - Use the bundled `pdf2zh/` core. Never substitute the PyPI `pdf2zh` package; the runner checks version `1.9.11` and preservation ruleset `code4life-preservation-v1` and refuses an external core.
 - Google mode sends extracted document text to Google. Tell the user before processing sensitive material and obtain explicit confirmation unless their request already authorizes that disclosure. Handoff mode does not contact Google.
-- Supported targets are the Latin-script codes enforced by `scripts/translate_pdf.py`. CJK, right-to-left, Thai, Devanagari, and other complex-shaping targets are rejected because the bundled font and layout engine cannot render them reliably.
+- Supported targets are the 48 language codes enforced by `scripts/translate_pdf.py` (including Latin alphabets, Vietnamese, CJK Chinese/Japanese/Korean, Cyrillic Russian/Ukrainian/Bulgarian, Semitic Arabic/Hebrew, Greek, Thai, and Hindi). Font routing automatically resolves to Google Noto, SourceHanSerif, and high-legibility Unicode typefaces.
 - There is no OCR. If a source page is image-only, report that OCR is required instead of claiming it was translated.
 - Text inside detected tables, figures, contents pages, indexes, symbol lists, or references may intentionally remain in the source language. Report material untranslated regions as partial translation.
 - Preserve the source. Write results to a separate output directory. Do not pass `--overwrite` without explicit replacement authorization.
