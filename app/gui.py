@@ -336,24 +336,20 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         title_box = ctk.CTkFrame(header, fg_color="transparent")
         title_box.grid(row=0, column=1, rowspan=2, sticky="w")
-        
-        # Micro-eyebrow from taste skill:
-        ctk.CTkLabel(
-            title_box, text="PRECISION DOCUMENT TRANSLATION · LOCAL ENGINE",
-            font=ctk.CTkFont(self.mono_font, size=9, weight="bold"),
-            text_color=("#0284C7", "#00F2FE"),
-        ).pack(anchor="w")
+
+        title_row = ctk.CTkFrame(title_box, fg_color="transparent")
+        title_row.pack(anchor="w")
 
         ctk.CTkLabel(
-            title_box, text="LayoutLingua",
-            font=ctk.CTkFont(self.ui_font, size=22, weight="bold"),
+            title_row, text="LayoutLingua",
+            font=ctk.CTkFont(self.ui_font, size=20, weight="bold"),
             text_color=("gray10", "#F8FAFC"),
-        ).pack(anchor="w")
+        ).pack(side="left")
 
         ctk.CTkLabel(
-            title_box, text="Preserve tables, math formulas, and typography geometry",
+            title_box, text="High-precision document translation with layout preservation",
             font=ctk.CTkFont(self.ui_font, size=11), text_color=MUTED,
-        ).pack(anchor="w")
+        ).pack(anchor="w", pady=(1, 0))
 
         right_box = ctk.CTkFrame(header, fg_color="transparent")
         right_box.grid(row=0, column=2, rowspan=2, sticky="e")
@@ -367,8 +363,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.update_link.pack_forget()
 
         ctk.CTkLabel(
-            right_box, text=f"v{APP_VERSION} · Core v1.9.11", anchor="e",
-            font=ctk.CTkFont(self.mono_font, size=10), text_color=MUTED,
+            right_box, text=f"v{APP_VERSION} (Build 1.9.11)", anchor="e",
+            font=ctk.CTkFont(self.mono_font, size=11), text_color=MUTED,
         ).pack(anchor="e")
 
     def _build_dropzone(self) -> None:
@@ -396,8 +392,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.dropzone_text.grid(row=1, column=0, pady=(2, 2))
 
         self.dropzone_subtext = ctk.CTkLabel(
-            self.dropzone, text="FORMULAS PRESERVED · TABLE GRID LOCKED · VECTOR FONTS",
-            font=ctk.CTkFont(self.mono_font, size=9, weight="bold"),
+            self.dropzone, text="Tables, equations, and page geometry are preserved automatically",
+            font=ctk.CTkFont(self.ui_font, size=11),
             text_color=MUTED,
         )
         self.dropzone_subtext.grid(row=2, column=0, pady=(0, PAD + 2))
