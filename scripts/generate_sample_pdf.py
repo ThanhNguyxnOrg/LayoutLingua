@@ -85,7 +85,7 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     p1.insert_text((50, 125), "1 Department of Computer Science, Cambridge  |  2 Bell Laboratories  |  3 Institute for Advanced Study", fontsize=8, fontname="helv", color=c_source)
 
     # Abstract Box
-    p1.draw_rect(fitz.Rect(50, 140, 545, 225), color=(0.75, 0.80, 0.88), fill=(0.97, 0.98, 1.0), width=0.8)
+    p1.draw_rect(fitz.Rect(50, 140, 545, 238), color=(0.75, 0.80, 0.88), fill=(0.97, 0.98, 1.0), width=0.8)
     p1.insert_text((65, 158), "Abstract", fontsize=11, fontname="hebo", color=c_primary)
     abstract_text = (
         "Document layout preservation remains one of the foundational challenges in neural machine translation. "
@@ -94,37 +94,37 @@ def generate_benchmark_pdf(output_path: Path) -> None:
         "decoupled semantic segmentation and geometric preservation, guaranteeing zero formula deformation while "
         "maintaining full typographic ink metrics across 48 world languages."
     )
-    rect_abs = fitz.Rect(65, 168, 530, 218)
-    p1.insert_textbox(rect_abs, abstract_text, fontsize=9, fontname="helv", color=c_body, lineheight=1.2)
+    rect_abs = fitz.Rect(65, 166, 530, 232)
+    p1.insert_textbox(rect_abs, abstract_text, fontsize=8.5, fontname="helv", color=c_body, lineheight=1.2)
 
     # Section 1
-    p1.insert_text((50, 252), "1. Introduction and Mathematical Formulation", fontsize=12, fontname="hebo", color=c_primary)
+    p1.insert_text((50, 260), "1. Introduction and Mathematical Formulation", fontsize=12, fontname="hebo", color=c_primary)
     intro_p1 = (
         "Let a technical manuscript be formalized as a set of continuous spatial coordinates X in R^2 and a discrete "
         "alphabet sequence Y. The objective of layout-preserving translation is to identify the non-prose invariant "
         "operator manifold Phi(X) such that textual elements undergo linguistic translation without altering mathematical bounds."
     )
-    p1.insert_textbox(fitz.Rect(50, 260, 545, 305), intro_p1, fontsize=9.5, fontname="helv", color=c_body, lineheight=1.25)
+    p1.insert_textbox(fitz.Rect(50, 270, 545, 318), intro_p1, fontsize=9.0, fontname="helv", color=c_body, lineheight=1.25)
 
     # Equation 1: Loss function
-    p1.insert_text((50, 325), "Equation 1 (Composite Structural Loss):", fontsize=9.5, fontname="hebo", color=c_primary)
-    p1.draw_rect(fitz.Rect(50, 332, 545, 370), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
-    p1.insert_text((75, 355), "L_total = (1 / N) * SUM_{i=1}^N || y_i - y_hat_i ||^2_2 + lambda * SUM_{j=1}^M | theta_j |", fontsize=10, fontname="courier", color=c_math)
-    p1.insert_text((495, 355), "(1)", fontsize=9.5, fontname="helv", color=c_source)
-    p1.insert_text((50, 380), "[Source: Goodfellow, Bengio, Courville. Deep Learning. MIT Press, 2016, Chapter 6, p. 172]", fontsize=8, fontname="heit", color=c_source)
+    p1.insert_text((50, 335), "Equation 1 (Composite Structural Loss):", fontsize=9.5, fontname="hebo", color=c_primary)
+    p1.draw_rect(fitz.Rect(50, 342, 545, 380), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
+    p1.insert_text((70, 365), "L_total = (1/N) * sum_{i=1}^N ||y_i - y_hat_i||^2 + lambda * sum_{j=1}^M |theta_j|", fontsize=8.5, fontname="courier", color=c_math)
+    p1.insert_text((510, 365), "(1)", fontsize=9.5, fontname="helv", color=c_source)
+    p1.insert_text((50, 390), "[Source: Goodfellow, Bengio, Courville. Deep Learning. MIT Press, 2016, Chapter 6, p. 172]", fontsize=8, fontname="heit", color=c_source)
 
     # Equation 2: Scaled Dot-Product Attention
-    p1.insert_text((50, 405), "Equation 2 (Scaled Dot-Product Self-Attention):", fontsize=9.5, fontname="hebo", color=c_primary)
-    p1.draw_rect(fitz.Rect(50, 412, 545, 450), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
-    p1.insert_text((75, 435), "Attention(Q, K, V) = softmax( (Q * K^T) / sqrt(d_k) ) * V", fontsize=10, fontname="courier", color=c_math)
-    p1.insert_text((495, 435), "(2)", fontsize=9.5, fontname="helv", color=c_source)
-    p1.insert_text((50, 460), "[Source: Vaswani et al. 'Attention Is All You Need', NeurIPS 2017, Section 3.2.1]", fontsize=8, fontname="heit", color=c_source)
+    p1.insert_text((50, 415), "Equation 2 (Scaled Dot-Product Self-Attention):", fontsize=9.5, fontname="hebo", color=c_primary)
+    p1.draw_rect(fitz.Rect(50, 422, 545, 460), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
+    p1.insert_text((70, 445), "Attention(Q, K, V) = softmax( (Q * K^T) / sqrt(d_k) ) * V", fontsize=9.0, fontname="courier", color=c_math)
+    p1.insert_text((510, 445), "(2)", fontsize=9.5, fontname="helv", color=c_source)
+    p1.insert_text((50, 470), "[Source: Vaswani et al. 'Attention Is All You Need', NeurIPS 2017, Section 3.2.1]", fontsize=8, fontname="heit", color=c_source)
 
     # Diagram / Figure 1
-    p1.insert_text((50, 485), "2. Architectural Layout Routing", fontsize=12, fontname="hebo", color=c_primary)
+    p1.insert_text((50, 495), "2. Architectural Layout Routing", fontsize=12, fontname="hebo", color=c_primary)
     img_bytes = create_sample_diagram()
-    p1.insert_image(fitz.Rect(65, 498, 530, 620), stream=img_bytes)
-    p1.insert_text((70, 634), "Figure 1: Multimodal cross-attention architecture separating semantic text from formula coordinate vectors.", fontsize=8.5, fontname="heit", color=c_source)
+    p1.insert_image(fitz.Rect(65, 508, 530, 630), stream=img_bytes)
+    p1.insert_text((70, 644), "Figure 1: Multimodal cross-attention architecture separating semantic text from formula coordinate vectors.", fontsize=8.5, fontname="heit", color=c_source)
 
     # Footer p1
     p1.draw_line((50, 800), (545, 800), color=c_line, width=0.5)
@@ -148,9 +148,9 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     # Maxwell's Equations
     p2.insert_text((50, 135), "Equation 3 (Maxwell's Differential Electrodynamic System):", fontsize=9.5, fontname="hebo", color=c_primary)
     p2.draw_rect(fitz.Rect(50, 142, 545, 195), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
-    p2.insert_text((75, 162), "div E = rho / epsilon_0,        div B = 0", fontsize=10, fontname="courier", color=c_math)
-    p2.insert_text((75, 182), "curl E = - d B / d t,           curl B = mu_0 * J + mu_0 * epsilon_0 * (d E / d t)", fontsize=10, fontname="courier", color=c_math)
-    p2.insert_text((495, 172), "(3)", fontsize=9.5, fontname="helv", color=c_source)
+    p2.insert_text((70, 162), "div E = rho / epsilon_0,              div B = 0", fontsize=9.0, fontname="courier", color=c_math)
+    p2.insert_text((70, 182), "curl E = - dB / dt,                   curl B = mu_0 ( J + epsilon_0 * dE/dt )", fontsize=8.5, fontname="courier", color=c_math)
+    p2.insert_text((505, 172), "(3)", fontsize=9.5, fontname="helv", color=c_source)
     p2.insert_text((50, 205), "[Source: Griffiths, D. J. Introduction to Electrodynamics, 4th ed. Cambridge University Press, 2017, p. 338]", fontsize=8, fontname="heit", color=c_source)
 
     # Stokes' Theorem

@@ -4,24 +4,27 @@ description: Translate local, text-based PDFs into any supported language while 
 license: AGPL-3.0-only
 ---
 
-# LayoutLingua
+# 🤖 LayoutLingua Agent Skill
 
-Translate a PDF with the bundled LayoutLingua preservation engine. Keep the source file unchanged and produce a separate PDF with the same page structure.
+<p align="left">
+  <img src="https://img.shields.io/badge/Agent_Skills-Specification_1.0-8A2BE2?style=flat-square" alt="Agent Skills">
+  <img src="https://img.shields.io/badge/Engine-PyMuPDF_Preservation-blue?style=flat-square" alt="Preservation">
+  <img src="https://img.shields.io/badge/Languages-48_Supported-2ea44f?style=flat-square" alt="48 Languages">
+  <img src="https://img.shields.io/badge/License-AGPL--3.0-informational?style=flat-square" alt="AGPL-3.0">
+</p>
 
-When this skill runs inside the repository, first read
-[`agent-knowledge/index.md`](agent-knowledge/index.md). For preservation or
-layout work, load its PDF engine, regression, and validation routes. These are
-the shared project instructions for Codex and Claude; do not duplicate them in
-this entrypoint.
+Translate local, text-based PDFs into any supported language while preserving the original layout, formulas, tables, and figures.
 
-## Resolve the skill root
+> [!NOTE]
+> When this skill runs inside the repository, first read [`agent-knowledge/index.md`](agent-knowledge/index.md). For preservation or layout work, load its PDF engine, regression, and validation routes.
+
+## 🧭 Resolve the Skill Root
 
 This skill may be installed globally while the user's files live elsewhere. Resolve the absolute directory containing this `SKILL.md` before running anything. Call its scripts and dependency files by absolute path; do not assume the current working directory is the skill directory.
 
 Use the interpreter inside `<skill-root>/.venv`:
-
-- Windows: `<skill-root>\.venv\Scripts\python.exe`
-- macOS/Linux: `<skill-root>/.venv/bin/python`
+- 🪟 Windows: `<skill-root>\.venv\Scripts\python.exe`
+- 🍎/🐧 macOS/Linux: `<skill-root>/.venv/bin/python`
 
 ## Choose a mode
 

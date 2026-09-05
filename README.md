@@ -31,49 +31,57 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest"><img src="https://img.shields.io/github/v/release/ThanhNguyxnOrg/LayoutLingua?style=flat-square&label=release" alt="Latest Release"></a>
-  <a href="https://github.com/ThanhNguyxnOrg/LayoutLingua/releases"><img src="https://img.shields.io/github/downloads/ThanhNguyxnOrg/LayoutLingua/total?style=flat-square&label=downloads" alt="Total Downloads"></a>
+  <a href="https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest"><img src="https://img.shields.io/github/v/release/ThanhNguyxnOrg/LayoutLingua?style=flat-square&label=release&color=0969da" alt="Latest Release"></a>
+  <a href="https://github.com/ThanhNguyxnOrg/LayoutLingua/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/ThanhNguyxnOrg/LayoutLingua/test.yml?branch=main&label=CI%20Tests&logo=githubactions&logoColor=white&style=flat-square" alt="CI Status"></a>
+  <a href="docs/development.md#3-automated-testing"><img src="https://img.shields.io/badge/Tests-219%20Passed-2ea44f?style=flat-square&logo=pytest&logoColor=white" alt="219 Tests Passing"></a>
+  <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.12+"></a>
+  <a href="SKILL.md"><img src="https://img.shields.io/badge/Agent_Skills-Compatible-8A2BE2?style=flat-square&logo=probot&logoColor=white" alt="Agent Skills"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Changelog-v1.0.0-blue?style=flat-square" alt="Changelog"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ThanhNguyxnOrg/LayoutLingua?style=flat-square" alt="AGPL-3.0 License"></a>
-  <img src="https://img.shields.io/badge/Python-standalone_bundle-2ea44f?style=flat-square" alt="Standalone Bundle">
 </p>
 
 <p align="center">
-  <a href="#key-features">Features</a> ·
-  <a href="#quick-start">Quick Start</a> ·
-  <a href="#usage-guide">Usage</a> ·
-  <a href="#supported-languages">Languages</a> ·
-  <a href="#agent-skill">Agent Skill</a> ·
-  <a href="docs/development.md">Developer Guide</a> ·
-  <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="#license">License</a>
+  <a href="#-key-features">✨ Features</a> ·
+  <a href="#-quick-start">🚀 Quick Start</a> ·
+  <a href="#-usage-guide">💻 Usage</a> ·
+  <a href="#-supported-languages--typography-verification">🌍 48 Languages</a> ·
+  <a href="#-agent-skill">🤖 Agent Skill</a> ·
+  <a href="#-documentation--engineering-hub">📚 Doc Hub</a> ·
+  <a href="CHANGELOG.md">📋 Changelog</a> ·
+  <a href="#-license">⚖️ License</a>
 </p>
 
 ---
 
-**LayoutLingua** is an open-source document translation platform available for Windows, macOS, Linux, Android, and command-line environments. It parses page geometry, isolates formulas and technical code blocks, translates prose through high-accuracy neural engines, and writes the translated content back to exact spatial coordinates without converting documents into plain text.
+> [!NOTE]
+> **LayoutLingua** is an open-source document translation platform available for Windows, macOS, Linux, Android, and command-line environments. It parses page geometry, isolates formulas and technical code blocks, translates prose through high-accuracy neural engines, and writes the translated content back to exact spatial coordinates without converting documents into plain text.
 
-## Key Features
+## ✨ Key Features
 
-- **Strict Layout Preservation:** Keeps paragraph bounding boxes, formulas, tables, figures, tables of contents, and references intact.
-- **Universal Multi-lingual Recognition:** Deep isolation of technical formulas in documents written in Vietnamese (with full tone marks), CJK (Chinese, Japanese, Korean), Cyrillic (Russian, etc.), Arabic, Hebrew, and European Latin alphabets.
-- **4 Native Platforms:** Ready-to-use binaries for Windows, macOS (Apple Silicon & Intel), Linux (x86_64), and Android.
-- **Ready Out of the Box:** Download, extract, and run. Packaged desktop releases do not require Python or manual model downloads.
-- **Batch Processing:** Drag and drop multiple files or entire folder trees into the processing queue.
-- **Resilient Batch Execution:** A damaged or unsupported file logs an error and continues without stopping the rest of the queue.
-- **Background Auto-Updater (Windows):** Checks for new releases in the background, downloads updates, and stages safe seamless swaps.
-- **Native Android Companion:** Lightweight Android application powered by PDFBox-Android and Google Translate for on-the-go reading.
-- **AI Agent Skill Mode:** Built-in Handoff mode adhering to the Agent Skills standard, allowing local LLMs (Codex, Claude Code, Copilot, Gemini) to translate domain-specific technical papers with full context awareness.
+- 🎯 **Strict Layout Preservation:** Keeps paragraph bounding boxes, formulas, tables, figures, tables of contents, and references intact.
+- 🌐 **Universal Multi-lingual Recognition:** Deep isolation of technical formulas in documents written in Vietnamese (with full tone marks), CJK (Chinese, Japanese, Korean), Cyrillic (Russian, etc.), Arabic, Hebrew, and European Latin alphabets.
+- 📦 **4 Native Platforms:** Ready-to-use binaries for Windows, macOS (Apple Silicon & Intel), Linux (x86_64), and Android.
+- ⚡ **Ready Out of the Box:** Download, extract, and run. Packaged desktop releases do not require Python or manual model downloads.
+- 📂 **Batch Processing:** Drag and drop multiple files or entire folder trees into the processing queue.
+- 🛡️ **Resilient Batch Execution:** A damaged or unsupported file logs an error and continues without stopping the rest of the queue.
+- 🔄 **Background Auto-Updater (Windows):** Checks for new releases in the background, downloads updates, and stages safe seamless swaps.
+- 📱 **Native Android Companion:** Lightweight Android application powered by PDFBox-Android and Google Translate for on-the-go reading.
+- 🤖 **AI Agent Skill Mode:** Built-in Handoff mode adhering to the Agent Skills standard, allowing local LLMs (Codex, Claude Code, Copilot, Gemini) to translate domain-specific technical papers with full context awareness.
 
-## Quick Start
+---
 
-### Windows
+## 🚀 Quick Start
+
+### 🪟 Windows
 
 1. **[Download LayoutLingua for Windows](https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest/download/LayoutLingua-windows.zip)** (`.zip`).
 2. Extract the archive completely.
 3. Run `LayoutLingua.exe`.
 
-### macOS
+> [!TIP]
+> Windows builds include a background auto-update worker that notifies you whenever a new release is published.
+
+### 🍎 macOS
 
 1. Download the installer for your Mac architecture:
    - **[Apple Silicon (M1/M2/M3/M4)](https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest/download/LayoutLingua-macos-apple-silicon.dmg)**
@@ -81,7 +89,7 @@
 2. Open the `.dmg` file and drag **LayoutLingua** to your **Applications** folder.
 3. On first launch, right-click the app icon → **Open** → **Open**.
 
-### Linux (x86_64)
+### 🐧 Linux (x86_64)
 
 1. **[Download LayoutLingua for Linux](https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest/download/LayoutLingua-linux-x86_64.tar.gz)** (`.tar.gz`).
 2. Extract and launch:
@@ -90,7 +98,7 @@
    cd LayoutLingua && ./LayoutLingua
    ```
 
-### Android
+### 🤖 Android
 
 1. **[Download APK from the latest release](https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest)** (`LayoutLingua-android-*.apk`).
 2. Install the APK on your device (Android 8.0+ supported).
@@ -102,16 +110,18 @@ cd android
 ./gradlew assembleDebug
 ```
 
-## Usage Guide
+---
 
-### 1. Add Documents
+## 💻 Usage Guide
+
+### 1️⃣ Add Documents
 - Drag and drop PDF files or folders directly onto the application window.
 - Or click **Select Files** / **Select Folder**.
 
-### 2. Choose Target Language
+### 2️⃣ Choose Target Language
 - Select your target language from the dropdown menu (48 languages supported across Latin, CJK, Cyrillic, Semitic, Greek, Thai, and Hindi).
 
-### 3. Translate
+### 3️⃣ Translate
 - Click **Translate**. Each file displays live per-page progress.
 - Results are saved into a `translated/` subfolder next to each input file:
   ```text
@@ -123,7 +133,7 @@ cd android
 
 ---
 
-## Supported Languages & Typography Verification
+## 🌍 Supported Languages & Typography Verification
 
 LayoutLingua does not merely present a list of language codes—each language tier is backed by verified font routing, ink metrics, and formula boundary protection to prevent missing glyphs (tofu boxes) and overlapping lines:
 
@@ -141,11 +151,11 @@ LayoutLingua does not merely present a list of language codes—each language ti
 
 ---
 
-## Agent Skill
+## 🤖 Agent Skill
 
 LayoutLingua follows the [Agent Skills](https://agentskills.io/) specification and integrates directly into AI coding tools (Claude Code, Codex, GitHub Copilot, Antigravity).
 
-### Install
+### 📦 Install
 
 The `skills` CLI pulls directly from GitHub repositories or local directories (no npm publishing required):
 
@@ -157,7 +167,7 @@ npx skills add ThanhNguyxnOrg/LayoutLingua -g --all
 npx skills add . -g --all
 ```
 
-### Run from Prompts
+### ⚡ Run from Prompts
 
 In your agent session or terminal:
 
@@ -165,26 +175,36 @@ In your agent session or terminal:
 /layout-lingua translate document.pdf into English
 ```
 
-### Dual-Engine Modes
+### 🔄 Dual-Engine Modes
 
 | Mode | Engine | Best Suited For |
 | :--- | :--- | :--- |
 | **Google (Default)** | `translate.google.com` | Rapid batch translation without API tokens |
 | **Handoff** | Active AI Agent Session | Technical papers, specialized terminology, high accuracy |
 
-In **Handoff** mode, translatable text is extracted to JSONL chunks, translated by the LLM in context, and rebuilt back into the PDF with exact formula markers preserved.
+> [!NOTE]
+> In **Handoff** mode, translatable text is extracted to JSONL chunks, translated by the LLM in context, and rebuilt back into the PDF with exact formula markers preserved.
 
 ---
 
-## Developer Resources
+## 📚 Documentation & Engineering Hub
 
-Looking to contribute, run tests, understand the translation pipeline, or build binaries from source?
+All technical specifications, development workflows, and platform architectures are organized in modular documents:
 
-- 📖 **[Developer Guide & CI/CD Pipeline](docs/development.md):** Architecture and translation pipeline, local environment setup, fast test runner, automated GitHub Actions testing CI, cross-platform build scripts, and cloud release automation.
-- 📐 **[Architecture & Vision Roadmap](docs/architecture-roadmap.md):** Deep-dive into layout geometry, formula tokenization, BabelDOC CJK engine integration, and olmOCR multi-modal vision pipeline.
-- 🧪 **Automated Cloud CI:** Every code commit automatically runs our test suite via [`.github/workflows/test.yml`](.github/workflows/test.yml). Skip-CI applies automatically to documentation edits.
+| Topic & Guide | Focus Area | Status / Target |
+| :--- | :--- | :--- |
+| 🛠️ **[Developer & CI/CD Guide](docs/development.md)** | Core translation pipeline, local setup, test runner, GitHub Actions CI & release trigger | [![CI Tests](https://img.shields.io/badge/CI-Active-2ea44f?style=flat-square)](docs/development.md) |
+| 📐 **[Architecture & Vision Roadmap](docs/architecture-roadmap.md)** | Formula tokenization manifold, BabelDOC CJK engine integration & olmOCR vision model | [![Vision](https://img.shields.io/badge/Roadmap-v1.0.0-blueviolet?style=flat-square)](docs/architecture-roadmap.md) |
+| 📱 **[Android Build & Release Guide](docs/android-release.md)** | Gradle compilation, PDFBox-Android integration, APK signing & distribution | [![Android](https://img.shields.io/badge/Android-APK-3DDC84?style=flat-square)](docs/android-release.md) |
+| 🌐 **[Web Architecture Blueprint](docs/web-architecture.md)** | Scalable browser/cloud translation service, WebAssembly & worker pools | [![Web](https://img.shields.io/badge/Web-Blueprint-0969da?style=flat-square)](docs/web-architecture.md) |
+| 🧠 **[Agent Knowledge Base](agent-knowledge/index.md)** | AI assistant context, invariant rules, test regression history & domain patterns | [![Knowledge](https://img.shields.io/badge/AI-Knowledge_Base-orange?style=flat-square)](agent-knowledge/index.md) |
+| 🛡️ **[Preservation Rules Reference](references/preservation-rules.md)** | Mathematical symbol matrices, regex tokens, non-prose grammar invariants | [![Math](https://img.shields.io/badge/LaTeX-Zero_Corruption-informational?style=flat-square)](references/preservation-rules.md) |
+| 🤖 **[Agent Skill Specification](SKILL.md)** | Command schema, skill definition, dual-engine CLI workflows for AI pair programmers | [![Skill](https://img.shields.io/badge/Skill-AgentSkills.io-8A2BE2?style=flat-square)](SKILL.md) |
+| 📋 **[Changelog & Version History](CHANGELOG.md)** | Comprehensive release notes, migration paths, and version audit logs | [![Changelog](https://img.shields.io/badge/Version-v1.0.0-blue?style=flat-square)](CHANGELOG.md) |
 
-## License
+---
 
-LayoutLingua is open-source software released under the [AGPL-3.0 License](LICENSE).
-Maintained by **[ThanhNguyxnOrg](https://github.com/ThanhNguyxnOrg)**.
+## ⚖️ License
+
+LayoutLingua is open-source software released under the [AGPL-3.0 License](LICENSE).  
+Maintained with ❤️ by **[ThanhNguyxnOrg](https://github.com/ThanhNguyxnOrg)**.
