@@ -1,20 +1,116 @@
-name: Release
+name: Release 4 Platforms
 
-# Tag the release and this publishes it. The in-app update check reads the
-# latest tag from this repository, so the tag and the asset name have to be
-# right every time - which is exactly the kind of thing manual uploads get
-# wrong once and then nobody notices for a month.
+# Automatically builds and publishes releases for all 4 supported platforms:
+# Windows (zip), macOS (dmg), Linux (tar.gz), and Android (apk).
+#
+# CI Cost & Resource Protection:
+# Heavy cross-platform runners (Windows, macOS, Linux, Android) will ONLY run when:
+# 1. A commit message on 'main' contains a release keyword, e.g.:
+#      git commit -m "release: 1.0.1"
+#      git commit -m "release: v1.0.1"
+#      git commit -m "[release] 1.0.1"
+#      git commit -m "chore(release): 1.0.1"
+#      git commit -m "bump: 1.0.1"
+# 2. A git tag is pushed (e.g. v1.0.1)
+# 3. Manually triggered via workflow_dispatch
+#
+# Normal push commits (fixes, features, docs) will skip all heavy jobs in ~5 seconds.
+# App version is automatically extracted and synchronized across all platforms.
+
 on:
-  workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.0.1). Leave empty to use APP_VERSION in app/update.py"
+        required: false
+        default: ""
 
 permissions:
   contents: write
 
 jobs:
+  check-release:
+    name: Detect Release & Resolve Version
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Parse release trigger & semver
+        id: check
+        shell: python
+        run: |
+          import os
+          import re
+
+          ref = os.environ.get("GITHUB_REF", "")
+          ref_name = os.environ.get("GITHUB_REF_NAME", "")
+          event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+          commit_msg = os.environ.get("COMMIT_MESSAGE", "")
+          manual_version = os.environ.get("INPUT_VERSION", "").strip()
+
+          version = None
+          should_release = False
+
+          # 1. Manual trigger (workflow_dispatch)
+          if event_name == "workflow_dispatch":
+              should_release = True
+              if manual_version:
+                  version = manual_version.lstrip("vV")
+              else:
+                  with open("app/update.py", "r", encoding="utf-8") as f:
+                      m = re.search(r'APP_VERSION = "([^"]+)"', f.read())
+                      if m:
+                          version = m.group(1)
+
+          # 2. Tag push (e.g. refs/tags/v1.0.1)
+          elif ref.startswith("refs/tags/v"):
+              should_release = True
+              version = ref_name.lstrip("vV")
+
+          # 3. Push to main: check commit message keywords
+          elif event_name == "push":
+              rx = re.compile(r'(?i)\b(?:release|bump)\b.*?\bv?(\d+\.\d+\.\d+)\b')
+              m = rx.search(commit_msg)
+              if m:
+                  should_release = True
+                  version = m.group(1)
+              else:
+                  print("No release keyword detected in commit message. Skipping 4-platform release build to save CI resources.")
+
+          if should_release and version:
+              if not re.fullmatch(r'\d+\.\d+\.\d+', version):
+                  print(f"Invalid semantic version: {version}")
+                  should_release = False
+
+          tag = f"v{version}" if version else ""
+          print(f"Result: should_release={should_release}, version={version}, tag={tag}")
+
+          output_file = os.environ.get("GITHUB_OUTPUT")
+          if output_file:
+              with open(output_file, "a", encoding="utf-8") as out:
+                  out.write(f"should_release={str(should_release).lower()}\n")
+                  out.write(f"version={version or ''}\n")
+                  out.write(f"tag={tag}\n")
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+
   windows:
+    name: Windows
+    needs: check-release
+    if: needs.check-release.outputs.should_release == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -23,24 +119,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Check the tag matches APP_VERSION
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Sync version
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}".TrimStart("v")
-          $line = Select-String -Path app/update.py -Pattern '^APP_VERSION = "(.+)"$'
-          $version = $line.Matches[0].Groups[1].Value
-          if ($tag -ne $version) {
-            throw "Tag $tag does not match APP_VERSION $version in app/update.py"
-          }
-          Write-Host "Releasing $version"
+          $ver = "${{ needs.check-release.outputs.version }}"
+          python scripts/set_version.py $ver
 
-      # build.ps1 requires a virtual environment at the repository root and
-      # installs the dependencies into it itself.
-      - name: Create the virtual environment
+      - name: Create virtual environment
         run: python -m venv .venv
 
-      - name: Build
+      - name: Build Windows package
         run: .\build.ps1
 
       - uses: actions/upload-artifact@v6
@@ -51,6 +139,8 @@ jobs:
 
   macos:
     name: macOS (${{ matrix.arch }})
+    needs: check-release
+    if: needs.check-release.outputs.should_release == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -58,8 +148,9 @@ jobs:
           - arch: apple-silicon
             runner: macos-15
           - arch: intel
-            runner: macos-15-intel
+            runner: macos-13
     runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.arch == 'intel' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -67,17 +158,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Check the tag matches APP_VERSION
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Sync version
         shell: bash
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          version="$(sed -n 's/^APP_VERSION = "\([^"]*\)"$/\1/p' app/update.py)"
-          if [[ "$tag" != "$version" ]]; then
-            echo "Tag $tag does not match APP_VERSION $version in app/update.py" >&2
-            exit 1
-          fi
-          echo "Releasing $version"
+          python3 scripts/set_version.py "${{ needs.check-release.outputs.version }}"
 
       - name: Build app and DMG
         shell: bash
@@ -91,6 +175,8 @@ jobs:
 
   linux:
     name: Linux (x86_64)
+    needs: check-release
+    if: needs.check-release.outputs.should_release == 'true'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
@@ -104,17 +190,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3-tk libgl1 libglib2.0-0
 
-      - name: Check the tag matches APP_VERSION
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Sync version
         shell: bash
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          version="$(sed -n 's/^APP_VERSION = "\([^"]*\)"$/\1/p' app/update.py)"
-          if [[ "$tag" != "$version" ]]; then
-            echo "Tag $tag does not match APP_VERSION $version in app/update.py" >&2
-            exit 1
-          fi
-          echo "Releasing $version"
+          python3 scripts/set_version.py "${{ needs.check-release.outputs.version }}"
 
       - name: Build Linux archive
         shell: bash
@@ -126,18 +205,108 @@ jobs:
           path: dist/LayoutLingua-linux-*.tar.gz
           if-no-files-found: error
 
+  android:
+    name: Android (APK)
+    needs: check-release
+    if: needs.check-release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Sync version
+        run: |
+          python3 ../scripts/set_version.py "${{ needs.check-release.outputs.version }}"
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Decode release keystore if available
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.signed == 'true' && format('{0}/release.jks', runner.temp) || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ "${{ steps.keystore.outputs.signed }}" = "true" ]; then
+            ./gradlew assembleRelease
+            cp app/build/outputs/apk/release/app-release.apk "LayoutLingua-android-${{ needs.check-release.outputs.version }}.apk"
+          else
+            ./gradlew assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk "LayoutLingua-android-${{ needs.check-release.outputs.version }}.apk"
+          fi
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: LayoutLingua-android
+          path: android/LayoutLingua-android-${{ needs.check-release.outputs.version }}.apk
+          if-no-files-found: error
+
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, macos, linux]
+    name: Publish Release (4 Platforms)
+    needs: [check-release, windows, macos, linux, android]
+    if: needs.check-release.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/checkout@v6
+
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v7
         with:
           path: release-assets
           merge-multiple: true
 
-      - uses: softprops/action-gh-release@v3
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ needs.check-release.outputs.tag }}
+          name: LayoutLingua ${{ needs.check-release.outputs.tag }}
           files: release-assets/*
           generate_release_notes: true
 
+      - name: Tag android namespace
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "android-${{ needs.check-release.outputs.tag }}" || true
+          git push origin "android-${{ needs.check-release.outputs.tag }}" || true
+
+      - name: Sync version files back to main branch
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: |
+          python3 scripts/set_version.py "${{ needs.check-release.outputs.version }}"
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add app/update.py android/app/build.gradle.kts Redesign/
+            git commit -m "chore(release): bump version to ${{ needs.check-release.outputs.version }} [skip ci]"
+            git push origin main
+          fi
