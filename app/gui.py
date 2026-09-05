@@ -366,7 +366,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.update_link.pack_forget()
 
         ctk.CTkLabel(
-            right_box, text=f"v{APP_VERSION} (Build 1.9.11)", anchor="e",
+            right_box, text=f"v{APP_VERSION}", anchor="e",
             font=ctk.CTkFont(self.mono_font, size=11), text_color=MUTED,
         ).pack(anchor="e")
 

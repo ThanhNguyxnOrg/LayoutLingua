@@ -185,7 +185,7 @@ export default function App() {
               LayoutLingua
             </span>
             <span className="font-mono-ll rounded-[5px] bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-medium tracking-tight text-white/55 ring-1 ring-inset ring-white/10">
-              v0.3.0
+              v1.0.0
             </span>
           </div>
 

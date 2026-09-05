@@ -20,7 +20,12 @@ MATH_OPERATOR_PATTERN = re.compile(
 )
 PROSE_WORD_PATTERN = re.compile(
     r"[a-z]{3,}|"
-    r"[a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]*[\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9][a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]+"
+    r"[a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]*[\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9][a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]+|"
+    r"[A-Z\u00C0-\u024E\u1EA0-\u1EF8][a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]{2,}|"
+    r"[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]{1,}|"
+    r"[\u0430-\u044F\u0451]{3,}|"
+    r"[\u0410-\u042F\u0401][\u0430-\u044F\u0451]{2,}|"
+    r"[\u0600-\u06FF\u0590-\u05FF]{2,}"
 )
 MATH_FUNCTION_PATTERN = re.compile(
     r"(?<![A-Za-z])(?:sin|cos|tan|cot|sec|csc|log|ln|exp|min|max|lim|det|mod)(?![A-Za-z])",

@@ -26,7 +26,7 @@ class UpdateCheckerTest {
     }
 
     /**
-     * The desktop line is at v0.2.5 while Android starts at 0.1.0, so a desktop
+     * The desktop line is at v1.0.0 while Android starts at 0.1.0, so a desktop
      * tag compares *higher*. Nothing in the version numbers protects us — only
      * the `android-v` prefix filter in checkForUpdate keeps a Windows release
      * from prompting Android users to install a zip they cannot use. This test
@@ -34,8 +34,8 @@ class UpdateCheckerTest {
      */
     @Test
     fun testDesktopTagWouldCompareHigherAndMustBeFilteredByPrefix() {
-        assertTrue(UpdateChecker.isNewer("v0.2.5", "0.1.0"))
-        assertFalse("v0.2.5".startsWith(UpdateChecker.ANDROID_TAG_PREFIX))
+        assertTrue(UpdateChecker.isNewer("v1.0.0", "0.1.0"))
+        assertFalse("v1.0.0".startsWith(UpdateChecker.ANDROID_TAG_PREFIX))
     }
 
     @Test
