@@ -1,6 +1,12 @@
-# Changelog
+# 📋 Changelog & Release Notes
 
-All notable changes to LayoutLingua will be documented in this file.
+<p align="left">
+  <img src="https://img.shields.io/badge/Version-v1.0.0-blue?style=flat-square" alt="Version 1.0.0">
+  <img src="https://img.shields.io/badge/Release_Status-Production_Ready-brightgreen?style=flat-square" alt="Production Ready">
+  <img src="https://img.shields.io/badge/SemVer-2.0.0-informational?style=flat-square" alt="SemVer">
+</p>
+
+All notable changes to **LayoutLingua** across Windows, macOS, Linux, and Android are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).

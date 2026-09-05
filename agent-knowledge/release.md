@@ -1,4 +1,10 @@
-# Cross-Platform Build and Release
+# 📦 Cross-Platform Build and Release
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Platforms-Win_|_Mac_|_Linux_|_Android-informational?style=flat-square" alt="4 Platforms">
+  <img src="https://img.shields.io/badge/Release_Gate-Automated_CI-2ea44f?style=flat-square" alt="Automated Release">
+  <img src="https://img.shields.io/badge/Tag_Namespace-v*_|_android--v*-blue?style=flat-square" alt="Tag Namespace">
+</p>
 
 This file covers the desktop product. The Android app releases under the
 separate `android-v*` namespace; see [android.md](android.md). A `v*` tag is

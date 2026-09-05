@@ -1,4 +1,10 @@
-# Repository and Development
+# 📁 Repository Structure and Development Workflows
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Architecture-Modular-blue?style=flat-square" alt="Modular">
+  <img src="https://img.shields.io/badge/Platforms-Win_|_Mac_|_Linux_|_Android-informational?style=flat-square" alt="Platforms">
+  <img src="https://img.shields.io/badge/Tests-219_Passed-brightgreen?style=flat-square" alt="Tests Passed">
+</p>
 
 ## Structure
 

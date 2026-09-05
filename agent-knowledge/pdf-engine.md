@@ -1,4 +1,11 @@
-# PDF Engine Architecture and Invariants
+# ⚙️ PDF Engine Architecture and Invariants
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Core-PyMuPDF_|_pdfminer-blue?style=flat-square" alt="PyMuPDF Core">
+  <img src="https://img.shields.io/badge/Layout_Model-doclayout--yolo-brightgreen?style=flat-square" alt="doclayout-yolo">
+  <img src="https://img.shields.io/badge/Formulas-Safe_Placeholders-8A2BE2?style=flat-square" alt="Formula Placeholders">
+  <img src="https://img.shields.io/badge/Diacritics-Ink_Floor_1.10-informational?style=flat-square" alt="Ink Floor">
+</p>
 
 ## Pipeline
 

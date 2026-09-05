@@ -1,4 +1,10 @@
-# Validation and PDF QA
+# 🔍 Validation Gates and PDF Quality Assurance
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Quality_Gate-Strict-brightgreen?style=flat-square" alt="Strict Gate">
+  <img src="https://img.shields.io/badge/Visual_QA-Multi--Page_Contact_Sheet-blue?style=flat-square" alt="Visual QA">
+  <img src="https://img.shields.io/badge/Smoke_Test-Automated-orange?style=flat-square" alt="Smoke Test">
+</p>
 
 ## Automated Gate
 

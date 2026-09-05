@@ -1,6 +1,12 @@
-# Shared Agent Knowledge
+# 🧠 Shared Agent Knowledge Base
+ 
+<p align="left">
+  <img src="https://img.shields.io/badge/Agent_Memory-Universal_Truth-orange?style=flat-square" alt="Agent Memory">
+  <img src="https://img.shields.io/badge/Architecture-BabelDOC_|_olmOCR-8A2BE2?style=flat-square" alt="Architecture">
+  <img src="https://img.shields.io/badge/Strict_Invariants-Enforced-2ea44f?style=flat-square" alt="Invariants Enforced">
+</p>
 
-This directory is the maintained project memory for both Codex and Claude.
+This directory is the maintained project memory for both Codex, Claude, and AI Agent Systems.
 Entry files should stay short; detailed, decision-changing knowledge belongs
 here and must be updated with the code that changes it.
 

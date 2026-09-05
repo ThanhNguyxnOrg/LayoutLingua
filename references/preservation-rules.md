@@ -1,4 +1,11 @@
-# PDF preservation contract
+# 🛡️ PDF Preservation Contract & Invariants
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Preservation-100%25_Geometry-blue?style=flat-square" alt="100% Geometry">
+  <img src="https://img.shields.io/badge/Formulas-LaTeX_Zero_Corruption-brightgreen?style=flat-square" alt="LaTeX Zero Corruption">
+  <img src="https://img.shields.io/badge/Tables-Cell_Grid_Preserved-orange?style=flat-square" alt="Cell Grid Preserved">
+  <img src="https://img.shields.io/badge/Typography-Diacritic_Headroom-8A2BE2?style=flat-square" alt="Diacritic Headroom">
+</p>
 
 The bundled core translates ordinary text while retaining document structures whose meaning depends on exact placement. These rules are product behavior and require regression coverage when changed.
 

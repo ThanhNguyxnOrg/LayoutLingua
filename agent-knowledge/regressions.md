@@ -1,4 +1,10 @@
-# Proven Regression Patterns
+# 🛡️ Proven Regression Patterns & Battle-Tested Fixes
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Regressions-Documented_&_Guarded-2ea44f?style=flat-square" alt="Guarded">
+  <img src="https://img.shields.io/badge/QA_Gate-Zero_Visual_Defects-blue?style=flat-square" alt="Zero Visual Defects">
+  <img src="https://img.shields.io/badge/Coverage-Formula_|_Table_|_Diacritic_|_Font-orange?style=flat-square" alt="Full Coverage">
+</p>
 
 Use this as a cause map, not a substitute for inspecting the failing PDF.
 

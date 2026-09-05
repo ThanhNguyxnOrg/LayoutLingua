@@ -1,4 +1,11 @@
-# Android Build and Release
+# 📱 Android Build, Engine & Release
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Android-8.0+_API_26-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android 8.0+">
+  <img src="https://img.shields.io/badge/Engine-PDFBox--Android-blue?style=flat-square" alt="PDFBox">
+  <img src="https://img.shields.io/badge/Translation-Google_Engine-2ea44f?style=flat-square" alt="Google Translate">
+  <img src="https://img.shields.io/badge/Release_Tag-android--v*-orange?style=flat-square" alt="Tag android-v*">
+</p>
 
 The Android app in `android/` is a second product, not the desktop pipeline
 recompiled. It reimplements layout preservation on PDFBox-Android
