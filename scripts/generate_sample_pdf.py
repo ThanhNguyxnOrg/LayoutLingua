@@ -23,6 +23,21 @@ from pathlib import Path
 import fitz  # PyMuPDF
 
 
+def render_latex(formula: str, fontsize: int = 12, figsize: tuple[float, float] = (6.0, 0.65)) -> bytes:
+    """Render LaTeX mathematical expression into high-DPI transparent PNG bytes."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure(figsize=figsize, dpi=300)
+    fig.text(0.5, 0.5, formula, fontsize=fontsize, ha="center", va="center", color="#0c1a30")
+    plt.axis("off")
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", dpi=300, bbox_inches="tight", transparent=True)
+    plt.close(fig)
+    return buf.getvalue()
+
+
 def create_sample_diagram() -> bytes:
     """Create a clean 2D vector architecture diagram in PNG format."""
     pix = fitz.Pixmap(fitz.csRGB, (0, 0, 480, 160), False)
@@ -108,23 +123,25 @@ def generate_benchmark_pdf(output_path: Path) -> None:
 
     # Equation 1: Loss function
     p1.insert_text((50, 335), "Equation 1 (Composite Structural Loss):", fontsize=9.5, fontname="hebo", color=c_primary)
-    p1.draw_rect(fitz.Rect(50, 342, 545, 380), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
-    p1.insert_text((70, 365), "L_total = (1/N) * sum_{i=1}^N ||y_i - y_hat_i||^2 + lambda * sum_{j=1}^M |theta_j|", fontsize=8.5, fontname="courier", color=c_math)
+    p1.draw_rect(fitz.Rect(50, 342, 545, 384), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
+    eq1_img = render_latex(r"$\mathcal{L}_{\mathrm{total}} = \frac{1}{N} \sum_{i=1}^N \|y_i - \hat{y}_i\|_2^2 + \lambda \sum_{j=1}^M |\theta_j|$", fontsize=12, figsize=(6.0, 0.65))
+    p1.insert_image(fitz.Rect(70, 345, 490, 381), stream=eq1_img)
     p1.insert_text((510, 365), "(1)", fontsize=9.5, fontname="helv", color=c_source)
-    p1.insert_text((50, 390), "[Source: Goodfellow, Bengio, Courville. Deep Learning. MIT Press, 2016, Chapter 6, p. 172]", fontsize=8, fontname="heit", color=c_source)
+    p1.insert_text((50, 394), "[Source: Goodfellow, Bengio, Courville. Deep Learning. MIT Press, 2016, Chapter 6, p. 172]", fontsize=8, fontname="heit", color=c_source)
 
     # Equation 2: Scaled Dot-Product Attention
-    p1.insert_text((50, 415), "Equation 2 (Scaled Dot-Product Self-Attention):", fontsize=9.5, fontname="hebo", color=c_primary)
-    p1.draw_rect(fitz.Rect(50, 422, 545, 460), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
-    p1.insert_text((70, 445), "Attention(Q, K, V) = softmax( (Q * K^T) / sqrt(d_k) ) * V", fontsize=9.0, fontname="courier", color=c_math)
-    p1.insert_text((510, 445), "(2)", fontsize=9.5, fontname="helv", color=c_source)
-    p1.insert_text((50, 470), "[Source: Vaswani et al. 'Attention Is All You Need', NeurIPS 2017, Section 3.2.1]", fontsize=8, fontname="heit", color=c_source)
+    p1.insert_text((50, 417), "Equation 2 (Scaled Dot-Product Self-Attention):", fontsize=9.5, fontname="hebo", color=c_primary)
+    p1.draw_rect(fitz.Rect(50, 424, 545, 466), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
+    eq2_img = render_latex(r"$\mathrm{Attention}(Q, K, V) = \mathrm{softmax}\left( \frac{Q K^T}{\sqrt{d_k}} \right) V$", fontsize=12, figsize=(5.5, 0.65))
+    p1.insert_image(fitz.Rect(70, 427, 490, 463), stream=eq2_img)
+    p1.insert_text((510, 447), "(2)", fontsize=9.5, fontname="helv", color=c_source)
+    p1.insert_text((50, 476), "[Source: Vaswani et al. 'Attention Is All You Need', NeurIPS 2017, Section 3.2.1]", fontsize=8, fontname="heit", color=c_source)
 
     # Diagram / Figure 1
-    p1.insert_text((50, 495), "2. Architectural Layout Routing", fontsize=12, fontname="hebo", color=c_primary)
+    p1.insert_text((50, 498), "2. Architectural Layout Routing", fontsize=12, fontname="hebo", color=c_primary)
     img_bytes = create_sample_diagram()
-    p1.insert_image(fitz.Rect(65, 508, 530, 630), stream=img_bytes)
-    p1.insert_text((70, 644), "Figure 1: Multimodal cross-attention architecture separating semantic text from formula coordinate vectors.", fontsize=8.5, fontname="heit", color=c_source)
+    p1.insert_image(fitz.Rect(65, 510, 530, 632), stream=img_bytes)
+    p1.insert_text((70, 646), "Figure 1: Multimodal cross-attention architecture separating semantic text from formula coordinate vectors.", fontsize=8.5, fontname="heit", color=c_source)
 
     # Footer p1
     p1.draw_line((50, 800), (545, 800), color=c_line, width=0.5)
@@ -148,23 +165,25 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     # Maxwell's Equations
     p2.insert_text((50, 135), "Equation 3 (Maxwell's Differential Electrodynamic System):", fontsize=9.5, fontname="hebo", color=c_primary)
     p2.draw_rect(fitz.Rect(50, 142, 545, 195), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
-    p2.insert_text((70, 162), "div E = rho / epsilon_0,              div B = 0", fontsize=9.0, fontname="courier", color=c_math)
-    p2.insert_text((70, 182), "curl E = - dB / dt,                   curl B = mu_0 ( J + epsilon_0 * dE/dt )", fontsize=8.5, fontname="courier", color=c_math)
+    eq3_img = render_latex(r"$\nabla \cdot \mathbf{E} = \frac{\rho}{\varepsilon_0}, \quad \nabla \cdot \mathbf{B} = 0, \qquad \nabla \times \mathbf{E} = -\frac{\partial \mathbf{B}}{\partial t}, \quad \nabla \times \mathbf{B} = \mu_0 \mathbf{J} + \mu_0 \varepsilon_0 \frac{\partial \mathbf{E}}{\partial t}$", fontsize=10.5, figsize=(7.0, 0.75))
+    p2.insert_image(fitz.Rect(60, 145, 495, 192), stream=eq3_img)
     p2.insert_text((505, 172), "(3)", fontsize=9.5, fontname="helv", color=c_source)
     p2.insert_text((50, 205), "[Source: Griffiths, D. J. Introduction to Electrodynamics, 4th ed. Cambridge University Press, 2017, p. 338]", fontsize=8, fontname="heit", color=c_source)
 
     # Stokes' Theorem
     p2.insert_text((50, 228), "Equation 4 (Stokes' Theorem & Surface Circulation):", fontsize=9.5, fontname="hebo", color=c_primary)
     p2.draw_rect(fitz.Rect(50, 235, 545, 275), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
-    p2.insert_text((75, 258), "iint_S (curl F) * dS = oint_C F * dr", fontsize=10.5, fontname="courier", color=c_math)
-    p2.insert_text((495, 258), "(4)", fontsize=9.5, fontname="helv", color=c_source)
+    eq4_img = render_latex(r"$\iint_S (\nabla \times \mathbf{F}) \cdot d\mathbf{S} = \oint_C \mathbf{F} \cdot d\mathbf{r}$", fontsize=12, figsize=(4.5, 0.65))
+    p2.insert_image(fitz.Rect(70, 238, 490, 272), stream=eq4_img)
+    p2.insert_text((505, 258), "(4)", fontsize=9.5, fontname="helv", color=c_source)
     p2.insert_text((50, 285), "[Source: Stewart, J. Calculus: Early Transcendentals, 8th ed. Cengage Learning, 2015, Theorem 16.8, p. 1130]", fontsize=8, fontname="heit", color=c_source)
 
     # Relativistic Energy
     p2.insert_text((50, 308), "Equation 5 (Relativistic Energy-Momentum Invariant):", fontsize=9.5, fontname="hebo", color=c_primary)
     p2.draw_rect(fitz.Rect(50, 315, 545, 355), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
-    p2.insert_text((75, 338), "E^2 = (p * c)^2 + (m_0 * c^2)^2", fontsize=10.5, fontname="courier", color=c_math)
-    p2.insert_text((495, 338), "(5)", fontsize=9.5, fontname="helv", color=c_source)
+    eq5_img = render_latex(r"$E^2 = (p c)^2 + (m_0 c^2)^2$", fontsize=12, figsize=(3.5, 0.65))
+    p2.insert_image(fitz.Rect(70, 318, 490, 352), stream=eq5_img)
+    p2.insert_text((505, 338), "(5)", fontsize=9.5, fontname="helv", color=c_source)
     p2.insert_text((50, 365), "[Source: Einstein, A. 'Zur Elektrodynamik bewegter Korper', Annalen der Physik, 17(10), 891-921, 1905]", fontsize=8, fontname="heit", color=c_source)
 
     # Section 4: Chemistry
@@ -178,15 +197,17 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     # Haber-Bosch Reaction
     p2.insert_text((50, 448), "Reaction 6 (Haber-Bosch Ammonia Synthesis Equilibrium):", fontsize=9.5, fontname="hebo", color=c_primary)
     p2.draw_rect(fitz.Rect(50, 455, 545, 495), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
-    p2.insert_text((75, 478), "N2 (g) + 3 H2 (g) <===> 2 NH3 (g),    Delta H^o = -92.4 kJ/mol", fontsize=10.5, fontname="courier", color=c_math)
-    p2.insert_text((495, 478), "(6)", fontsize=9.5, fontname="helv", color=c_source)
+    eq6_img = render_latex(r"$\mathrm{N}_2\mathrm{(g)} + 3\,\mathrm{H}_2\mathrm{(g)} \ \ \longleftrightarrow\ \ 2\,\mathrm{NH}_3\mathrm{(g)}, \quad \Delta H^\circ = -92.4\ \mathrm{kJ/mol}$", fontsize=11, figsize=(6.0, 0.65))
+    p2.insert_image(fitz.Rect(70, 458, 490, 492), stream=eq6_img)
+    p2.insert_text((505, 478), "(6)", fontsize=9.5, fontname="helv", color=c_source)
     p2.insert_text((50, 505), "[Source: Atkins, P., & de Paula, J. Physical Chemistry, 10th ed. Oxford University Press, 2014, Chapter 6]", fontsize=8, fontname="heit", color=c_source)
 
     # Michaelis-Menten Kinetics
     p2.insert_text((50, 528), "Equation 7 (Michaelis-Menten Enzyme Catalysis Velocity):", fontsize=9.5, fontname="hebo", color=c_primary)
     p2.draw_rect(fitz.Rect(50, 535, 545, 575), color=c_line, fill=(0.98, 0.99, 1.0), width=0.5)
-    p2.insert_text((75, 558), "v_0 = (V_max * [S]) / (K_m + [S])", fontsize=10.5, fontname="courier", color=c_math)
-    p2.insert_text((495, 558), "(7)", fontsize=9.5, fontname="helv", color=c_source)
+    eq7_img = render_latex(r"$v_0 = \frac{V_{\max} [S]}{K_m + [S]}$", fontsize=12, figsize=(3.5, 0.65))
+    p2.insert_image(fitz.Rect(70, 538, 490, 572), stream=eq7_img)
+    p2.insert_text((505, 558), "(7)", fontsize=9.5, fontname="helv", color=c_source)
     p2.insert_text((50, 585), "[Source: Michaelis, L., & Menten, M. L. 'Die Kinetik der Invertinwirkung', Biochem. Z., 49, 333-369, 1913]", fontsize=8, fontname="heit", color=c_source)
 
     # Footer p2
