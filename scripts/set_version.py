@@ -34,22 +34,6 @@ def set_version_in_root(version: str, root: Path | None = None) -> str:
             gradle_kts.write_text(new_content, encoding="utf-8")
             print(f"[OK] android/app/build.gradle.kts -> appVersionName = \"{clean}\"")
 
-    # 3. Redesign packages (if present)
-    for pkg in target_root.glob("Redesign/*/package.json"):
-        content = pkg.read_text(encoding="utf-8")
-        new_content, count = re.subn(r'"version":\s*"[^"]+"', f'"version": "{clean}"', content)
-        if count > 0:
-            pkg.write_text(new_content, encoding="utf-8")
-            print(f"[OK] {pkg.relative_to(target_root)} -> \"version\": \"{clean}\"")
-
-    # 4. Redesign UI components showing version badge
-    for app_tsx in target_root.glob("Redesign/*/src/App.tsx"):
-        content = app_tsx.read_text(encoding="utf-8")
-        new_content, count = re.subn(r'>\s*v\d+\.\d+\.\d+\s*<', f'>v{clean}<', content)
-        if count > 0:
-            app_tsx.write_text(new_content, encoding="utf-8")
-            print(f"[OK] {app_tsx.relative_to(target_root)} -> v{clean}")
-
     return clean
 
 
