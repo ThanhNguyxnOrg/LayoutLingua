@@ -177,12 +177,172 @@ def collect_pdfs(paths: list[Path]) -> list[Path]:
     return list(unique)
 
 
+class ScrollableDropdown(ctk.CTkFrame):
+    """Custom scrollable dropdown with native mouse wheel scrolling and instant search filter."""
+
+    def __init__(
+        self,
+        parent,
+        values: list[str],
+        default_value: str,
+        on_change: callable = None,
+        width: int = 220,
+        height: int = 34,
+        app: App | None = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(parent, fg_color="transparent", width=width, height=height, **kwargs)
+        self.values = values
+        self.current_value = default_value
+        self.on_change = on_change
+        self.app = app
+        self.popup: ctk.CTkToplevel | None = None
+        self._bind_id: str | None = None
+        self.ui_font = getattr(app, "ui_font", UI_FONT)
+
+        self.btn = ctk.CTkButton(
+            self,
+            text=f"{default_value}  ▾",
+            width=width,
+            height=height,
+            corner_radius=8,
+            fg_color=("#F1F5F9", "#131D31"),
+            text_color=("gray10", "#F8FAFC"),
+            hover_color=("#E2E8F0", "#1E293B"),
+            border_width=1,
+            border_color=BORDER_IDLE,
+            font=ctk.CTkFont(self.ui_font, size=13),
+            command=self.toggle_popup,
+        )
+        self.btn.pack(fill="both", expand=True)
+
+    def get(self) -> str:
+        return self.current_value
+
+    def set(self, val: str) -> None:
+        self.current_value = val
+        self.btn.configure(text=f"{val}  ▾")
+
+    def configure(self, **kwargs) -> None:
+        if "state" in kwargs:
+            self.btn.configure(state=kwargs.pop("state"))
+        if kwargs:
+            super().configure(**kwargs)
+
+    def toggle_popup(self) -> None:
+        if self.popup and self.popup.winfo_exists():
+            self.close_popup()
+        else:
+            self.open_popup()
+
+    def open_popup(self) -> None:
+        if self.popup and self.popup.winfo_exists():
+            return
+
+        self.update_idletasks()
+        x = self.btn.winfo_rootx()
+        y = self.btn.winfo_rooty() + self.btn.winfo_height() + 4
+
+        self.popup = ctk.CTkToplevel(self)
+        self.popup.overrideredirect(True)
+        self.popup.geometry(f"250x310+{x}+{y}")
+        self.popup.attributes("-topmost", True)
+
+        frame = ctk.CTkFrame(
+            self.popup,
+            corner_radius=10,
+            border_width=1,
+            border_color=BORDER_IDLE,
+            fg_color=("#FFFFFF", "#0F172A"),
+        )
+        frame.pack(fill="both", expand=True)
+
+        search = ctk.CTkEntry(
+            frame,
+            placeholder_text="🔍 Tìm kiếm ngôn ngữ / Search...",
+            height=30,
+            corner_radius=6,
+            font=ctk.CTkFont(self.ui_font, size=12),
+        )
+        search.pack(fill="x", padx=8, pady=(8, 4))
+
+        scroll = ctk.CTkScrollableFrame(
+            frame,
+            fg_color="transparent",
+            height=250,
+        )
+        scroll.pack(fill="both", expand=True, padx=4, pady=(0, 6))
+
+        item_buttons: list[ctk.CTkButton] = []
+
+        def populate(filter_text: str = "") -> None:
+            for b in item_buttons:
+                b.destroy()
+            item_buttons.clear()
+            filter_lower = filter_text.strip().lower()
+            for v in self.values:
+                if not filter_lower or filter_lower in v.lower():
+                    is_active = (v == self.current_value)
+                    b = ctk.CTkButton(
+                        scroll,
+                        text=f"✓  {v}" if is_active else f"    {v}",
+                        anchor="w",
+                        height=28,
+                        corner_radius=6,
+                        font=ctk.CTkFont(self.ui_font, size=12, weight="bold" if is_active else "normal"),
+                        fg_color=("#E0F2FE", "#1E293B") if is_active else "transparent",
+                        text_color=("#0284C7", "#00F2FE") if is_active else ("gray15", "#F8FAFC"),
+                        hover_color=("#BAE6FD", "#334155"),
+                        command=lambda val=v: self.select(val),
+                    )
+                    b.pack(fill="x", pady=1)
+                    item_buttons.append(b)
+
+        populate()
+        search.bind("<KeyRelease>", lambda _e: populate(search.get()))
+        self.popup.after(50, search.focus_set)
+
+        def on_root_click(e) -> None:
+            if not self.popup or not self.popup.winfo_exists():
+                return
+            px, py = self.popup.winfo_rootx(), self.popup.winfo_rooty()
+            pw, ph = self.popup.winfo_width(), self.popup.winfo_height()
+            bx, by = self.btn.winfo_rootx(), self.btn.winfo_rooty()
+            bw, bh = self.btn.winfo_width(), self.btn.winfo_height()
+            if bx <= e.x_root <= bx + bw and by <= e.y_root <= by + bh:
+                return
+            if not (px <= e.x_root <= px + pw and py <= e.y_root <= py + ph):
+                self.close_popup()
+
+        top_window = self.winfo_toplevel()
+        self._bind_id = top_window.bind("<Button-1>", on_root_click, add="+")
+        self.popup.bind("<Escape>", lambda _e: self.close_popup())
+
+    def select(self, val: str) -> None:
+        self.set(val)
+        self.close_popup()
+        if self.on_change:
+            self.on_change(val)
+
+    def close_popup(self) -> None:
+        if self._bind_id:
+            try:
+                self.winfo_toplevel().unbind("<Button-1>", self._bind_id)
+            except Exception:
+                pass
+            self._bind_id = None
+        if self.popup and self.popup.winfo_exists():
+            self.popup.destroy()
+            self.popup = None
+
+
 class QueueRow:
     """The widgets for one queued file, kept together so the event drain can
     address the mark, the name and the detail column separately."""
 
     def __init__(self, parent, path: Path, app: App) -> None:
         self.path = path
+        self.app = app
         # Double-bezel outer shell:
         self.frame = ctk.CTkFrame(
             parent, corner_radius=10, border_width=1,
@@ -219,13 +379,21 @@ class QueueRow:
         self.message.grid(row=1, column=1, columnspan=2, padx=PAD, pady=(0, 8), sticky="ew")
         self.message.grid_remove()
 
+        self.requeue = ctk.CTkButton(
+            self.frame, text="↺", width=26, height=26, corner_radius=6,
+            fg_color="transparent", hover_color=("gray78", "#1E293B"),
+            text_color=ACCENT, font=ctk.CTkFont(app.ui_font, size=13, weight="bold"),
+            command=lambda: app.requeue_file(path),
+        )
+        self.requeue.grid(row=0, column=3, padx=(PAD // 4, 0), pady=8)
+
         self.remove = ctk.CTkButton(
             self.frame, text="✕", width=26, height=26, corner_radius=6,
             fg_color="transparent", hover_color=("gray78", "#1E293B"),
             text_color=MUTED, font=ctk.CTkFont(app.ui_font, size=12),
             command=lambda: app.remove_file(path),
         )
-        self.remove.grid(row=0, column=3, padx=(PAD // 2, PAD), pady=8)
+        self.remove.grid(row=0, column=4, padx=(PAD // 4, PAD), pady=8)
 
         # Hover the whole row, not just the button, so it reads as one item.
         for widget in (self.frame, self.mark, self.name, self.detail, self.message):
@@ -247,9 +415,14 @@ class QueueRow:
             self.message.grid()
         else:
             self.message.grid_remove()
-        if state != "queued":
-            # Removing a file mid-batch would desync the worker's own list.
+
+    def set_running(self, running: bool) -> None:
+        if running:
+            self.requeue.grid_remove()
             self.remove.grid_remove()
+        else:
+            self.requeue.grid(row=0, column=3, padx=(PAD // 4, 0), pady=8)
+            self.remove.grid(row=0, column=4, padx=(PAD // 4, PAD), pady=8)
 
     def destroy(self) -> None:
         self.frame.destroy()
@@ -326,6 +499,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self._build_controls()
         self._build_queue()
         self._build_footer()
+        self.bind("<Configure>", lambda _e: self.language.close_popup() if hasattr(self, "language") else None, add="+")
 
     def _build_header(self) -> None:
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -447,11 +621,15 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         ).grid(row=0, column=0, padx=(GAP, PAD + 2), pady=(GAP, PAD), sticky="w")
 
         names = sorted(LANGUAGE_NAMES[code] for code in TARGET_LANGUAGES if code in LANGUAGE_NAMES)
-        self.language = ctk.CTkOptionMenu(
-            controls, values=names, width=200, height=34,
-            font=ctk.CTkFont(self.ui_font, size=13),
+        self.language = ScrollableDropdown(
+            controls,
+            values=names,
+            default_value=LANGUAGE_NAMES[DEFAULT_TARGET_LANGUAGE],
+            on_change=self._on_language_changed,
+            width=220,
+            height=34,
+            app=self,
         )
-        self.language.set(LANGUAGE_NAMES[DEFAULT_TARGET_LANGUAGE])
         self.language.grid(row=0, column=1, pady=(GAP, PAD), sticky="w")
 
         self.translate_button = ctk.CTkButton(
@@ -468,6 +646,13 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             font=ctk.CTkFont(self.ui_font, size=12),
         )
         self.overwrite.grid(row=1, column=0, columnspan=2, padx=GAP, pady=(0, GAP), sticky="w")
+
+    def _on_language_changed(self, new_lang: str) -> None:
+        if self.worker and self.worker.is_alive():
+            return
+        if self.files and all(self.states.get(p) in ("done", "partial", "failed", "skipped") for p in self.files):
+            self.translate_button.configure(state="normal", text="Translate All")
+            self.status.configure(text=f"Ready to translate {len(self.files)} file(s) into {new_lang}")
 
     def _build_queue(self) -> None:
         head = ctk.CTkFrame(self, fg_color="transparent")
@@ -613,6 +798,22 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.progress.grid_remove()
         self._refresh_queue_chrome()
 
+    def requeue_file(self, path: Path) -> None:
+        """Re-queue an individual finished/failed file for re-translation."""
+        if self.worker and self.worker.is_alive():
+            return
+        self.states[path] = "queued"
+        self.outputs.pop(path, None)
+        self.failures.pop(path, None)
+        row = self.rows.get(path)
+        if row:
+            row.set_state("queued", "")
+            for widget in (row.frame, row.mark, row.name, row.detail, row.message):
+                widget.configure(cursor="arrow")
+                widget.unbind("<Button-1>")
+        self.translate_button.configure(state="normal", text="Translate All")
+        self.status.configure(text=f"Re-queued {path.name}")
+
     def _refresh_queue_chrome(self) -> None:
         """Keep the count, the empty state and the dropzone size in step."""
         count = len(self.files)
@@ -621,7 +822,16 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self.empty_state.grid_remove()
         else:
             self.empty_state.grid()
-        self.status.configure(text=f"{count} file(s) in queue" if count else "No files queued")
+        has_pending = any(self.states.get(p) in ("queued", "failed") for p in self.files)
+        if not count:
+            self.translate_button.configure(text="Translate All")
+            self.status.configure(text="No files queued")
+        elif not has_pending:
+            self.translate_button.configure(text="Translate Again")
+            self.status.configure(text=f"{count} file(s) translated")
+        else:
+            self.translate_button.configure(text="Translate All")
+            self.status.configure(text=f"{count} file(s) in queue")
         self._resize_dropzone()
 
     # -- update ------------------------------------------------------------
@@ -751,8 +961,21 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             return
         pending = [path for path in self.files if self.states[path] in ("queued", "failed")]
         if not pending:
-            self.status.configure(text="No files pending translation")
-            return
+            if self.files:
+                for path in self.files:
+                    self.states[path] = "queued"
+                    self.outputs.pop(path, None)
+                    self.failures.pop(path, None)
+                    row = self.rows.get(path)
+                    if row:
+                        row.set_state("queued", "")
+                        for widget in (row.frame, row.mark, row.name, row.detail, row.message):
+                            widget.configure(cursor="arrow")
+                            widget.unbind("<Button-1>")
+                pending = list(self.files)
+            else:
+                self.status.configure(text="No files queued")
+                return
 
         names = {name: code for code, name in LANGUAGE_NAMES.items()}
         language = names[self.language.get()]
@@ -760,6 +983,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         self.translate_button.configure(state="disabled", text="Translating…")
         self.clear_button.configure(state="disabled")
+        for row in self.rows.values():
+            row.set_running(True)
         # The engine loads a 70 MB layout model before the first page event, and
         # a bar frozen at 0% for those seconds reads as a hung app.
         self.determinate = False
@@ -982,8 +1207,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                 self.update_tag = event[1]
                 self._show_update_link(f"● Install {event[1]} & restart", "install")
             elif event[0] == "finished":
-                self.translate_button.configure(state="normal", text="Translate")
+                self.translate_button.configure(state="normal", text="Translate Again")
                 self.clear_button.configure(state="normal")
+                for row in self.rows.values():
+                    row.set_running(False)
                 self._go_determinate()
                 counts = {}
                 for state in self.states.values():
