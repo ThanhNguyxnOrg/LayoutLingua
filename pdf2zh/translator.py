@@ -222,6 +222,9 @@ def validate_formula_placeholders(source: str, translated: str) -> None:
 
 def restore_formula_placeholders(source: str, translated: str) -> str:
     """Validate translator output and restore its tags to converter markers."""
+    from pdf2zh.formula import normalize_mt_placeholders
+
+    translated = normalize_mt_placeholders(translated)
     encoded_source = encode_formula_placeholders(source)
     validate_formula_placeholders(encoded_source, translated)
     validate_style_tags(encoded_source, translated)
