@@ -266,18 +266,32 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     p1.insert_text((505, 627), "(3)", fontsize=9, fontname="helv", color=c_source)
     p1.insert_text((50, 663), "[Source: LayoutLingua Specification, Section 4.2: Topological Coordinate Masking]", fontsize=7.5, fontname="heit", color=c_source)
 
-    # Section 1.1: Topological Reading Order Preservation
-    p1.insert_text((50, 680), "1.1 Topological Reading Order Preservation", fontsize=10.5, fontname="hebo", color=c_primary)
+    # Section 1.1: Topological Reading Order & Invariant Bullet List
+    p1.insert_text((50, 672), "1.1 Topological Reading Order & Invariant Checklist", fontsize=10.5, fontname="hebo", color=c_primary)
     p1_summary = (
         "The directed acyclic parsing tree preserves strictly vertical column streams before sentence boundary detection "
-        "is attempted, ensuring invariant topological reconstruction across heterogeneous target languages."
+        "is attempted, ensuring invariant topological reconstruction across heterogeneous target languages:"
     )
-    p1.insert_textbox(fitz.Rect(50, 690, 545, 725), p1_summary, fontsize=8.4, fontname="helv", color=c_body, lineheight=1.2)
+    p1.insert_textbox(fitz.Rect(50, 680, 545, 702), p1_summary, fontsize=8.0, fontname="helv", color=c_body, lineheight=1.15)
+
+    # Bullet list with hanging indents and special symbols (BabelDOC #89, PDFMathTranslate #1175)
+    bullet_items = [
+        "• Invariant § 1.1: Financial tolerances $1,250.00 ± 0.05% and temperature metrics (T = 25°C) must remain unbroken.",
+        "• Invariant § 1.2: Hypothesis testing p-values (p < 0.001) under critical threshold τ ∈ [0, 1] must not translate.",
+        "• Invariant § 1.3: Unicode typography—including em-dash (—), euro (€45.90), and copyright notice (© 2026)—is preserved.",
+    ]
+    b_y = 704
+    for b_text in bullet_items:
+        p1.insert_textbox(fitz.Rect(58, b_y, 545, b_y + 13), b_text, fontsize=7.4, fontname="helv", color=c_body, lineheight=1.1)
+        b_y += 13
+
+    # Vertical Rotated Text Margin Annotation (BabelDOC #89 & rotated text edge case)
+    p1.insert_text((568, 520), "PREPRINT — UNDER PEER REVIEW (DO NOT REDISTRIBUTE)", fontsize=7.0, fontname="hebo", color=(0.65, 0.68, 0.75), rotate=90)
 
     # Footnotes at bottom
-    p1.draw_line((50, 742), (200, 742), color=c_line, width=0.6)
-    p1.insert_text((50, 755), "* Corresponding author: alan@cambridge.ac.uk", fontsize=7, fontname="helv", color=c_source)
-    p1.insert_text((50, 765), "† Work performed while visiting the Institute for Advanced Study, Princeton.", fontsize=7, fontname="helv", color=c_source)
+    p1.draw_line((50, 752), (200, 752), color=c_line, width=0.6)
+    p1.insert_text((50, 763), "* Corresponding author: alan@cambridge.ac.uk", fontsize=7, fontname="helv", color=c_source)
+    p1.insert_text((50, 773), "† Work performed while visiting the Institute for Advanced Study, Princeton.", fontsize=7, fontname="helv", color=c_source)
 
     # Page 1 Footer
     p1.draw_line((50, 800), (545, 800), color=c_line, width=0.5)
@@ -524,16 +538,16 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     for i, h in enumerate(headers):
         p5.insert_text((col_x[i] + 6, table_top + 15), h, fontsize=8, fontname="hebo", color=(1, 1, 1))
 
-    # Table rows
+    # Table rows with exact bug stress triggers (Marker #1068, Docling, MinerU, PDFMathTranslate #1175)
     rows_data = [
-        ("LL-1.0.0-PRO", "Theoretical Physics (arXiv)", "44.82", "99.8%", "1.12 s"),
-        ("LL-1.0.0-PRO", "Organic Reaction Kinetics", "41.35", "99.6%", "1.18 s"),
-        ("LL-1.0.0-PRO", "Differential Geometry", "45.10", "99.9%", "1.09 s"),
-        ("LL-1.0.0-PRO", "Biochemical Thermodynamics", "43.20", "99.5%", "1.15 s"),
-        ("BabelDOC-Hybrid", "Theoretical Physics (arXiv)", "38.60", "91.2%", "2.40 s"),
-        ("BabelDOC-Hybrid", "Organic Reaction Kinetics", "36.40", "88.7%", "2.65 s"),
-        ("Baseline-PDF", "Theoretical Physics (arXiv)", "28.40", "64.2%", "3.45 s"),
-        ("Baseline-PDF", "Organic Reaction Kinetics", "25.10", "58.1%", "3.80 s"),
+        ("LL-1.0.0-PRO", "Theoretical Physics (arXiv)", "44.82 ± 0.12", "99.8%", "p < 0.001"),
+        ("LL-1.0.0-PRO", "Financial NLP ($25,000)", "$12,450.00", "99.6%", "€45.90 / req"),
+        ("LL-1.0.0-PRO", "Reaction Thermodynamics", "45.10 ± 0.25", "99.9%", "ΔH° = -92.4"),
+        ("LL-1.0.0-PRO", "Complex Attention O(N log N)", "43.20 ± 0.30", "99.5%", "1.15 s (N/A)"),
+        ("BabelDOC-Hybrid", "ResNet-50 / CNN-LSTM", "38.60 ± 0.45", "91.2%", "p = 0.042"),
+        ("BabelDOC-Hybrid", "Chemical Kinetics 25°C", "36.40 ± 0.50", "88.7%", "2.65 s"),
+        ("Baseline-PDF", "Theoretical Physics (arXiv)", "28.40 ± 1.10", "64.2%", "p = 0.185"),
+        ("Baseline-PDF", "Multi-Modal Matrix W ∈ R^d", "25.10 ± 1.35", "58.1%", "N/A (Fail)"),
     ]
 
     for r_idx, row in enumerate(rows_data):
@@ -543,30 +557,29 @@ def generate_benchmark_pdf(output_path: Path) -> None:
         p5.draw_rect(fitz.Rect(col_x[0], y0, col_x[-1], y1), color=c_line, fill=bg_col, width=0.5)
         for c_idx, val in enumerate(row):
             font = "courier" if c_idx in (0, 2, 3, 4) else "helv"
-            p5.insert_text((col_x[c_idx] + 6, y0 + 15), val, fontsize=8, fontname=font, color=c_body)
+            p5.insert_text((col_x[c_idx] + 6, y0 + 15), val, fontsize=7.6, fontname=font, color=c_body)
 
     table_bottom = table_top + (len(rows_data) + 1) * row_h
     p5.insert_text((50, table_bottom + 12), "[Data Source: LayoutLingua Benchmarks v1.0.0, evaluated against PyMuPDF 1.25 & BabelDOC Ground Truth]", fontsize=7, fontname="heit", color=c_source)
 
-    # Section 8: Literature Citations & Full References (10 References)
-    p5.insert_text((50, table_bottom + 35), "9. References and Source Literature", fontsize=11.5, fontname="hebo", color=c_primary)
+    # Vertical Rotated Text Margin Annotation (Page 5)
+    p5.insert_text((568, 480), "STRESS BENCHMARK SUITE — CONFIDENTIAL EVALUATION COPY", fontsize=7.0, fontname="hebo", color=(0.65, 0.68, 0.75), rotate=90)
+
+    # Section 8: Literature Citations & Full References (10 References with DOIs & Citation Ranges)
+    p5.insert_text((50, table_bottom + 32), "9. References and Source Literature", fontsize=11.5, fontname="hebo", color=c_primary)
     refs = [
-        "[1] U. Montanari, 'Networks of Constraints: Fundamental Properties and Applications to Picture Processing', Information Sciences, 1974.",
-        "[2] C. M. Bishop, Pattern Recognition and Machine Learning. New York: Springer, 2006, Chapter 3, pp. 137-160.",
-        "[3] I. Goodfellow, Y. Bengio, and A. Courville, Deep Learning. Cambridge, MA: MIT Press, 2016, Chapter 6, p. 172.",
-        "[4] A. Vaswani et al., 'Attention Is All You Need', in Advances in Neural Information Processing Systems (NeurIPS), 2017, pp. 5998-6008.",
-        "[5] M. A. Nielsen and I. L. Chuang, Quantum Computation and Quantum Information. Cambridge: Cambridge University Press, 2010.",
-        "[6] P. J. Huber, Robust Statistics. Hoboken, NJ: John Wiley & Sons, 2004, Chapter 3, p. 43.",
-        "[7] D. J. Griffiths, Introduction to Electrodynamics, 4th ed. Cambridge: Cambridge University Press, 2017, p. 338.",
-        "[8] J. Stewart, Calculus: Early Transcendentals, 8th ed. Boston: Cengage Learning, 2015, Theorem 16.8, p. 1130.",
-        "[9] P. Atkins and J. de Paula, Physical Chemistry, 10th ed. Oxford: Oxford University Press, 2014, Chapter 6.",
+        "[1, 2] U. Montanari, 'Networks of Constraints: Fundamental Properties and Applications to Picture Processing', Inf. Sci., 1974. doi:10.1016/S0020-0255(74)80008-5.",
+        "[3] C. M. Bishop, Pattern Recognition and Machine Learning. New York: Springer, 2006, Chapter 3, pp. 137-160.",
+        "[4–6] A. Vaswani et al., 'Attention Is All You Need', in Advances in Neural Information Processing Systems (NeurIPS), 2017, pp. 5998-6008.",
+        "[7] M. A. Nielsen and I. L. Chuang, Quantum Computation and Quantum Information. Cambridge: Cambridge University Press, 2010.",
+        "[8, 9] P. J. Huber, Robust Statistics. Hoboken, NJ: John Wiley & Sons, 2004, Chapter 3, p. 43; D. J. Griffiths, Electrodynamics, 2017.",
         "[10] L. Michaelis and M. L. Menten, 'Die Kinetik der Invertinwirkung', Biochemische Zeitschrift, vol. 49, pp. 333-369, 1913.",
     ]
 
-    ref_y = table_bottom + 52
+    ref_y = table_bottom + 48
     for ref in refs:
-        p5.insert_textbox(fitz.Rect(50, ref_y, 545, ref_y + 20), ref, fontsize=7.5, fontname="helv", color=c_body, lineheight=1.1)
-        ref_y += 21
+        p5.insert_textbox(fitz.Rect(50, ref_y, 545, ref_y + 18), ref, fontsize=7.2, fontname="helv", color=c_body, lineheight=1.1)
+        ref_y += 19
 
     # Page 5 Footer
     p5.draw_line((50, 800), (545, 800), color=c_line, width=0.5)
