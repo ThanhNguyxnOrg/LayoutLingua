@@ -224,7 +224,7 @@ def generate_benchmark_pdf(output_path: Path) -> None:
         "an undifferentiated stream, fed to a sequence-to-sequence model, and dumped into plain text without preserving "
         "spatial bounding coordinates.\n\n"
         "High-fidelity layout preservation treats every character and formula as an invariant topological entity with "
-        "bounding box B_i = [x_min, y_min, x_max, y_max]ᵀ. The fundamental objective is to determine an operator Φ(X) "
+        "bounding box Bᵢ = [xₘᵢₙ, yₘᵢₙ, xₘₐₓ, yₘₐₓ]ᵀ. The fundamental objective is to determine an operator Φ(X) "
         "ensuring prose text undergoes semantic translation without causing geometric collisions with mathematical symbols, "
         "as formalized in Equation (1)."
     )
@@ -437,8 +437,8 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     p3_mixed = (
         "For an arbitrary reversible chemical system aA + bB ⇌ cC + dD at temperature T = 298.15 K and pressure P = 1.0 bar, "
         "the reaction quotient Q = [C]^c [D]^d / ([A]^a [B]^b) governs instantaneous Gibbs free energy ΔG = ΔG° + RT ln Q, "
-        "where R = 8.314 J/(mol·K). Catalytic turnover in Michaelis-Menten dynamics satisfies k_cat = V_max / [E]₀ = 4.2 × 10³ s⁻¹ "
-        "with specificity constant k_cat / K_m ≥ 10⁸ M⁻¹ s⁻¹ approaching diffusion control.\n\n"
+        "where R = 8.314 J/(mol·K). Catalytic turnover in Michaelis-Menten dynamics satisfies k_cat = Vₘₐₓ / [E]₀ = 4.2 × 10³ s⁻¹ "
+        "with specificity constant k_cat / Kₘ ≥ 10⁸ M⁻¹ s⁻¹ approaching diffusion control.\n\n"
         "In electrodynamics, local energy conservation follows Poynting's theorem ∂u/∂t + ∇·S = -J·E with energy density "
         "u = ½(ε₀ E² + (1/μ₀)B²) and flux S = E × H. Stokes' circulation ∮ F·dr around boundary ∂S verifies differential "
         "curl curl(E) = -∂B/∂t, confirming that field operators retain mathematical invariance under layout-preserving translation."
@@ -501,8 +501,8 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     f_acad4 = attach_acad_font(p4)
     p4.insert_text((50, 628), "7.1 Optimization Convergence & Preservation Bounds", fontsize=10.5, fontname="hebo", color=c_primary)
     p4_mixed = (
-        "The iterative spatial optimizer updates bounding boxes B_i^(t+1) = B_i^(t) - η_t ∇ L_geom with cosine learning "
-        "rate η_t = η_min + ½(η_0 - η_min)(1 + cos(π t / T_max)), where initial step η_0 = 10⁻³ and convergence tolerance "
+        "The iterative spatial optimizer updates bounding boxes Bᵢᵗ⁺¹ = Bᵢᵗ - ηₜ ∇ L_geom with cosine learning "
+        "rate ηₜ = ηₘᵢₙ + ½(η₀ - ηₘᵢₙ)(1 + cos(π t / Tₘₐₓ)), where initial step η₀ = 10⁻³ and convergence tolerance "
         "ε = 10⁻⁶. Across 20 optimization epochs, the multi-task loss converges exponentially to L_total ≤ 0.12, achieving "
         "validation preservation score BLEU-4 ≥ 44.82 and formula bounding IoU ≥ 99.8% across all evaluation domains."
     )
