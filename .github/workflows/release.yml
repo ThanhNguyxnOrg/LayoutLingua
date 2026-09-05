@@ -135,8 +135,8 @@ jobs:
 
       - uses: actions/upload-artifact@v6
         with:
-          name: LayoutLingua-windows
-          path: dist/LayoutLingua-windows.zip
+          name: LayoutLingua-windows-x86_64
+          path: dist/LayoutLingua-windows-*.zip
           if-no-files-found: error
 
   macos:

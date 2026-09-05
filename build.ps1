@@ -70,9 +70,10 @@ if ($missing) {
     throw "Incomplete build, refusing to package. Missing:`n  " + ($missing -join "`n  ")
 }
 
-$archive = Join-Path $root "dist\LayoutLingua-windows.zip"
+$archive = Join-Path $root "dist\LayoutLingua-windows-x86_64.zip"
 Write-Host "==> Zipping to $archive" -ForegroundColor Cyan
 Compress-Archive -Path (Join-Path $output "*") -DestinationPath $archive -Force
+Copy-Item -Path $archive -Destination (Join-Path $root "dist\LayoutLingua-windows.zip") -Force
 
 $size = (Get-ChildItem $output -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
 Write-Host ("==> Done. Folder {0:N0} MB, archive {1:N0} MB" -f $size, ((Get-Item $archive).Length / 1MB)) -ForegroundColor Green

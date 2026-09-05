@@ -31,6 +31,7 @@ from app.errors import Failure, describe_failure, report_text  # noqa: E402
 from app.update import (  # noqa: E402
     APP_VERSION,
     RELEASES_PAGE,
+    REPOSITORY,
     can_self_update,
     check_for_update,
     clean_previous_install,
@@ -721,13 +722,19 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         footer_links = ctk.CTkFrame(footer, fg_color="transparent")
         footer_links.grid(row=1, column=1, sticky="e")
 
-        for label, tab in (("Changelog", "changelog"), ("Credits", "credits"), ("Report Issue", "report")):
+        def on_link_click(tab: str) -> None:
+            if tab == "report":
+                webbrowser.open_new_tab(f"https://github.com/{REPOSITORY}/issues/new/choose")
+            else:
+                self._show_info_modal(tab)
+
+        for label, tab in (("Changelog", "changelog"), ("Credits", "credits"), ("Report Issue ↗", "report")):
             btn = ctk.CTkLabel(
                 footer_links, text=label, cursor="hand2", text_color=MUTED,
                 font=ctk.CTkFont(self.ui_font, size=11, underline=True),
             )
             btn.pack(side="left", padx=PAD // 2)
-            btn.bind("<Button-1>", lambda _e, t=tab: self._show_info_modal(t))
+            btn.bind("<Button-1>", lambda _e, t=tab: on_link_click(t))
             btn.bind("<Enter>", lambda _e, b=btn: b.configure(text_color=ACCENT))
             btn.bind("<Leave>", lambda _e, b=btn: b.configure(text_color=MUTED))
 

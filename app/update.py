@@ -30,7 +30,8 @@ RELEASES_PAGE = f"https://github.com/{REPOSITORY}/releases/latest"
 # publishing a release. It is unset on any machine that is not testing one.
 API_VARIABLE = "LAYOUTLINGUA_UPDATE_API"
 
-WINDOWS_ASSET = "LayoutLingua-windows.zip"
+WINDOWS_ASSET = "LayoutLingua-windows-x86_64.zip"
+LEGACY_WINDOWS_ASSETS = ("LayoutLingua-windows-x86_64.zip", "LayoutLingua-windows.zip")
 # The two files build.ps1 refuses to package without. Enough to tell a real
 # payload from a truncated download or a zip of the wrong thing.
 REQUIRED_PAYLOAD = ("LayoutLingua.exe", "_internal/base_library.zip")
@@ -98,7 +99,7 @@ def latest_release(current: str = APP_VERSION) -> Release | None:
         if not is_newer(tag, current):
             return None
         for asset in payload.get("assets") or ():
-            if asset.get("name") == WINDOWS_ASSET:
+            if asset.get("name") in LEGACY_WINDOWS_ASSETS:
                 return Release(tag, asset["browser_download_url"], int(asset.get("size") or 0))
         return Release(tag, "", 0)
     except Exception:  # noqa: BLE001 - an update check must never break startup
