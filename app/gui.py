@@ -16,6 +16,7 @@ import sys
 import threading
 import tkinter
 import traceback
+import urllib.parse
 import webbrowser
 from datetime import datetime
 from pathlib import Path
@@ -1243,27 +1244,26 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         cleaned_content = re.sub(r"<[^>]+>", "", normalized)
         raw_blocks = re.split(r"\n##\s+", cleaned_content)
 
+        rendered_versions = 0
         for block in raw_blocks[1:]:
             lines = block.split("\n")
             header_line = lines[0].strip()
             if not header_line:
                 continue
 
-            is_unreleased = "unreleased" in header_line.lower()
-            if is_unreleased:
-                version_title = "⚡ Upcoming Features & Improvements"
-                badge_text = "In Development"
-                badge_bg = ("#FEF3C7", "#451a03")
-                badge_fg = ("#D97706", "#FBBF24")
-                card_border = ACCENT
-            else:
-                clean_h = re.sub(r"\[([^\]]+)\]", r"v\1", header_line)
-                clean_h = re.sub(r"\bv+([0-9])", r"v\1", clean_h)
-                version_title = clean_h.strip()
-                badge_text = "Production Ready"
-                badge_bg = ("#DCFCE7", "#064E3B")
-                badge_fg = ("#16A34A", "#34D399")
-                card_border = BORDER_IDLE
+            # Skip [Unreleased] developer notes - end-users only see actual releases
+            if "unreleased" in header_line.lower():
+                continue
+
+            clean_h = re.sub(r"\[([^\]]+)\]", r"v\1", header_line)
+            clean_h = re.sub(r"\bv+([0-9])", r"v\1", clean_h)
+            version_title = clean_h.strip()
+
+            is_current = APP_VERSION in header_line
+            badge_text = f"Current Version • v{APP_VERSION}" if is_current else "Stable Release"
+            badge_bg = ("#DCFCE7", "#064E3B")
+            badge_fg = ("#16A34A", "#34D399")
+            card_border = ACCENT if (is_current or rendered_versions == 0) else BORDER_IDLE
 
             card = ctk.CTkFrame(
                 scroll, corner_radius=8, fg_color=HOVER,
@@ -1271,6 +1271,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             )
             card.pack(fill="x", pady=(0, PAD))
             card.grid_columnconfigure(0, weight=1)
+            rendered_versions += 1
 
             # Card Header Bar
             card_top = ctk.CTkFrame(card, fg_color="transparent")
@@ -1497,8 +1498,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
 
         ctk.CTkLabel(
             report_frame,
-            text="LayoutLingua follows strict fail-closed preservation: if a formula or table cell cannot be translated with 100% geometric fidelity, it is preserved in the source language. If you find a bug or unexpected behavior, please submit a report directly to GitHub!",
-            font=ctk.CTkFont(self.ui_font, size=11), text_color=MUTED, justify="left", wraplength=600, anchor="w",
+            text="LayoutLingua follows strict fail-closed preservation: if a formula or table cell cannot be translated with 100% geometric fidelity, it is preserved in the source language. Clicking 'Open GitHub Bug Report ↗' will automatically detect your OS, app version, Python environment, and pre-fill them directly into GitHub Issues!",
+            font=ctk.CTkFont(self.ui_font, size=11), text_color=MUTED, justify="left", wraplength=620, anchor="w",
         ).pack(fill="x", pady=(0, PAD))
 
         # System Diagnostics info box
@@ -1526,6 +1527,60 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self.clipboard_append(diag_info)
             diag_status.configure(text="Diagnostics copied to clipboard!")
 
+        def open_bug_report() -> None:
+            # 1. Automatically detect OS matching bug_report.yml dropdown options:
+            # ("Windows 11", "Windows 10", "macOS (Apple Silicon - M1/M2/M3/M4)", "macOS (Intel - x86_64)", "Linux (Ubuntu / Debian / Fedora / Arch)", "Android")
+            sys_name = platform.system()
+            rel = platform.release()
+            mach = platform.machine()
+            if sys_name == "Windows":
+                is_win_11 = rel == "11"
+                try:
+                    ver_parts = platform.version().split(".")
+                    if len(ver_parts) >= 3 and int(ver_parts[2]) >= 22000:
+                        is_win_11 = True
+                except Exception:
+                    pass
+                detected_os = "Windows 11" if is_win_11 else "Windows 10"
+            elif sys_name == "Darwin":
+                detected_os = "macOS (Apple Silicon - M1/M2/M3/M4)" if "arm" in mach.lower() else "macOS (Intel - x86_64)"
+            elif sys_name == "Linux":
+                detected_os = "Linux (Ubuntu / Debian / Fedora / Arch)"
+            else:
+                detected_os = "Windows 11"
+
+            # 2. Detect selected target language
+            target_lang = "vi"
+            try:
+                selected_display = self.language.get()
+                for code, display in LANGUAGE_NAMES.items():
+                    if display == selected_display:
+                        target_lang = code
+                        break
+            except Exception:
+                pass
+
+            # 3. Gather logs and failure details
+            log_payload = diag_info
+            failed_files = [str(p.name) for p, st in self.states.items() if st in ("failed", "partial")]
+            if failed_files:
+                log_payload += f"\nAffected Files: {', '.join(failed_files)}\n"
+            if hasattr(self, "rows"):
+                error_msgs = [f"- {r.name.cget('text')}: {r.message.cget('text')}" for r in self.rows.values() if r.state in ("failed", "partial")]
+                if error_msgs:
+                    log_payload += "\nStatus Details:\n" + "\n".join(error_msgs)
+
+            params = {
+                "template": "bug_report.yml",
+                "app_version": APP_VERSION,
+                "os": detected_os,
+                "target_language": target_lang,
+                "logs": log_payload,
+            }
+            url = f"https://github.com/{REPOSITORY}/issues/new?" + urllib.parse.urlencode(params)
+            webbrowser.open_new_tab(url)
+            diag_status.configure(text="Opened GitHub with OS, version & diagnostics pre-filled automatically!")
+
         ctk.CTkButton(
             action_row, text="📋 Copy Diagnostics", width=140, height=32,
             fg_color="transparent", border_width=1, border_color=BORDER_IDLE,
@@ -1534,8 +1589,8 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         ).pack(side="left", padx=(0, PAD))
 
         ctk.CTkButton(
-            action_row, text="🐞 Open GitHub Bug Report ↗", width=190, height=32,
-            command=lambda: webbrowser.open_new_tab(f"https://github.com/{REPOSITORY}/issues/new?template=bug_report.yml"),
+            action_row, text="🐞 Open GitHub Bug Report ↗", width=205, height=32,
+            command=open_bug_report,
             font=ctk.CTkFont(self.ui_font, size=12, weight="bold"),
         ).pack(side="left", padx=(0, PAD))
 
