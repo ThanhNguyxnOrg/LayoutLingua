@@ -58,9 +58,12 @@ MONO_FONT = "JetBrains Mono"
 if sys.platform == "darwin":
     FALLBACK_UI_FONT = "Helvetica Neue"
     FALLBACK_MONO_FONT = "Menlo"
-else:
+elif sys.platform == "win32":
     FALLBACK_UI_FONT = "Segoe UI"
     FALLBACK_MONO_FONT = "Consolas"
+else:
+    FALLBACK_UI_FONT = "DejaVu Sans"
+    FALLBACK_MONO_FONT = "DejaVu Sans Mono"
 
 # One 8px rhythm for the whole window, so nothing is spaced by feel.
 PAD, GAP, EDGE = 8, 16, 24
