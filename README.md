@@ -199,26 +199,22 @@ cd android && ./gradlew assembleRelease
 
 ---
 
-## CI/CD & Releasing
+## CI/CD & Automated Releasing
 
-LayoutLingua features a unified 4-platform release pipeline that avoids consuming GitHub Actions minutes on standard code pushes:
+LayoutLingua uses a 100% automated release pipeline powered by GitHub Actions:
 
-- **Recommended (One-Command Release):** Use the built-in release manager:
+- **Automated Cloud Release:** You do not need to run any local release scripts. Simply commit with a release keyword:
   ```bash
-  python scripts/release.py patch    # Bumps 1.0.0 -> 1.0.1, updates configs, commits, tags, and pushes
-  python scripts/release.py minor    # Bumps 1.0.0 -> 1.1.0
-  python scripts/release.py 1.0.1    # Explicit version bump
-  ```
-- **Commit Keyword Trigger:** Include a `release:` or `bump:` keyword in your commit message:
-  ```bash
-  git commit -m "release: 1.0.1"
+  git commit -m "release: 1.0.0"
   git push origin main
   ```
-- **Git Tag Trigger:** Push any `v*` tag directly:
-  ```bash
-  git tag v1.0.1 && git push origin v1.0.1
-  ```
-- **Resource Protection:** Standard commits complete the CI check in ~5 seconds and skip heavy cross-platform runners.
+  GitHub Actions automatically handles everything in the cloud:
+  1. Detects release version `1.0.0` from the commit message.
+  2. Automatically builds all 4 platform binaries in parallel (Windows, macOS, Linux, Android).
+  3. Extracts matching release notes from [CHANGELOG.md](CHANGELOG.md).
+  4. Creates the GitHub Release, attaches all 4 platform assets, and tags `v1.0.0`.
+  5. Synchronizes version files on `main` with `[skip ci]`.
+- **Resource Protection:** Normal code commits run the lightweight test suite in ~30 seconds and skip heavy cross-platform builders, saving GitHub Actions quota.
 
 ## License
 
