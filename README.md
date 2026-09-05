@@ -43,7 +43,7 @@
   <a href="#quick-start">Quick Start</a> ·
   <a href="#usage-guide">Usage</a> ·
   <a href="#agent-skill">Agent Skill</a> ·
-  <a href="#ci-cd--releasing">Releasing</a> ·
+  <a href="docs/development.md">Developer Guide</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
   <a href="#license">License</a>
 </p>
@@ -151,70 +151,13 @@ In **Handoff** mode, translatable text is extracted to JSONL chunks, translated 
 
 ---
 
-## Architecture & Future Roadmap
+## Developer Resources
 
-LayoutLingua builds upon the foundational advances of leading document processing systems—synthesizing the formula preservation of **PDFMathTranslate**, precision diacritical ink-metric typography, the intermediate representation (IR) and Chinese/CJK engine of **[BabelDOC](https://github.com/funstory-ai/BabelDOC)**, and the multimodal vision capabilities of **[AllenAI olmOCR](https://github.com/allenai/olmocr)**.
+Looking to contribute, run tests, understand the translation pipeline, or build binaries from source?
 
-For complete technical specifications, see [docs/architecture-roadmap.md](docs/architecture-roadmap.md).
-
-### 1. Multilingual Chinese & CJK Expansion (Inspired by BabelDOC)
-- **Decoupled Intermediate Representation (IR):** Decouples page layout geometry from semantic text streams, enabling lossless re-typesetting.
-- **Cross-Page Paragraph Stitching:** Merges sentences that wrap across page boundaries or columns before translation.
-- **Chinese/CJK Typesetting Engine:** Dynamic punctuation compression (*kinshoku shori*), character-spacing optimization, and integrated Google Noto Sans CJK SC/TC/JP/KR font cascades.
-- **Document-Level Glossary Constraints:** Automated domain terminology extraction enforcing lexical consistency across whole documents.
-
-### 2. Vision & Scanned Document Pipeline (Powered by olmOCR)
-- **[AllenAI olmOCR](https://github.com/allenai/olmocr) Pipeline:** Multi-modal Vision-Language Models (e.g., Molmo, Qwen2-VL) transcribe dense scanned pages, multi-column research papers, and complex LaTeX equations into grounded Markdown with bounding boxes.
-- **Text Erasure & Inpainting:** Background text removal via LaMa inpainting to preserve underlying graphics, charts, diagrams, and figures.
-- **Composite Re-typesetting:** Overlay target translations seamlessly into original image coordinate frames.
-
----
-
-## Building from Source
-
-### Prerequisites
-
-```powershell
-git clone https://github.com/ThanhNguyxnOrg/LayoutLingua.git
-cd LayoutLingua
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-### Build Desktop Binaries
-
-```bash
-# Windows
-.\build.ps1
-
-# macOS
-bash build-macos.sh
-
-# Linux
-bash build-linux.sh
-
-# Android
-cd android && ./gradlew assembleRelease
-```
-
----
-
-## CI/CD & Automated Releasing
-
-LayoutLingua uses a 100% automated release pipeline powered by GitHub Actions:
-
-- **Automated Cloud Release:** You do not need to run any local release scripts. Simply commit with a release keyword:
-  ```bash
-  git commit -m "release: 1.0.0"
-  git push origin main
-  ```
-  GitHub Actions automatically handles everything in the cloud:
-  1. Detects release version `1.0.0` from the commit message.
-  2. Automatically builds all 4 platform binaries in parallel (Windows, macOS, Linux, Android).
-  3. Extracts matching release notes from [CHANGELOG.md](CHANGELOG.md).
-  4. Creates the GitHub Release, attaches all 4 platform assets, and tags `v1.0.0`.
-  5. Synchronizes version files on `main` with `[skip ci]`.
-- **Resource Protection:** Normal code commits run the lightweight test suite in ~30 seconds and skip heavy cross-platform builders, saving GitHub Actions quota.
+- 📖 **[Developer Guide & CI/CD Pipeline](docs/development.md):** Architecture and translation pipeline, local environment setup, fast test runner, automated GitHub Actions testing CI, cross-platform build scripts, and cloud release automation.
+- 📐 **[Architecture & Vision Roadmap](docs/architecture-roadmap.md):** Deep-dive into layout geometry, formula tokenization, BabelDOC CJK engine integration, and olmOCR multi-modal vision pipeline.
+- 🧪 **Automated Cloud CI:** Every code commit automatically runs our test suite via [`.github/workflows/test.yml`](.github/workflows/test.yml). Skip-CI applies automatically to documentation edits.
 
 ## License
 
