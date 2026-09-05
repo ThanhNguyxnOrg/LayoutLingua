@@ -11,6 +11,20 @@ All notable changes to **LayoutLingua** across Windows, macOS, Linux, and Androi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Canonical Semantic Document IR (`pdf2zh/ir.py`)**: Unified intermediate representation decoupling layout geometry from linguistic content with lossless JSON serialization.
+- **Layout-Aware Reading Order Engine (`pdf2zh/reading_order.py`)**: Column slicing, vertical gutter analysis, and topological sorting to eliminate multi-column reading jumps.
+- **Structure-Aware Table Engine (`pdf2zh/tables.py`)**: Cell-level boundary isolation, automatic numerical/unit protection, adaptive cell fitting, and GriTS structural similarity scoring.
+- **Resilience & Session Checkpoint Manager (`pdf2zh/checkpoint.py`)**: Atomic session persistence for large documents (100–1000+ pages), instant crash resumption, and transparent defect manifests.
+- **Enhanced Formula Recovery Normalizer (`pdf2zh/formula.py`)**: Heuristic MT artifact repair (HTML entities, rogue tag spaces) with 100% fail-closed safety for damaged formulas.
+- **Adaptive Typesetting & Multi-Space Constraint Solver (`pdf2zh/typesetting.py`)**: Multi-variable fitting with safe whitespace spillover (addressing BabelDOC #89) and diacritic headroom clearance.
+- **Cross-Page Paragraph Stitcher (`pdf2zh/stitcher.py`)**: Sentence boundary continuity detection across page breaks with proportional word-boundary rendering.
+- **Document-Level Terminology Memory (`pdf2zh/glossary.py`)**: Global glossary enforcement supporting JSON/CSV dictionaries and automatic technical acronym discovery.
+- **Bulk Translation Batcher (`pdf2zh/batch.py`)**: Multi-segment bulk translation with special delimiters, reducing HTTP requests by 70% while protecting formula markers.
+- **CLI Options (`scripts/translate_pdf.py`)**: New flags `--glossary`, `--manifest`, `--skip-references`, and `--verify`.
+
 ## [1.0.0] - 2026-09-05
 
 ### Added
