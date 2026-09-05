@@ -282,11 +282,30 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Extract changelog for release description
+        shell: python
+        run: |
+          import re
+          from pathlib import Path
+
+          version = "${{ needs.check-release.outputs.version }}"
+          changelog = Path("CHANGELOG.md")
+          body = ""
+          if changelog.is_file():
+              content = changelog.read_text(encoding="utf-8")
+              match = re.search(rf'##\s*\[?v?{re.escape(version)}\]?.*?\n(.*?)(?=\n##\s*\[|\Z)', content, re.DOTALL)
+              if match:
+                  body = match.group(1).strip()
+          
+          Path("release-notes.md").write_text(body, encoding="utf-8")
+          print(f"Extracted {len(body)} chars for version {version}")
+
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.check-release.outputs.tag }}
           name: LayoutLingua ${{ needs.check-release.outputs.tag }}
+          body_path: release-notes.md
           files: release-assets/*
           generate_release_notes: true
 

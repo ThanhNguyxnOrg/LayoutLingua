@@ -22,11 +22,18 @@
   <a href="https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest/download/LayoutLingua-macos-intel.dmg">
     <img src="https://img.shields.io/badge/DOWNLOAD-macOS_Intel-555555?style=for-the-badge&logo=apple&logoColor=white" alt="Download LayoutLingua for macOS Intel">
   </a>
+  <a href="https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest/download/LayoutLingua-linux-x86_64.tar.gz">
+    <img src="https://img.shields.io/badge/DOWNLOAD-Linux_x64-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download LayoutLingua for Linux">
+  </a>
+  <a href="https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest">
+    <img src="https://img.shields.io/badge/DOWNLOAD-Android_APK-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Download LayoutLingua for Android">
+  </a>
 </p>
 
 <p align="center">
   <a href="https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest"><img src="https://img.shields.io/github/v/release/ThanhNguyxnOrg/LayoutLingua?style=flat-square&label=release" alt="Latest Release"></a>
   <a href="https://github.com/ThanhNguyxnOrg/LayoutLingua/releases"><img src="https://img.shields.io/github/downloads/ThanhNguyxnOrg/LayoutLingua/total?style=flat-square&label=downloads" alt="Total Downloads"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Changelog-v1.0.0-blue?style=flat-square" alt="Changelog"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ThanhNguyxnOrg/LayoutLingua?style=flat-square" alt="AGPL-3.0 License"></a>
   <img src="https://img.shields.io/badge/Python-standalone_bundle-2ea44f?style=flat-square" alt="Standalone Bundle">
 </p>
@@ -36,17 +43,20 @@
   <a href="#quick-start">Quick Start</a> ·
   <a href="#usage-guide">Usage</a> ·
   <a href="#agent-skill">Agent Skill</a> ·
-  <a href="#vision--image-roadmap">Vision & OCR Roadmap</a> ·
+  <a href="#ci-cd--releasing">Releasing</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
   <a href="#license">License</a>
 </p>
 
 ---
 
-**LayoutLingua** is an open-source document translation platform available for Windows, macOS, Android, and command-line environments. It parses page geometry, isolates formulas and technical code blocks, translates prose through high-accuracy neural engines, and writes the translated content back to exact spatial coordinates without converting documents into plain text.
+**LayoutLingua** is an open-source document translation platform available for Windows, macOS, Linux, Android, and command-line environments. It parses page geometry, isolates formulas and technical code blocks, translates prose through high-accuracy neural engines, and writes the translated content back to exact spatial coordinates without converting documents into plain text.
 
 ## Key Features
 
 - **Strict Layout Preservation:** Keeps paragraph bounding boxes, formulas, tables, figures, tables of contents, and references intact.
+- **Universal Multi-lingual Recognition:** Deep isolation of technical formulas in documents written in Vietnamese (with full tone marks), CJK (Chinese, Japanese, Korean), Cyrillic (Russian, etc.), Arabic, Hebrew, and European Latin alphabets.
+- **4 Native Platforms:** Ready-to-use binaries for Windows, macOS (Apple Silicon & Intel), Linux (x86_64), and Android.
 - **Ready Out of the Box:** Download, extract, and run. Packaged desktop releases do not require Python or manual model downloads.
 - **Batch Processing:** Drag and drop multiple files or entire folder trees into the processing queue.
 - **Resilient Batch Execution:** A damaged or unsupported file logs an error and continues without stopping the rest of the queue.
@@ -70,9 +80,18 @@
 2. Open the `.dmg` file and drag **LayoutLingua** to your **Applications** folder.
 3. On first launch, right-click the app icon → **Open** → **Open**.
 
+### Linux (x86_64)
+
+1. **[Download LayoutLingua for Linux](https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest/download/LayoutLingua-linux-x86_64.tar.gz)** (`.tar.gz`).
+2. Extract and launch:
+   ```bash
+   tar -xzf LayoutLingua-linux-x86_64.tar.gz
+   cd LayoutLingua && ./LayoutLingua
+   ```
+
 ### Android
 
-1. **[Download APK from the latest Android release](https://github.com/ThanhNguyxnOrg/LayoutLingua/releases?q=android-v)** (`LayoutLingua-android-*.apk`).
+1. **[Download APK from the latest release](https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest)** (`LayoutLingua-android-*.apk`).
 2. Install the APK on your device (Android 8.0+ supported).
 
 To build Android from source:
@@ -164,15 +183,38 @@ python -m venv .venv
 
 ### Build Desktop Binaries
 
-```powershell
+```bash
 # Windows
 .\build.ps1
 
 # macOS
 bash build-macos.sh
+
+# Linux
+bash build-linux.sh
+
+# Android
+cd android && ./gradlew assembleRelease
 ```
 
 ---
+
+## CI/CD & Releasing
+
+LayoutLingua features a unified 4-platform release pipeline that avoids consuming GitHub Actions minutes on standard code pushes:
+
+- **Automated Commit Trigger:** To publish a new release across all 4 platforms, include a `release:` or `bump:` keyword in your commit message:
+  ```bash
+  git commit -m "release: 1.0.1"
+  git push origin main
+  ```
+  The workflow will automatically extract version `1.0.1`, synchronize all platform config files, build all 4 targets, extract matching notes from [CHANGELOG.md](CHANGELOG.md), and publish the release.
+- **Manual Git Tag Trigger:**
+  ```bash
+  git tag v1.0.1
+  git push origin v1.0.1
+  ```
+- **Normal Commits:** Regular feature/fix commits complete the CI check in ~5 seconds and skip heavy multi-platform builders.
 
 ## License
 

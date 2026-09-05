@@ -7,16 +7,17 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def set_version(version: str) -> str:
+def set_version_in_root(version: str, root: Path | None = None) -> str:
+    target_root = root or DEFAULT_ROOT
     clean = version.strip().lstrip("vV")
     if not re.fullmatch(r"\d+\.\d+\.\d+", clean):
         raise ValueError(f"Invalid semantic version: {version!r}. Expected format: X.Y.Z (e.g. 1.0.1)")
 
     # 1. app/update.py
-    update_py = ROOT / "app" / "update.py"
+    update_py = target_root / "app" / "update.py"
     if update_py.is_file():
         content = update_py.read_text(encoding="utf-8")
         new_content, count = re.subn(r'APP_VERSION = "[^"]+"', f'APP_VERSION = "{clean}"', content)
@@ -25,7 +26,7 @@ def set_version(version: str) -> str:
             print(f"[OK] app/update.py -> APP_VERSION = \"{clean}\"")
 
     # 2. android/app/build.gradle.kts
-    gradle_kts = ROOT / "android" / "app" / "build.gradle.kts"
+    gradle_kts = target_root / "android" / "app" / "build.gradle.kts"
     if gradle_kts.is_file():
         content = gradle_kts.read_text(encoding="utf-8")
         new_content, count = re.subn(r'val appVersionName = "[^"]+"', f'val appVersionName = "{clean}"', content)
@@ -34,22 +35,26 @@ def set_version(version: str) -> str:
             print(f"[OK] android/app/build.gradle.kts -> appVersionName = \"{clean}\"")
 
     # 3. Redesign packages (if present)
-    for pkg in ROOT.glob("Redesign/*/package.json"):
+    for pkg in target_root.glob("Redesign/*/package.json"):
         content = pkg.read_text(encoding="utf-8")
         new_content, count = re.subn(r'"version":\s*"[^"]+"', f'"version": "{clean}"', content)
         if count > 0:
             pkg.write_text(new_content, encoding="utf-8")
-            print(f"[OK] {pkg.relative_to(ROOT)} -> \"version\": \"{clean}\"")
+            print(f"[OK] {pkg.relative_to(target_root)} -> \"version\": \"{clean}\"")
 
     # 4. Redesign UI components showing version badge
-    for app_tsx in ROOT.glob("Redesign/*/src/App.tsx"):
+    for app_tsx in target_root.glob("Redesign/*/src/App.tsx"):
         content = app_tsx.read_text(encoding="utf-8")
         new_content, count = re.subn(r'>\s*v\d+\.\d+\.\d+\s*<', f'>v{clean}<', content)
         if count > 0:
             app_tsx.write_text(new_content, encoding="utf-8")
-            print(f"[OK] {app_tsx.relative_to(ROOT)} -> v{clean}")
+            print(f"[OK] {app_tsx.relative_to(target_root)} -> v{clean}")
 
     return clean
+
+
+def set_version(version: str) -> str:
+    return set_version_in_root(version, root=DEFAULT_ROOT)
 
 
 def main() -> int:
