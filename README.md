@@ -41,6 +41,7 @@
 </p>
 
 <p align="center">
+  <a href="#-before--after-demonstration">📊 Demo</a> ·
   <a href="#-key-features">✨ Features</a> ·
   <a href="#-quick-start">🚀 Quick Start</a> ·
   <a href="#-usage-guide">💻 Usage</a> ·
@@ -55,6 +56,12 @@
 
 > [!NOTE]
 > **LayoutLingua** is an open-source document translation platform available for Windows, macOS, Linux, Android, and command-line environments. It parses page geometry, isolates formulas and technical code blocks, translates prose through high-accuracy neural engines, and writes the translated content back to exact spatial coordinates without converting documents into plain text.
+
+## 📊 Before & After Demonstration
+
+<p align="center">
+  <img src=".github/assets/demo-comparison.png" alt="LayoutLingua Side-by-Side Dual Comparison: Mathematical Paper (arXiv)" width="100%">
+</p>
 
 ## ✨ Key Features
 
