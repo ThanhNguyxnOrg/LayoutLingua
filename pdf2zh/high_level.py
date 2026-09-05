@@ -811,21 +811,58 @@ def download_remote_fonts(lang: str):
         },
     }
 
-    # Use Times New Roman for Vietnamese
-    if lang == "vi":
-        times_path = Path("C:/Windows/Fonts/times.ttf")
-        if times_path.exists():
-            logger.info(f"use font: {times_path.as_posix()}")
-            return times_path.as_posix()
-
     font_name = LANG_NAME_MAP.get(lang, "GoNotoKurrent-Regular.ttf")
 
-    # docker
-    font_path = os.environ.get("NOTO_FONT_PATH", Path("/app", font_name).as_posix())
-    if not Path(font_path).exists():
-        font_path, _ = get_font_and_metadata(font_name)
-        font_path = font_path.as_posix()
+    # Vietnamese font preference
+    if lang == "vi":
+        for vi_candidate in (
+            Path("C:/Windows/Fonts/times.ttf"),
+            Path("C:/Windows/Fonts/arial.ttf"),
+            Path("/System/Library/Fonts/Times.ttc"),
+            Path("/Library/Fonts/Times New Roman.ttf"),
+        ):
+            if vi_candidate.exists():
+                logger.info(f"use font for vi: {vi_candidate.as_posix()}")
+                return vi_candidate.as_posix()
+
+    font_path = None
+
+    # Only inherit NOTO_FONT_PATH if the required font is GoNotoKurrent (non-CJK)
+    if font_name == "GoNotoKurrent-Regular.ttf" and "NOTO_FONT_PATH" in os.environ:
+        cand = Path(os.environ["NOTO_FONT_PATH"])
+        if cand.exists():
+            font_path = cand.as_posix()
+
+    # Check bundled assets directory
+    if not font_path:
+        bundled = Path(__file__).resolve().parents[1] / "app" / "assets" / font_name
+        if bundled.exists():
+            font_path = bundled.as_posix()
+
+    # Check system fonts for CJK as high-performance offline fallback
+    if not font_path:
+        system_cjk: dict[str, list[str]] = {
+            "zh": ["C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simsun.ttc", "/System/Library/Fonts/PingFang.ttc"],
+            "zh-cn": ["C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simsun.ttc", "/System/Library/Fonts/PingFang.ttc"],
+            "zh-hans": ["C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simsun.ttc", "/System/Library/Fonts/PingFang.ttc"],
+            "zh-tw": ["C:/Windows/Fonts/msjh.ttc", "C:/Windows/Fonts/mingliu.ttc"],
+            "zh-hant": ["C:/Windows/Fonts/msjh.ttc", "C:/Windows/Fonts/mingliu.ttc"],
+            "ja": ["C:/Windows/Fonts/meiryo.ttc", "C:/Windows/Fonts/msgothic.ttc", "C:/Windows/Fonts/YuGothM.ttc"],
+            "ko": ["C:/Windows/Fonts/malgun.ttf"],
+        }
+        for candidate in system_cjk.get(lang, []):
+            if Path(candidate).exists():
+                font_path = candidate
+                break
+
+    # Download or load from cache via babeldoc
+    if not font_path or not Path(font_path).exists():
+        try:
+            font_path, _ = get_font_and_metadata(font_name)
+            font_path = font_path.as_posix()
+        except Exception:
+            # Final backstop
+            font_path = os.environ.get("NOTO_FONT_PATH", "GoNotoKurrent-Regular.ttf")
 
     logger.info(f"use font: {font_path}")
-
     return font_path

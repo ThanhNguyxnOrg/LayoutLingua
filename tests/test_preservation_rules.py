@@ -53,6 +53,21 @@ class PreservationRuleTests(unittest.TestCase):
                     [(10.0, 20.0, 190.0, 40.0)],
                 )
 
+    def test_chemistry_and_calculus_equations_are_protected_as_formulas(self):
+        for equation in (
+            "2H2 + O2 → 2H2O",
+            "N2 + 3H2 ⇌ 2NH3",
+            "∇ · B = 0",
+            "∮ B · dl = μ0 I",
+            "∂u/∂t = α ∇²u",
+        ):
+            with self.subTest(equation=equation):
+                blocks = [(10, 20, 190, 40, equation)]
+                self.assertEqual(
+                    formula_regions(blocks, []),
+                    [(10.0, 20.0, 190.0, 40.0)],
+                )
+
     def test_prose_containing_variables_is_not_protected_as_a_formula(self):
         blocks = [(10, 20, 190, 40, "If F1 is larger than C2, use another belt")]
         self.assertEqual(formula_regions(blocks, []), [])

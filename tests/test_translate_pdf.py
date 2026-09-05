@@ -236,9 +236,12 @@ class TranslatePdfTests(unittest.TestCase):
         self.assertIn("4 segments", joined)
         self.assertIn("ConnectionError x3", joined)
 
-    def test_target_language_is_limited_to_latin_script(self):
+    def test_target_language_accepts_supported_and_rejects_unknown(self):
         self.assertEqual(translate_pdf._target_language("FR"), "fr")
-        for rejected in ("zh", "ja", "ko", "ar", "he", "th", "hi"):
+        for accepted in ("zh", "ja", "ko", "ru", "ar", "he", "th", "hi"):
+            with self.subTest(language=accepted):
+                self.assertEqual(translate_pdf._target_language(accepted), accepted)
+        for rejected in ("xx", "xyz", "invalid", "123"):
             with self.subTest(language=rejected):
                 with self.assertRaises(argparse.ArgumentTypeError):
                     translate_pdf._target_language(rejected)

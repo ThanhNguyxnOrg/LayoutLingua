@@ -774,7 +774,7 @@ class TranslateConverter(PDFConverterEx):
                     and char != " "
                     and (
                         unicodedata.category(char[0])
-                        in ["Lm", "Mn", "Sk", "Sm", "Zl", "Zp", "Zs"]
+                        in ["Lm", "Mn", "Sk", "Sm", "So", "Zl", "Zp", "Zs"]
                         or ord(char[0]) in range(0x370, 0x400)
                     )
                 ):

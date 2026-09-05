@@ -16,7 +16,7 @@ FORMULA_FONT_PATTERN = re.compile(
 )
 
 MATH_OPERATOR_PATTERN = re.compile(
-    r"[=≤≥≈≠±×÷·∑∫√∞∝+*/^]"
+    r"[=≤≥≈≠±×÷·∑∫∬∭∮∂∇√∞∝+*/^→⇄⇌↔≡∼≅≲≳∈∉⊂⊆∪∩⊥∠∥]"
 )
 PROSE_WORD_PATTERN = re.compile(
     r"[a-z]{3,}|"
@@ -28,7 +28,9 @@ PROSE_WORD_PATTERN = re.compile(
     r"[\u0600-\u06FF\u0590-\u05FF]{2,}"
 )
 MATH_FUNCTION_PATTERN = re.compile(
-    r"(?<![A-Za-z])(?:sin|cos|tan|cot|sec|csc|log|ln|exp|min|max|lim|det|mod)(?![A-Za-z])",
+    r"(?<![A-Za-z])(?:sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|coth|"
+    r"arcsin|arccos|arctan|log|ln|lg|exp|min|max|lim|det|mod|"
+    r"div|grad|rot|curl|rank|dim|ker|trace|Tr|diag|arg|sgn|sup|inf|gcd|lcm)(?![A-Za-z])",
     re.IGNORECASE,
 )
 STACKED_TOKEN_PATTERN = re.compile(

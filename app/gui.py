@@ -70,16 +70,18 @@ PAD, GAP, EDGE = 8, 16, 24
 DROPZONE_TALL, DROPZONE_SHORT = 148, 80
 
 LANGUAGE_NAMES = {
-    "af": "Afrikaans", "ca": "Català", "cs": "Čeština", "cy": "Cymraeg",
-    "da": "Dansk", "de": "Deutsch", "en": "English", "es": "Español",
-    "et": "Eesti", "eu": "Euskara", "fi": "Suomi", "fr": "Français",
-    "ga": "Gaeilge", "gl": "Galego", "hr": "Hrvatski", "hu": "Magyar",
-    "id": "Bahasa Indonesia", "is": "Íslenska", "it": "Italiano",
-    "lt": "Lietuvių", "lv": "Latviešu", "ms": "Bahasa Melayu", "mt": "Malti",
-    "nl": "Nederlands", "no": "Norsk", "pl": "Polski", "pt": "Português",
-    "ro": "Română", "sk": "Slovenčina", "sl": "Slovenščina", "sq": "Shqip",
-    "sv": "Svenska", "sw": "Kiswahili", "tl": "Tagalog", "tr": "Türkçe",
-    "vi": "Tiếng Việt",
+    "af": "Afrikaans", "ar": "العربية", "bg": "Български", "ca": "Català",
+    "cs": "Čeština", "cy": "Cymraeg", "da": "Dansk", "de": "Deutsch",
+    "el": "Ελληνικά", "en": "English", "es": "Español", "et": "Eesti",
+    "eu": "Euskara", "fi": "Suomi", "fr": "Français", "ga": "Gaeilge",
+    "gl": "Galego", "he": "עִברִית", "hi": "हिन्दी", "hr": "Hrvatski",
+    "hu": "Magyar", "id": "Bahasa Indonesia", "is": "Íslenska", "it": "Italiano",
+    "ja": "日本語", "ko": "한국어", "lt": "Lietuvių", "lv": "Latviešu",
+    "ms": "Bahasa Melayu", "mt": "Malti", "nl": "Nederlands", "no": "Norsk",
+    "pl": "Polski", "pt": "Português", "ro": "Română", "ru": "Русский",
+    "sk": "Slovenčina", "sl": "Slovenščina", "sq": "Shqip", "sv": "Svenska",
+    "sw": "Kiswahili", "th": "ไทย", "tl": "Tagalog", "tr": "Türkçe",
+    "uk": "Українська", "vi": "Tiếng Việt", "zh": "中文 (简体)", "zh-tw": "中文 (繁體)",
 }
 
 STATUS_MARKS = {"queued": "•", "running": "▶", "done": "✓", "partial": "!", "failed": "✕", "skipped": "–"}

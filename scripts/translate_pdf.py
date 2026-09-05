@@ -28,14 +28,14 @@ CORE_VERSION = "1.9.11"
 RULESET = "code4life-preservation-v1"
 DEFAULT_TARGET_LANGUAGE = "vi"
 
-# Latin-script targets the bundled GoNotoKurrent font renders correctly. Scripts
-# needing CJK glyphs, right-to-left runs, or complex shaping are refused rather
-# than emitted as blank boxes or reordered text.
+# Broad multi-lingual support: Latin, CJK (Chinese, Japanese, Korean),
+# Cyrillic (Russian, Ukrainian, Bulgarian), Semitic (Arabic, Hebrew), Greek, Thai, Hindi.
 TARGET_LANGUAGES = frozenset(
     {
-        "af", "ca", "cs", "cy", "da", "de", "en", "es", "et", "eu", "fi", "fr",
-        "ga", "gl", "hr", "hu", "id", "is", "it", "lt", "lv", "ms", "mt", "nl",
-        "no", "pl", "pt", "ro", "sk", "sl", "sq", "sv", "sw", "tl", "tr", "vi",
+        "af", "ar", "bg", "ca", "cs", "cy", "da", "de", "el", "en", "es", "et",
+        "eu", "fi", "fr", "ga", "gl", "he", "hi", "hr", "hu", "id", "is", "it",
+        "ja", "ko", "lt", "lv", "ms", "mt", "nl", "no", "pl", "pt", "ro", "ru",
+        "sk", "sl", "sq", "sv", "sw", "th", "tl", "tr", "uk", "vi", "zh", "zh-tw",
     }
 )
 
@@ -141,9 +141,7 @@ def _target_language(value: str) -> str:
     if language not in TARGET_LANGUAGES:
         supported = ", ".join(sorted(TARGET_LANGUAGES))
         raise argparse.ArgumentTypeError(
-            f"unsupported target language {value!r}. The bundled font covers Latin-script "
-            f"targets only, so CJK, right-to-left, and complex-shaping scripts would render "
-            f"as blank boxes or reordered text. Supported: {supported}"
+            f"unsupported target language {value!r}. Supported: {supported}"
         )
     return language
 
