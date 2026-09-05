@@ -23,7 +23,7 @@ class TestFormulaRecovery(unittest.TestCase):
     def test_normalize_spaced_style_tags(self):
         raw = "Chữ < s 1 > đậm < / s 1 > và chữ < s 2 > nghiêng < / s 2 >"
         normalized = normalize_mt_placeholders(raw)
-        self.assertEqual(normalized, "Chữ <s1> đậm </s> và chữ <s2> nghiêng </s>")
+        self.assertEqual(normalized, "Chữ <s1> đậm </s1> và chữ <s2> nghiêng </s2>")
 
     def test_extract_placeholder_ids(self):
         text = "<b1></b1> some text <b4></b4> more text <b99></b99>"
