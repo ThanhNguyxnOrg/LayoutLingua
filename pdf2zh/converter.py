@@ -745,6 +745,8 @@ class TranslateConverter(PDFConverterEx):
         preserved_segments: set[str] = set()
 
         def vflag(font: str, char: str):
+            if not char or char.isspace():
+                return False
             if isinstance(font, bytes):
                 try:
                     font = font.decode('utf-8')
@@ -772,10 +774,9 @@ class TranslateConverter(PDFConverterEx):
             else:
                 if (
                     char
-                    and char != " "
                     and (
                         unicodedata.category(char[0])
-                        in ["Lm", "Mn", "Sk", "Sm", "So", "Zl", "Zp", "Zs"]
+                        in ["Lm", "Mn", "Sk", "Sm", "So"]
                         or ord(char[0]) in range(0x370, 0x400)
                     )
                 ):
@@ -795,10 +796,11 @@ class TranslateConverter(PDFConverterEx):
                 if style:
                     sstk[index] += f"<s{int(style)}>"
                 paragraph.open_style = style
-            sstk[index] += text
-            paragraph.text_length += len(text)
+            clean_text = text.replace("\xa0", " ")
+            sstk[index] += clean_text
+            paragraph.text_length += len(clean_text)
             paragraph.visible_length += sum(
-                1 for character in text if not character.isspace()
+                1 for character in clean_text if not character.isspace()
             )
 
         def adopt_graphic(paragraph: Paragraph, child: LTChar) -> None:

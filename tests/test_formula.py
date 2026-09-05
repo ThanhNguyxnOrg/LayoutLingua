@@ -46,6 +46,11 @@ class TestFormulaRecovery(unittest.TestCase):
         valid, msg = validate_formula_integrity(src, dst_unclosed)
         self.assertFalse(valid)
 
+    def test_normalize_placeholders_with_non_breaking_spaces(self):
+        raw = "Phương trình\xa0<b12></b12>\xa0đại diện cho\xa0ma trận"
+        normalized = normalize_mt_placeholders(raw)
+        self.assertIn("<b12></b12>", normalized)
+
 
 if __name__ == "__main__":
     unittest.main()
