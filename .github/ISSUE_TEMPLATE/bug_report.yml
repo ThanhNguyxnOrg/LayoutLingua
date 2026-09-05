@@ -1,34 +1,35 @@
-name: "Bug Report / Báo lỗi dịch thuật & bố cục"
-description: "Báo cáo lỗi vỡ layout, mất công thức toán học, tràn bảng, hoặc crash ứng dụng"
+name: "Bug Report"
+description: "Report layout corruption, broken formulas, table shifts, translation failures, or crashes"
 title: "[Bug]: "
 labels: ["bug", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Cảm ơn bạn đã báo lỗi để cải thiện LayoutLingua! 
-        Vui lòng cung cấp chi tiết bên dưới để đội ngũ kỹ thuật có thể tái hiện và sửa lỗi nhanh nhất.
+        Thank you for reporting an issue to help improve LayoutLingua!
+        > **Note on Language**: English is preferred for international collaboration and community visibility, but reports in **Vietnamese (Tiếng Việt)** are also warmly welcomed!
 
   - type: dropdown
     id: issue_category
     attributes:
-      label: "Phân loại sự cố (Issue Category)"
-      description: "Chọn danh mục phản ánh đúng nhất sự cố bạn gặp phải"
+      label: "Issue Category"
+      description: "Select the category that best describes the problem"
       options:
-        - "Formula Dropped / Broken (Công thức toán bị mất hoặc vỡ ký hiệu)"
-        - "Layout Overlap / Tràn văn bản (Chữ dịch đè lên cột hoặc hình khác)"
-        - "Table Structure Breakage (Vỡ đường viền hoặc lệch ô bảng)"
-        - "Translation Engine Error / Untranslated Segments (Lỗi dịch máy)"
-        - "App GUI Crash / Freeze (Treo hoặc văng ứng dụng)"
-        - "Other (Khác)"
+        - "Formula Dropped / Broken (Math symbols lost, misplaced, or unrendered)"
+        - "Layout Overlap / Text Overflow (Translated text bleeds into adjacent columns or figures)"
+        - "Table Structure Breakage (Grid lines broken, borders disrupted, or cell alignment shifted)"
+        - "Translation Engine Failure / Untranslated Segments"
+        - "App GUI Crash / Freeze"
+        - "Packaging / Installation / Auto-Update"
+        - "Other"
     validations:
       required: true
 
   - type: input
     id: target_language
     attributes:
-      label: "Ngôn ngữ đích (Target Language)"
-      description: "Ví dụ: Tiếng Việt (vi), Trung giản thể (zh), Pháp (fr)..."
+      label: "Target Language"
+      description: "E.g., Vietnamese (vi), Simplified Chinese (zh), French (fr), German (de), Japanese (ja)..."
       placeholder: "vi"
     validations:
       required: true
@@ -36,47 +37,59 @@ body:
   - type: dropdown
     id: os
     attributes:
-      label: "Hệ điều hành (Operating System)"
+      label: "Operating System"
       options:
-        - "Windows 10 / 11"
-        - "macOS (Apple Silicon M1/M2/M3)"
-        - "macOS (Intel)"
-        - "Linux (Ubuntu / Debian / Fedora)"
+        - "Windows 11"
+        - "Windows 10"
+        - "macOS (Apple Silicon - M1/M2/M3/M4)"
+        - "macOS (Intel - x86_64)"
+        - "Linux (Ubuntu / Debian / Fedora / Arch)"
+        - "Android"
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: "LayoutLingua Version"
+      description: "Found in app header or terminal (e.g., 1.0.0, commit hash, or source build)"
+      placeholder: "1.0.0"
     validations:
       required: true
 
   - type: textarea
     id: description
     attributes:
-      label: "Mô tả chi tiết sự cố (Description)"
-      description: "Điều gì đã xảy ra khác so với kỳ vọng?"
-      placeholder: "Ví dụ: Khi dịch trang 3, phương trình Dirac bị giữ nguyên tiếng Anh và báo 1 segment(s) untranslated..."
+      label: "Description"
+      description: "A clear and concise description of what happened versus what you expected"
+      placeholder: "E.g., On page 3 of the sample paper, Equation 4 was preserved in source language with a warning 'formula placeholders changed during translation'..."
     validations:
       required: true
 
   - type: textarea
     id: reproduction_steps
     attributes:
-      label: "Các bước tái hiện (Steps to Reproduce)"
+      label: "Steps to Reproduce"
+      description: "How can the maintainers reproduce this behavior?"
       placeholder: |
-        1. Kéo thả file PDF vào giao diện LayoutLingua
-        2. Chọn ngôn ngữ đích
-        3. Nhấn 'Translate All'
-        4. Quan sát lỗi trong danh sách hoặc file PDF đầu ra
+        1. Drag and drop PDF into LayoutLingua
+        2. Set Target Language to '...'
+        3. Click 'Translate All'
+        4. Observe output PDF or error log
     validations:
       required: true
 
   - type: textarea
     id: logs
     attributes:
-      label: "Log Terminal / Thông báo lỗi (Terminal Output / Error Log)"
-      description: "Dán thông báo lỗi từ Terminal hoặc file log (nếu có)"
+      label: "Terminal Output / Error Log"
+      description: "Paste relevant terminal output or crash logs here"
       render: shell
 
   - type: checkboxes
     id: fail_closed_acknowledged
     attributes:
-      label: "Xác nhận nguyên lý Fail-Closed"
+      label: "Fail-Closed Safety Awareness"
       options:
-        - label: "Tôi hiểu rằng LayoutLingua ưu tiên giữ nguyên văn bản gốc (fail-closed) thay vì tạo ra bản dịch làm hỏng công thức hoặc bảng biểu."
+        - label: "I understand that LayoutLingua intentionally prioritizes fail-closed preservation (keeping source segments intact) over producing corrupted translations that damage mathematical or tabular layout geometry."
           required: false

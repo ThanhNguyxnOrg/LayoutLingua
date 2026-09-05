@@ -1,32 +1,40 @@
-name: "Feature Request / Đề xuất tính năng mới"
-description: "Gợi ý ý tưởng mới, hỗ trợ định dạng tài liệu, hoặc cải tiến hiệu năng"
+name: "Feature Request"
+description: "Suggest a new idea, format support, or enhancement for LayoutLingua"
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        Cảm ơn bạn đã đóng góp ý tưởng để LayoutLingua ngày càng hoàn thiện hơn!
+        Thank you for suggesting an enhancement to LayoutLingua!
+        > **Note on Language**: English is preferred for international collaboration and community visibility, but proposals in **Vietnamese (Tiếng Việt)** are also warmly welcomed!
 
   - type: textarea
     id: feature_description
     attributes:
-      label: "Mô tả tính năng đề xuất (Feature Description)"
-      description: "Mô tả ngắn gọn và rõ ràng tính năng bạn muốn có"
-      placeholder: "Ví dụ: Hỗ trợ tự động xuất song ngữ theo từng trang đối xứng (bilingual side-by-side)..."
+      label: "Feature Description"
+      description: "A clear and concise description of the feature or enhancement you would like to see"
+      placeholder: "E.g., Automated bilingual side-by-side export mode for academic reviewing..."
     validations:
       required: true
 
   - type: textarea
     id: use_case
     attributes:
-      label: "Trường hợp sử dụng & Lý do cần thiết (Use Case & Motivation)"
-      description: "Tính năng này giải quyết vấn đề gì trong công việc nghiên cứu / đọc tài liệu của bạn?"
+      label: "Use Case & Motivation"
+      description: "What problem does this feature solve? Who will benefit from it?"
+      placeholder: "Researchers reviewing complex proofs need to compare original English formulas with translated annotations..."
     validations:
       required: true
 
   - type: textarea
     id: alternatives
     attributes:
-      label: "Giải pháp thay thế đã cân nhắc (Alternatives Considered)"
-      description: "Bạn đã thử giải pháp nào khác chưa và vì sao chưa tối ưu?"
+      label: "Alternatives Considered"
+      description: "Any alternative solutions or workarounds you have considered?"
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: "Additional Context"
+      description: "Add any other context, diagrams, or UI mockups here"
