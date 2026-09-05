@@ -10,6 +10,7 @@ from __future__ import annotations
 import ctypes
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -1177,10 +1178,216 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         # Grab only after the window exists, or Tk raises on some platforms.
         dialog.after(120, dialog.grab_set)
 
+    def _populate_changelog_ui(self, scroll: ctk.CTkScrollableFrame) -> None:
+        """Parse and render CHANGELOG.md into beautiful native CustomTkinter cards."""
+        changelog_path = APP_ROOT / "CHANGELOG.md"
+        if not changelog_path.is_file():
+            empty_card = ctk.CTkFrame(scroll, corner_radius=8, fg_color=HOVER, border_width=1, border_color=BORDER_IDLE)
+            empty_card.pack(fill="x", pady=PAD)
+            ctk.CTkLabel(
+                empty_card, text=f"LayoutLingua v{APP_VERSION}",
+                font=ctk.CTkFont(self.ui_font, size=14, weight="bold"),
+                text_color=("gray15", "#F8FAFC"),
+            ).pack(padx=PAD, pady=(PAD, 4))
+            ctk.CTkLabel(
+                empty_card, text="No local CHANGELOG.md found. Check online releases on GitHub.",
+                font=ctk.CTkFont(self.ui_font, size=11), text_color=MUTED,
+            ).pack(padx=PAD, pady=(0, PAD))
+            return
+
+        try:
+            content = changelog_path.read_text(encoding="utf-8")
+        except Exception:
+            err_card = ctk.CTkFrame(scroll, corner_radius=8, fg_color=HOVER, border_width=1, border_color=BORDER_IDLE)
+            err_card.pack(fill="x", pady=PAD)
+            ctk.CTkLabel(
+                err_card, text="Failed to read CHANGELOG.md",
+                font=ctk.CTkFont(self.ui_font, size=12), text_color=STATUS_COLORS["error"],
+            ).pack(padx=PAD, pady=PAD)
+            return
+
+        # Top Banner with current version and link to online releases
+        header_frame = ctk.CTkFrame(scroll, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, PAD))
+        header_frame.grid_columnconfigure(0, weight=1)
+
+        title_box = ctk.CTkFrame(header_frame, fg_color="transparent")
+        title_box.grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(
+            title_box, text="What's New & Release Notes",
+            font=ctk.CTkFont(self.ui_font, size=14, weight="bold"),
+            text_color=("gray15", "#F8FAFC"), anchor="w",
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            title_box, text=f"Currently running v{APP_VERSION} • Official Changelog",
+            font=ctk.CTkFont(self.ui_font, size=11), text_color=MUTED, anchor="w",
+        ).pack(anchor="w")
+
+        ctk.CTkButton(
+            header_frame, text="All Releases ↗", width=110, height=28,
+            fg_color="transparent", border_width=1, border_color=BORDER_IDLE,
+            text_color=ACCENT, hover_color=HOVER,
+            font=ctk.CTkFont(self.ui_font, size=11),
+            command=lambda: webbrowser.open_new_tab(f"https://github.com/{REPOSITORY}/releases"),
+        ).grid(row=0, column=1, sticky="e")
+
+        def clean_md(text: str) -> str:
+            text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+            text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+            text = re.sub(r"\*([^*]+)\*", r"\1", text)
+            text = re.sub(r"`([^`]+)`", r"\1", text)
+            return text.strip()
+
+        # Parse markdown by version blocks
+        normalized = content.replace("\r\n", "\n")
+        cleaned_content = re.sub(r"<[^>]+>", "", normalized)
+        raw_blocks = re.split(r"\n##\s+", cleaned_content)
+
+        for block in raw_blocks[1:]:
+            lines = block.split("\n")
+            header_line = lines[0].strip()
+            if not header_line:
+                continue
+
+            is_unreleased = "unreleased" in header_line.lower()
+            if is_unreleased:
+                version_title = "⚡ Upcoming Features & Improvements"
+                badge_text = "In Development"
+                badge_bg = ("#FEF3C7", "#451a03")
+                badge_fg = ("#D97706", "#FBBF24")
+                card_border = ACCENT
+            else:
+                clean_h = re.sub(r"\[([^\]]+)\]", r"v\1", header_line)
+                clean_h = re.sub(r"\bv+([0-9])", r"v\1", clean_h)
+                version_title = clean_h.strip()
+                badge_text = "Production Ready"
+                badge_bg = ("#DCFCE7", "#064E3B")
+                badge_fg = ("#16A34A", "#34D399")
+                card_border = BORDER_IDLE
+
+            card = ctk.CTkFrame(
+                scroll, corner_radius=8, fg_color=HOVER,
+                border_width=1, border_color=card_border,
+            )
+            card.pack(fill="x", pady=(0, PAD))
+            card.grid_columnconfigure(0, weight=1)
+
+            # Card Header Bar
+            card_top = ctk.CTkFrame(card, fg_color="transparent")
+            card_top.pack(fill="x", padx=PAD, pady=(PAD, PAD // 2))
+            card_top.grid_columnconfigure(0, weight=1)
+
+            ctk.CTkLabel(
+                card_top, text=version_title,
+                font=ctk.CTkFont(self.ui_font, size=13, weight="bold"),
+                text_color=("gray15", "#F8FAFC"), anchor="w",
+            ).grid(row=0, column=0, sticky="w")
+
+            ctk.CTkLabel(
+                card_top, text=f"  {badge_text}  ",
+                font=ctk.CTkFont(self.ui_font, size=10, weight="bold"),
+                fg_color=badge_bg, text_color=badge_fg, corner_radius=6, height=22,
+            ).grid(row=0, column=1, sticky="e")
+
+            ctk.CTkFrame(card, height=1, fg_color=BORDER_IDLE).pack(fill="x", padx=PAD, pady=(2, PAD // 2))
+
+            # Sub-sections (### ...)
+            sub_blocks = re.split(r"\n###\s+", "\n".join(lines[1:]))
+            for sub in sub_blocks:
+                sub_lines = sub.strip().split("\n")
+                if not sub_lines or not sub_lines[0].strip():
+                    continue
+                sec_raw = sub_lines[0].strip()
+                sec_title = clean_md(sec_raw)
+
+                sec_lower = sec_title.lower()
+                if "add" in sec_lower:
+                    sec_bg = ("#E0F2FE", "#0c4a6e")
+                    sec_fg = ("#0284C7", "#38BDF8")
+                elif "change" in sec_lower:
+                    sec_bg = ("#FEF3C7", "#451a03")
+                    sec_fg = ("#D97706", "#FBBF24")
+                elif "fix" in sec_lower:
+                    sec_bg = ("#FEE2E2", "#4c0519")
+                    sec_fg = ("#E11D48", "#FB7185")
+                else:
+                    sec_bg = ("#F1F5F9", "#1E293B")
+                    sec_fg = ACCENT
+
+                sec_box = ctk.CTkFrame(card, fg_color="transparent")
+                sec_box.pack(fill="x", padx=PAD, pady=(PAD // 2, PAD // 2))
+
+                ctk.CTkLabel(
+                    sec_box, text=f"  {sec_title}  ",
+                    font=ctk.CTkFont(self.ui_font, size=11, weight="bold"),
+                    fg_color=sec_bg, text_color=sec_fg, corner_radius=4, height=22,
+                ).pack(anchor="w", pady=(0, 4))
+
+                items: list[dict[str, any]] = []
+                curr_item = None
+                for line in sub_lines[1:]:
+                    sline = line.strip()
+                    if not sline or sline.startswith("---") or sline.startswith("["):
+                        continue
+                    if line.startswith("- ") or line.startswith("* "):
+                        raw_t = clean_md(line[2:].strip())
+                        curr_item = {"title": raw_t, "sub": []}
+                        items.append(curr_item)
+                    elif line.startswith("  - ") or line.startswith("    - ") or line.startswith("\t- "):
+                        sub_t = clean_md(sline.lstrip("-* ").strip())
+                        if curr_item is not None:
+                            curr_item["sub"].append(sub_t)
+                        else:
+                            curr_item = {"title": sub_t, "sub": []}
+                            items.append(curr_item)
+                    else:
+                        if curr_item is not None and sline:
+                            curr_item["title"] += " " + clean_md(sline)
+
+                for item in items:
+                    item_frame = ctk.CTkFrame(sec_box, fg_color="transparent")
+                    item_frame.pack(fill="x", pady=2)
+
+                    title_str = item["title"]
+                    if ":" in title_str and not title_str.startswith("http"):
+                        feat_name, _, desc = title_str.partition(":")
+                        feat_name = feat_name.strip()
+                        desc = desc.strip()
+                        if len(feat_name) < 75 and desc:
+                            ctk.CTkLabel(
+                                item_frame, text=f"•  {feat_name}",
+                                font=ctk.CTkFont(self.ui_font, size=11, weight="bold"),
+                                text_color=("gray15", "#F1F5F9"), anchor="w",
+                            ).pack(fill="x")
+                            ctk.CTkLabel(
+                                item_frame, text=desc,
+                                font=ctk.CTkFont(self.ui_font, size=11),
+                                text_color=MUTED, wraplength=590, justify="left", anchor="w",
+                            ).pack(fill="x", padx=(14, 0), pady=(1, 2))
+                        else:
+                            ctk.CTkLabel(
+                                item_frame, text=f"•  {title_str}",
+                                font=ctk.CTkFont(self.ui_font, size=11),
+                                text_color=("gray15", "#E2E8F0"), wraplength=600, justify="left", anchor="w",
+                            ).pack(fill="x")
+                    else:
+                        ctk.CTkLabel(
+                            item_frame, text=f"•  {title_str}",
+                            font=ctk.CTkFont(self.ui_font, size=11),
+                            text_color=("gray15", "#E2E8F0"), wraplength=600, justify="left", anchor="w",
+                        ).pack(fill="x")
+
+                    for sub in item["sub"]:
+                        ctk.CTkLabel(
+                            item_frame, text=f"–  {sub}",
+                            font=ctk.CTkFont(self.ui_font, size=10),
+                            text_color=MUTED, wraplength=570, justify="left", anchor="w",
+                        ).pack(fill="x", padx=(16, 0), pady=1)
+
     def _show_info_modal(self, initial_tab: str = "changelog") -> None:
         dialog = ctk.CTkToplevel(self)
         dialog.title("LayoutLingua — About, Changelog & Issues")
-        dialog.geometry("700x540")
+        dialog.geometry("720x560")
         dialog.transient(self)
         dialog.grid_columnconfigure(0, weight=1)
         dialog.grid_rowconfigure(2, weight=1)
@@ -1236,22 +1443,10 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         changelog_frame.grid_rowconfigure(0, weight=1)
         tabs["changelog"] = changelog_frame
 
-        changelog_text = ctk.CTkTextbox(
-            changelog_frame, wrap="word",
-            font=ctk.CTkFont(self.mono_font, size=11),
-            fg_color="transparent",
-        )
-        changelog_text.grid(row=0, column=0, sticky="nsew")
-
-        changelog_path = APP_ROOT / "CHANGELOG.md"
-        if changelog_path.is_file():
-            try:
-                changelog_text.insert("1.0", changelog_path.read_text(encoding="utf-8"))
-            except Exception:
-                changelog_text.insert("1.0", "Failed to load CHANGELOG.md.")
-        else:
-            changelog_text.insert("1.0", f"LayoutLingua v{APP_VERSION}\n\nNo local changelog found.")
-        changelog_text.configure(state="disabled")
+        changelog_scroll = ctk.CTkScrollableFrame(changelog_frame, fg_color="transparent")
+        changelog_scroll.pack(fill="both", expand=True)
+        changelog_scroll.grid_columnconfigure(0, weight=1)
+        self._populate_changelog_ui(changelog_scroll)
 
         # Tab 2: Credits & Research
         credits_frame = ctk.CTkFrame(content_container, fg_color="transparent")

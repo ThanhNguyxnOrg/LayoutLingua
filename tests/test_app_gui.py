@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 try:
+    import customtkinter as ctk
     from app.gui import (
         App,
         LANGUAGE_NAMES,
@@ -20,6 +21,7 @@ try:
         verify_engine,
     )
 except ImportError:  # customtkinter and tkinterdnd2 are app-only dependencies
+    ctk = None
     App = None
     collect_pdfs = None
     main = None
@@ -322,5 +324,34 @@ class PackagedSmokeTestTests(unittest.TestCase):
             translate_pdf._LAYOUT_MODEL.update(cached)
 
 
+@unittest.skipIf(App is None, "desktop app dependencies are not installed")
+class ChangelogUITests(unittest.TestCase):
+    def test_populate_changelog_renders_without_errors(self):
+        root = ctk.CTk()
+        try:
+            root.withdraw()
+            fake_app = mock.MagicMock()
+            fake_app.ui_font = "Segoe UI"
+            scroll = ctk.CTkScrollableFrame(root)
+            App._populate_changelog_ui(fake_app, scroll)
+            root.update_idletasks()
+        finally:
+            root.destroy()
+
+    def test_populate_changelog_handles_missing_file(self):
+        root = ctk.CTk()
+        try:
+            root.withdraw()
+            fake_app = mock.MagicMock()
+            fake_app.ui_font = "Segoe UI"
+            scroll = ctk.CTkScrollableFrame(root)
+            with mock.patch("app.gui.APP_ROOT", Path("/non/existent/path")):
+                App._populate_changelog_ui(fake_app, scroll)
+            root.update_idletasks()
+        finally:
+            root.destroy()
+
+
 if __name__ == "__main__":
     unittest.main()
+
