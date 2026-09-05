@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 PLACEHOLDER_PATTERN = re.compile(r"</?b\d+>")
 INTERNAL_PLACEHOLDER_PATTERN = re.compile(r"\{\s*v([\d\s]+)\}", re.IGNORECASE)
-PAIRED_PLACEHOLDER_PATTERN = re.compile(r"<b(\d+)></b\1>")
+PAIRED_PLACEHOLDER_PATTERN = re.compile(r"<b(\d+)>\s*</b\1>")
 STYLE_TAG_PATTERN = re.compile(r"<(/?)s([123])>", re.IGNORECASE)
 
 
@@ -187,11 +187,36 @@ def encode_formula_placeholders(text: str) -> str:
     )
 
 
+def _formula_placeholder_counts(text: str) -> Counter[str]:
+    """Return balanced formula placeholder-pair counts, allowing complete pairs to reorder."""
+    stack: list[str] = []
+    pairs: Counter[str] = Counter()
+    for match in PLACEHOLDER_PATTERN.finditer(text):
+        tag = match.group(0)
+        closing = tag.startswith("</")
+        identifier = re.search(r"\d+", tag).group(0)
+        if not closing:
+            stack.append(identifier)
+            continue
+        if not stack or stack[-1] != identifier:
+            raise FormulaPlaceholderError("formula placeholders are malformed or cross-nested")
+        stack.pop()
+        pairs[identifier] += 1
+    if stack:
+        raise FormulaPlaceholderError("formula placeholders are not closed")
+    return pairs
+
+
+def validate_formula_placeholders(source: str, translated: str) -> None:
+    """Require all formula placeholders to be preserved in balanced pairs, allowing natural grammar reordering."""
+    if _formula_placeholder_counts(source) != _formula_placeholder_counts(translated):
+        raise FormulaPlaceholderError("formula placeholders changed during translation")
+
+
 def restore_formula_placeholders(source: str, translated: str) -> str:
     """Validate translator output and restore its tags to converter markers."""
     encoded_source = encode_formula_placeholders(source)
-    if placeholders(encoded_source) != placeholders(translated):
-        raise FormulaPlaceholderError("formula placeholders changed during translation")
+    validate_formula_placeholders(encoded_source, translated)
     validate_style_tags(encoded_source, translated)
     restored = PAIRED_PLACEHOLDER_PATTERN.sub(
         lambda match: f"{{v{match.group(1)}}}", translated
@@ -254,7 +279,9 @@ def load_segment_table(path: str | None) -> dict[str, str]:
             # existing handoff files remain usable with the documented tags.
             source = encode_formula_placeholders(source)
             translation = encode_formula_placeholders(translation)
-            if placeholders(source) != placeholders(translation):
+            try:
+                validate_formula_placeholders(source, translation)
+            except FormulaPlaceholderError:
                 logger.warning(
                     "%s line %d: formula placeholders differ between src and dst; "
                     "segment left untranslated",

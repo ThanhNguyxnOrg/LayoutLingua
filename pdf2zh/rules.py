@@ -18,7 +18,10 @@ FORMULA_FONT_PATTERN = re.compile(
 MATH_OPERATOR_PATTERN = re.compile(
     r"[=≤≥≈≠±×÷·∑∫√∞∝+*/^]"
 )
-PROSE_WORD_PATTERN = re.compile(r"[a-z]{3,}")
+PROSE_WORD_PATTERN = re.compile(
+    r"[a-z]{3,}|"
+    r"[a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]*[\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9][a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]+"
+)
 MATH_FUNCTION_PATTERN = re.compile(
     r"(?<![A-Za-z])(?:sin|cos|tan|cot|sec|csc|log|ln|exp|min|max|lim|det|mod)(?![A-Za-z])",
     re.IGNORECASE,

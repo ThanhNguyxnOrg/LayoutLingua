@@ -86,15 +86,21 @@ class SegmentTableTests(unittest.TestCase):
         self.assertEqual(encoded, "<b27></b27> C<b28></b28>[ ]")
         self.assertEqual(restore_formula_placeholders(source, encoded), source)
 
-    def test_damaged_or_reordered_placeholder_tags_are_rejected(self):
+    def test_damaged_placeholder_tags_are_rejected(self):
         source = "{v0} and {v1}"
         for translated in (
             "<b0></b0> and <b1>",
-            "<b1></b1> and <b0></b0>",
+            "<b0></b1> and <b1></b0>",
+            "<b0></b0>",
         ):
             with self.subTest(translated=translated):
                 with self.assertRaises(FormulaPlaceholderError):
                     restore_formula_placeholders(source, translated)
+
+    def test_balanced_placeholder_pairs_may_reorder(self):
+        source = "{v0} and {v1}"
+        restored = restore_formula_placeholders(source, "<b1></b1> and <b0></b0>")
+        self.assertEqual(restored, "{v1} and {v0}")
 
     def test_balanced_style_pairs_may_reorder_as_complete_runs(self):
         validate_style_tags(

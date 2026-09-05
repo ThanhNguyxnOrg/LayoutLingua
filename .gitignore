@@ -9,6 +9,7 @@ output/
 tmp/
 dist/
 build/
+scratch/
 app/assets/*.onnx
 app/assets/*.ttf
 app/assets/*.optimized
