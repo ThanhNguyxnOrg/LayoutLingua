@@ -21,3 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Native Android Companion**: Android app with Google Translate integration and PDFBox layout preservation engine.
 - **Grammar-Aware Formula Placeholders**: Resilient tag balancing allowing target language grammatical permutations while strictly protecting inline vectors and formulas.
 - **TOC & Link Preservation**: Full preservation of PDF Table of Contents (TOC) link annotations and visual formatting geometry.
+
+[1.0.0]: https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/tag/v1.0.0
+
