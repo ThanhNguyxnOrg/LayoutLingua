@@ -30,6 +30,7 @@ Usage:
 from __future__ import annotations
 
 import io
+import os
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -167,12 +168,26 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     c_source = (0.35, 0.40, 0.48)
     c_line = (0.80, 0.84, 0.90)
 
+    # Academic Serif font with full Unicode mathematical glyph coverage
+    font_acad_path = None
+    for fp in ["C:/Windows/Fonts/cambria.ttc", "C:/Windows/Fonts/calibri.ttf", "C:/Windows/Fonts/segoeui.ttf"]:
+        if os.path.exists(fp):
+            font_acad_path = fp
+            break
+
+    def attach_acad_font(p: fitz.Page) -> str:
+        if font_acad_path:
+            p.insert_font(fontname="AcadFont", fontfile=font_acad_path)
+            return "AcadFont"
+        return "helv"
+
     header_text = "arXiv:2409.12345v2 [cs.CV, cs.CL]  |  LayoutLingua Stress-Test Benchmark"
 
     # =========================================================================
     # PAGE 1: Academic Paper Header, Abstract, 2-Column Section 1, Footnotes
     # =========================================================================
     p1 = doc.new_page(width=595, height=842)  # A4
+    f_acad1 = attach_acad_font(p1)
     p1.insert_text((50, 45), header_text, fontsize=8.5, fontname="helv", color=c_source)
     p1.draw_line((50, 52), (545, 52), color=c_line, width=0.8)
 
@@ -204,26 +219,28 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     col2_rect = fitz.Rect(310, 264, 545, 420)
 
     col1_text = (
-        "Document intelligence requires formalizing a technical document as a continuous manifold coupled with a discrete "
-        "categorical alphabet. In conventional translation systems, PDF layout geometry is obliterated: text spans are "
-        "extracted as an undifferentiated stream, fed to a sequence-to-sequence model, and dumped into plain text without "
-        "preserving spatial bounding coordinates.\n\n"
-        "High-fidelity layout preservation treats every character and formula block as an invariant topological entity with "
-        "bounding coordinates. The fundamental objective of linguistic routing is to guarantee that prose text undergoes "
-        "semantic translation without causing geometric collisions with mathematical symbols, as formalized in Equation (1)."
+        "Document intelligence formalizes a technical document as a continuous manifold M ⊂ R² coupled with a discrete "
+        "alphabet Y. In conventional translation systems, layout geometry is obliterated: text spans are extracted as "
+        "an undifferentiated stream, fed to a sequence-to-sequence model, and dumped into plain text without preserving "
+        "spatial bounding coordinates.\n\n"
+        "High-fidelity layout preservation treats every character and formula as an invariant topological entity with "
+        "bounding box B_i = [x_min, y_min, x_max, y_max]ᵀ. The fundamental objective is to determine an operator Φ(X) "
+        "ensuring prose text undergoes semantic translation without causing geometric collisions with mathematical symbols, "
+        "as formalized in Equation (1)."
     )
     col2_text = (
-        "Furthermore, scientific typography includes inline mathematical variables, tensor subscripts, and functional norms "
-        "that must never be translated as linguistic tokens. If an engine mistranslates mathematical operators or gradients "
-        "as vernacular words, the entire scientific proof collapses, violating the parameter invariance condition defined "
-        "in Equation (2).\n\n"
-        "To prevent translation bleeding into data grids, we define a spatial exclusion mask over coordinate subspaces where "
-        "differential operators, matrix brackets, and stoichiometric indices reside. These bounding subspaces are excised from "
-        "the prose translation queue and substituted with grammar-preserving placeholders according to Equation (3)."
+        "Furthermore, scientific typography includes inline mathematical variables α, β, γ, parameter vector θ ∈ Θ, "
+        "tensor weights W ∈ R^(d×k), and Frobenius norms ||W||_F² ≤ δ that must never be translated as linguistic tokens. "
+        "If an engine mistranslates the gradient operator ∇_θ J(θ) as a vernacular word, the entire proof collapses, "
+        "violating the parameter invariance condition defined in Equation (2).\n\n"
+        "To prevent translation bleeding into data grids, we define a spatial exclusion mask M_mask(p) ∈ {0, 1} over "
+        "coordinate subspaces where differential operators, matrix brackets, and stoichiometric indices reside. These "
+        "bounding subspaces are excised from the prose queue and replaced with grammar-preserving placeholders according "
+        "to Equation (3)."
     )
 
-    p1.insert_textbox(col1_rect, col1_text, fontsize=8.4, fontname="helv", color=c_body, lineheight=1.2)
-    p1.insert_textbox(col2_rect, col2_text, fontsize=8.4, fontname="helv", color=c_body, lineheight=1.2)
+    p1.insert_textbox(col1_rect, col1_text, fontsize=8.2, fontname=f_acad1, color=c_body, lineheight=1.2)
+    p1.insert_textbox(col2_rect, col2_text, fontsize=8.2, fontname=f_acad1, color=c_body, lineheight=1.2)
 
     # Equation 1: Manifold & Coordinate Bounding Box
     p1.insert_text((50, 435), "Equation 1 (Continuous Manifold & Coordinate Bounding Box):", fontsize=9, fontname="hebo", color=c_primary)
@@ -318,6 +335,22 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     p2.insert_image(fitz.Rect(65, 484, 530, 606), stream=img_bytes)
     p2.insert_text((70, 618), "Figure 1: Multimodal cross-attention architecture separating semantic text from formula coordinate vectors.", fontsize=8, fontname="heit", color=c_source)
 
+    # Subsection 3.1: Mixed-Modal Regularization & Attention Dynamics
+    f_acad2 = attach_acad_font(p2)
+    p2.insert_text((50, 634), "3.1 Mixed-Modal Regularization & Attention Dynamics", fontsize=10.5, fontname="hebo", color=c_primary)
+    p2_mixed = (
+        "In deep neural translation architectures, the hidden state representation H ∈ R^(B×L×D) interacts directly "
+        "with self-attention weights A = softmax(Q Kᵀ / √d_k) ∈ R^(L×L). Scaling with factor τ = 1/√d_k = 0.125 ensures "
+        "numerical stability when computing cross-entropy gradients ∇_θ L_total. Parameter regularization combines "
+        "an ℓ₁-norm sparsity penalty ||θ||₁ = ∑ |θ_j| ≤ γ with weight decay (λ₂/2)||θ||₂² (where λ₂ = 10⁻⁴), guaranteeing "
+        "asymptotic convergence toward optimal manifold boundaries θ*.\n\n"
+        "Simultaneously, quantum state covariance requires density matrix normalization Tr(Σ_quantum) = 1 under semi-definite "
+        "positivity Σ ≥ 0. The non-commutative operator commutator [Â, B̂] = iℏ Ĉ imposes fundamental uncertainty limits "
+        "on coordinate localization, demonstrating why spatial masks must preserve formula token geometry against translation "
+        "drift across multilingual target spaces."
+    )
+    p2.insert_textbox(fitz.Rect(50, 646, 545, 785), p2_mixed, fontsize=8.2, fontname=f_acad2, color=c_body, lineheight=1.22)
+
     # Page 2 Footer
     p2.draw_line((50, 800), (545, 800), color=c_line, width=0.5)
     p2.insert_text((290, 815), "2", fontsize=9, fontname="helv", color=c_source)
@@ -384,6 +417,20 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     p3.insert_text((505, 516), "(12)", fontsize=9, fontname="helv", color=c_source)
     p3.insert_text((50, 545), "[Source: Michaelis, L., & Menten, M. L. Biochem. Z., 49, 333-369, 1913; Hill, A. V. J. Physiol., 40, iv-vii, 1910]", fontsize=7.5, fontname="heit", color=c_source)
 
+    # Section 5.1: Reversible Reaction Kinetics & Field Flux Conservation
+    f_acad3 = attach_acad_font(p3)
+    p3.insert_text((50, 565), "5.1 Reversible Reaction Kinetics & Field Flux Conservation", fontsize=10.5, fontname="hebo", color=c_primary)
+    p3_mixed = (
+        "For an arbitrary reversible chemical system aA + bB ⇌ cC + dD at temperature T = 298.15 K and pressure P = 1.0 bar, "
+        "the reaction quotient Q = [C]^c [D]^d / ([A]^a [B]^b) governs instantaneous Gibbs free energy ΔG = ΔG° + RT ln Q, "
+        "where R = 8.314 J/(mol·K). Catalytic turnover in Michaelis-Menten dynamics satisfies k_cat = V_max / [E]₀ = 4.2 × 10³ s⁻¹ "
+        "with specificity constant k_cat / K_m ≥ 10⁸ M⁻¹ s⁻¹ approaching diffusion control.\n\n"
+        "In electrodynamics, local energy conservation follows Poynting's theorem ∂u/∂t + ∇·S = -J·E with energy density "
+        "u = ½(ε₀ E² + (1/μ₀)B²) and flux S = E × H. Stokes' circulation ∮ F·dr around boundary ∂S verifies differential "
+        "curl curl(E) = -∂B/∂t, confirming that field operators retain mathematical invariance under layout-preserving translation."
+    )
+    p3.insert_textbox(fitz.Rect(50, 577, 545, 785), p3_mixed, fontsize=8.2, fontname=f_acad3, color=c_body, lineheight=1.22)
+
     # Page 3 Footer
     p3.draw_line((50, 800), (545, 800), color=c_line, width=0.5)
     p3.insert_text((290, 815), "3", fontsize=9, fontname="helv", color=c_source)
@@ -435,6 +482,17 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     plot_bytes = create_scientific_plot()
     p4.insert_image(fitz.Rect(50, 385, 545, 595), stream=plot_bytes)
     p4.insert_text((70, 608), "Figure 2: Empirical convergence dynamics: dual-axis tracking of training loss and geometric BLEU-4 validation scores.", fontsize=8, fontname="heit", color=c_source)
+
+    # Section 7.1: Optimization Convergence & Preservation Bounds
+    f_acad4 = attach_acad_font(p4)
+    p4.insert_text((50, 628), "7.1 Optimization Convergence & Preservation Bounds", fontsize=10.5, fontname="hebo", color=c_primary)
+    p4_mixed = (
+        "The iterative spatial optimizer updates bounding boxes B_i^(t+1) = B_i^(t) - η_t ∇ L_geom with cosine learning "
+        "rate η_t = η_min + ½(η_0 - η_min)(1 + cos(π t / T_max)), where initial step η_0 = 10⁻³ and convergence tolerance "
+        "ε = 10⁻⁶. Across 20 optimization epochs, the multi-task loss converges exponentially to L_total ≤ 0.12, achieving "
+        "validation preservation score BLEU-4 ≥ 44.82 and formula bounding IoU ≥ 99.8% across all evaluation domains."
+    )
+    p4.insert_textbox(fitz.Rect(50, 640, 545, 785), p4_mixed, fontsize=8.2, fontname=f_acad4, color=c_body, lineheight=1.22)
 
     # Page 4 Footer
     p4.draw_line((50, 800), (545, 800), color=c_line, width=0.5)
