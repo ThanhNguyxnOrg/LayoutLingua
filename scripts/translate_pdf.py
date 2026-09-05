@@ -171,6 +171,26 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--ignore-cache", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--glossary",
+        type=Path,
+        help="Path to JSON or CSV glossary mapping file",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="Path to write transparent defect manifest JSON report",
+    )
+    parser.add_argument(
+        "--skip-references",
+        action="store_true",
+        help="Skip translating reference and bibliography sections",
+    )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Run visual regression & preservation verification after translation",
+    )
     return parser
 
 
@@ -495,6 +515,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         emitted = args.emit_segments.expanduser().resolve()
         pending = sum(1 for line in emitted.open(encoding="utf-8") if line.strip())
         print(f"Segments left untranslated: {pending} -> {emitted}")
+    if args.manifest is not None:
+        import json
+        manifest_data = {
+            "source_pdf": str(args.input_pdf),
+            "translated_pdf": str(result.path) if result.path else None,
+            "untranslated_segments": result.untranslated,
+            "reasons": dict(result.reasons),
+            "image_only_pages": list(result.image_only_pages),
+        }
+        with open(args.manifest, "w", encoding="utf-8") as f:
+            json.dump(manifest_data, f, indent=2, ensure_ascii=False)
+        print(f"Defect manifest saved: {args.manifest}")
+    if args.verify and result.path is not None:
+        from scripts.verify_preservation import verify_pdf_pair
+        v_report = verify_pdf_pair(args.input_pdf, result.path)
+        v_status = "PASSED" if v_report.get("passed_invariants") else "FAILED"
+        print(f"Preservation Verification: {v_status} (invariants match: {v_report.get('passed_invariants')})")
     return 0
 
 
