@@ -119,7 +119,14 @@ class GoogleTranslator(BaseTranslator):
     """Translate through Google's mobile web endpoint without an API key."""
 
     name = "google"
-    lang_map: ClassVar[dict[str, str]] = {"zh": "zh-CN"}
+    lang_map: ClassVar[dict[str, str]] = {
+        "zh": "zh-CN",
+        "zh-cn": "zh-CN",
+        "zh-hans": "zh-CN",
+        "zh-tw": "zh-TW",
+        "zh-hant": "zh-TW",
+        "he": "iw",
+    }
 
     def __init__(
         self,

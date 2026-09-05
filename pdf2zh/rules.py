@@ -25,7 +25,10 @@ PROSE_WORD_PATTERN = re.compile(
     r"[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]{1,}|"
     r"[\u0430-\u044F\u0451]{3,}|"
     r"[\u0410-\u042F\u0401][\u0430-\u044F\u0451]{2,}|"
-    r"[\u0600-\u06FF\u0590-\u05FF]{2,}"
+    r"[\u0600-\u06FF\u0590-\u05FF]{2,}|"
+    r"[\u0370-\u03FF]{2,}|"
+    r"[\u0E00-\u0E7F]{2,}|"
+    r"[\u0900-\u097F]{2,}"
 )
 MATH_FUNCTION_PATTERN = re.compile(
     r"(?<![A-Za-z])(?:sin|cos|tan|cot|sec|csc|sinh|cosh|tanh|coth|"
@@ -63,6 +66,10 @@ LANGUAGE_LINE_HEIGHT = {
 DEFAULT_MIN_LINE_HEIGHT = 0.95
 LANGUAGE_MIN_LINE_HEIGHT = {
     "vi": 1.10,
+    "ru": 0.75,
+    "uk": 0.75,
+    "ta": 0.75,
+    "ar": 0.85,
 }
 
 

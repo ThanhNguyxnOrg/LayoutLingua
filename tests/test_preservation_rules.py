@@ -5,9 +5,14 @@ from types import SimpleNamespace
 
 from pdfminer.pdfinterp import PDFResourceManager
 
-from pdf2zh.converter import TranslateConverter, is_translatable_segment
+from pdf2zh.converter import (
+    TranslateConverter,
+    is_translatable_segment,
+    run_is_prose,
+)
 from pdf2zh.rules import (
     BULLET_CHARACTERS,
+    PROSE_WORD_PATTERN,
     classify_preserved_page,
     cluster_table_words,
     formula_regions,
@@ -20,6 +25,7 @@ from pdf2zh.rules import (
     min_line_height_for_language,
     should_translate_table_cell,
 )
+from scripts.translate_pdf import TARGET_LANGUAGES
 
 
 class PreservationRuleTests(unittest.TestCase):
@@ -287,6 +293,64 @@ class ImageOnlyPageTests(unittest.TestCase):
         converter.segments_by_page[3] += 0
 
         self.assertEqual(converter.image_only_pages, set())
+
+    def test_prose_word_pattern_covers_all_supported_world_scripts(self):
+        samples = {
+            "Vietnamese": "Đây là văn bản tài liệu kỹ thuật",
+            "Chinese": "这是一段人工智能相关的学术论文",
+            "Japanese": "これは機械翻訳に関する研究論文です",
+            "Korean": "이것은 딥러닝 번역 연구 논문입니다",
+            "Russian": "Это научная статья по машинному обучению",
+            "Ukrainian": "Це наукова стаття з комп'ютерних наук",
+            "Bulgarian": "Това е научна статия по физика",
+            "Arabic": "هذا بحث علمي في مجال الذكاء الاصطناعي",
+            "Hebrew": "זהו מאמר מדעי על למידת מכונה",
+            "Greek": "Αυτό είναι ένα επιστημονικό άρθρο φυσικής",
+            "Thai": "นี่คือบทความวิจัยทางวิทยาศาสตร์",
+            "Hindi": "यह मशीन लर्निंग पर एक शोध पत्र है",
+            "English": "This is a technical paper on deep learning",
+            "French": "Ceci est un article scientifique sur l'apprentissage",
+            "German": "Dies ist ein wissenschaftlicher Forschungsartikel",
+            "Spanish": "Este es un artículo de investigación científica",
+        }
+        for script_name, sample_text in samples.items():
+            with self.subTest(script=script_name):
+                self.assertIsNotNone(
+                    PROSE_WORD_PATTERN.search(sample_text),
+                    f"PROSE_WORD_PATTERN failed to recognize {script_name} prose",
+                )
+
+    def test_run_is_prose_recognizes_multilingual_captions_and_subscripts(self):
+        multilingual_runs = [
+            "Hình 1: Mô hình mạng nơ-ron học sâu",
+            "图 1: 基于多模态大模型的文档翻译框架",
+            "図 1: ニューラル機械翻訳の全体アーキテクチャ",
+            "그림 1: 인공신경망 기반 문서 번역 아키텍처",
+            "Рис. 1: Архитектура глубокой нейронной сети",
+            "الشكل 1: بنية الشبكة العصبية الاصطناعية",
+            "תרשים 1: ארכיטקטורת רשת עצבית עמוקה",
+            "Σχήμα 1: Αρχιτεκτονική νευρωνικού δικτύου",
+            "ภาพที่ 1: สถาปัตยกรรมโครงข่ายประสาทเทียม",
+            "चित्र 1: न्यूरल नेटवर्क मॉडल की वास्तुकला",
+        ]
+        for run in multilingual_runs:
+            with self.subTest(run=run):
+                self.assertTrue(
+                    run_is_prose(run),
+                    f"run_is_prose failed to recognize: {run}",
+                )
+
+    def test_all_48_target_languages_have_valid_line_height_bounds(self):
+        for language in TARGET_LANGUAGES:
+            with self.subTest(language=language):
+                minimum = min_line_height_for_language(language)
+                line_height = line_height_for_language(language)
+                self.assertGreater(minimum, 0.5, f"min_line_height too small for {language}")
+                self.assertLessEqual(
+                    minimum,
+                    line_height,
+                    f"min_line_height ({minimum}) exceeds line_height ({line_height}) for {language}",
+                )
 
 
 if __name__ == "__main__":

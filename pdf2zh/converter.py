@@ -19,6 +19,7 @@ from pymupdf import Font
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from pdf2zh.rules import (
+    PROSE_WORD_PATTERN,
     is_bullet_character,
     is_formula_font,
     line_height_for_language,
@@ -266,7 +267,7 @@ def run_is_prose(text: str) -> bool:
     visible = text.strip()
     if len(visible) < MINIMUM_PROSE_RUN:
         return False
-    return re.search(r"[a-z]{3,}", visible) is not None
+    return PROSE_WORD_PATTERN.search(visible) is not None
 
 
 def paragraph_width_budget(x: float, x0: float, x1: float, lines: int) -> float:

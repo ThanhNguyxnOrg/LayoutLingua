@@ -136,7 +136,8 @@ noto_list = [
     "chr",  # Cherokee
     "el",  # Greek
     "gu",  # Gujarati
-    "iw",  # Hebrew
+    "he",  # Hebrew
+    "iw",  # Hebrew (legacy)
     "hi",  # Hindi
     "kn",  # Kannada
     "ml",  # Malayalam

@@ -238,13 +238,28 @@ class TranslatePdfTests(unittest.TestCase):
 
     def test_target_language_accepts_supported_and_rejects_unknown(self):
         self.assertEqual(translate_pdf._target_language("FR"), "fr")
-        for accepted in ("zh", "ja", "ko", "ru", "ar", "he", "th", "hi"):
+        for accepted in translate_pdf.TARGET_LANGUAGES:
             with self.subTest(language=accepted):
                 self.assertEqual(translate_pdf._target_language(accepted), accepted)
         for rejected in ("xx", "xyz", "invalid", "123"):
             with self.subTest(language=rejected):
                 with self.assertRaises(argparse.ArgumentTypeError):
                     translate_pdf._target_language(rejected)
+
+    def test_google_translator_maps_language_codes_correctly(self):
+        from pdf2zh.translator import GoogleTranslator
+
+        translator_zh = GoogleTranslator("en", "zh")
+        self.assertEqual(translator_zh.lang_out, "zh-CN")
+
+        translator_zhtw = GoogleTranslator("en", "zh-tw")
+        self.assertEqual(translator_zhtw.lang_out, "zh-TW")
+
+        translator_he = GoogleTranslator("en", "he")
+        self.assertEqual(translator_he.lang_out, "iw")
+
+        translator_vi = GoogleTranslator("en", "vi")
+        self.assertEqual(translator_vi.lang_out, "vi")
 
     def test_output_name_follows_the_target_language(self):
         with (
