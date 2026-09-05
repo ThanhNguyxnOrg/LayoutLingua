@@ -42,6 +42,7 @@
   <a href="#key-features">Features</a> ·
   <a href="#quick-start">Quick Start</a> ·
   <a href="#usage-guide">Usage</a> ·
+  <a href="#supported-languages">Languages</a> ·
   <a href="#agent-skill">Agent Skill</a> ·
   <a href="docs/development.md">Developer Guide</a> ·
   <a href="CHANGELOG.md">Changelog</a> ·
@@ -108,7 +109,7 @@ cd android
 - Or click **Select Files** / **Select Folder**.
 
 ### 2. Choose Target Language
-- Select your target language from the dropdown menu (Default: English / Vietnamese, with 36 Latin-script languages supported).
+- Select your target language from the dropdown menu (48 languages supported across Latin, CJK, Cyrillic, Semitic, Greek, Thai, and Hindi).
 
 ### 3. Translate
 - Click **Translate**. Each file displays live per-page progress.
@@ -119,6 +120,24 @@ cd android
   └── translated/
       └── research-paper-en.pdf
   ```
+
+---
+
+## Supported Languages & Typography Verification
+
+LayoutLingua does not merely present a list of language codes—each language tier is backed by verified font routing, ink metrics, and formula boundary protection to prevent missing glyphs (tofu boxes) and overlapping lines:
+
+| Tier | Language / Script | Engine & Font Routing | Calibration & Precision Details |
+| :--- | :--- | :--- | :--- |
+| **Tier 1: Precision Calibrated** | **Vietnamese (`vi`)** | Times New Roman / Segoe / GoNoto | Calibrated ink metrics (strict `1.10` line-height floor) preventing stacked tone mark collisions (`ề`, `ở`, `ậ`); stable rotated table header terminology. |
+| | **English (`en`)** | Standard Latin / System Serif | Baseline reference standard; grammar-aware LaTeX placeholder permutations; zero formula corruption. |
+| | **Chinese (`zh`, `zh-tw`)** | `SourceHanSerif{CN,TW}` + System CJK | Explicit `zh-CN` (Simplified) & `zh-TW` (Traditional) API routing; `1.4` line-height multiplier for dense Hanzi glyphs. |
+| | **Japanese (`ja`)** | `SourceHanSerifJP` + Meiryo/YuGoth | Kanji, Hiragana, Katakana support; `1.1` line-height multiplier; Japanese punctuation handling. |
+| | **Korean (`ko`)** | `SourceHanSerifKR` + Malgun | Hangul syllable blocks; `1.2` line-height multiplier; syllable boundary word wrapping. |
+| **Tier 2: Unicode Latin** | **European Languages**<br>*(FR, DE, ES, IT, PT, NL, PL, CS, SV, DA, NO, FI, HU, RO, TR...)* | GoNotoKurrent / Base14 fonts | Full coverage for all extended Latin diacritics (`á`, `ö`, `ç`, `ř`, `ñ`, `ł`, `ő`); automatic hyphenation budget & width fitting. |
+| **Tier 3: Script-Routed** | **Cyrillic (`ru`, `uk`, `bg`)** | Google Noto Kurrent / DejaVu | Calibrated `0.8` line-height with `0.75` leading floor; Cyrillic prose regex isolation (`\u0400-\u04FF`). |
+| | **Semitic / RTL (`ar`, `he`)** | Google Noto Arabic / Hebrew | Hebrew code normalization (`he` ↔ `iw`); bidirectional character range isolation in tokenizer. |
+| | **Greek (`el`), Thai (`th`), Hindi (`hi`)** | Google Noto specialized fonts | Dedicated Unicode range protection in prose parser (`\u0370-\u03FF`, `\u0E00-\u0E7F`, `\u0900-\u097F`). |
 
 ---
 
