@@ -44,6 +44,15 @@ def set_version_in_root(version: str, root: Path | None = None) -> str:
             changelog.write_text(new_content, encoding="utf-8")
             print(f"[OK] CHANGELOG.md -> Version badge = \"v{clean}\"")
 
+    # 4. CITATION.cff version
+    citation_cff = target_root / "CITATION.cff"
+    if citation_cff.is_file():
+        content = citation_cff.read_text(encoding="utf-8")
+        new_content, count = re.subn(r'version:\s*[0-9.]+', f'version: {clean}', content)
+        if count > 0:
+            citation_cff.write_text(new_content, encoding="utf-8")
+            print(f"[OK] CITATION.cff -> version = \"{clean}\"")
+
     return clean
 
 
