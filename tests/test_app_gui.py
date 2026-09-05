@@ -324,7 +324,20 @@ class PackagedSmokeTestTests(unittest.TestCase):
             translate_pdf._LAYOUT_MODEL.update(cached)
 
 
-@unittest.skipIf(App is None, "desktop app dependencies are not installed")
+def _has_display() -> bool:
+    try:
+        import tkinter
+        t = tkinter.Tk()
+        t.destroy()
+        return True
+    except Exception:
+        return False
+
+
+HAS_DISPLAY = _has_display()
+
+
+@unittest.skipIf(App is None or not HAS_DISPLAY, "desktop app dependencies or GUI display server not available")
 class ChangelogUITests(unittest.TestCase):
     def test_populate_changelog_renders_without_errors(self):
         root = ctk.CTk()
