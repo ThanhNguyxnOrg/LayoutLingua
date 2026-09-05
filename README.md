@@ -36,7 +36,7 @@
   <a href="docs/development.md#3-automated-testing"><img src="https://img.shields.io/badge/Tests-219%20Passed-2ea44f?style=flat-square&logo=pytest&logoColor=white" alt="219 Tests Passing"></a>
   <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.12+"></a>
   <a href="SKILL.md"><img src="https://img.shields.io/badge/Agent_Skills-Compatible-8A2BE2?style=flat-square&logo=probot&logoColor=white" alt="Agent Skills"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Changelog-v1.0.0-blue?style=flat-square" alt="Changelog"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Changelog-v1.1.0-blue?style=flat-square" alt="Changelog"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/ThanhNguyxnOrg/LayoutLingua?style=flat-square" alt="AGPL-3.0 License"></a>
 </p>
 
@@ -201,13 +201,13 @@ All technical specifications, development workflows, and platform architectures 
 | Topic & Guide | Focus Area | Status / Target |
 | :--- | :--- | :--- |
 | 🛠️ **[Developer & CI/CD Guide](docs/development.md)** | Core translation pipeline, local setup, test runner, GitHub Actions CI & release trigger | [![CI Tests](https://img.shields.io/badge/CI-Active-2ea44f?style=flat-square)](docs/development.md) |
-| 📐 **[Architecture & Vision Roadmap](docs/architecture-roadmap.md)** | Formula tokenization manifold, BabelDOC CJK engine integration & olmOCR vision model | [![Vision](https://img.shields.io/badge/Roadmap-v1.0.0-blueviolet?style=flat-square)](docs/architecture-roadmap.md) |
+| 📐 **[Architecture & Vision Roadmap](docs/architecture-roadmap.md)** | Formula tokenization manifold, BabelDOC CJK engine integration & olmOCR vision model | [![Vision](https://img.shields.io/badge/Roadmap-v1.1.0-blueviolet?style=flat-square)](docs/architecture-roadmap.md) |
 | 📱 **[Android Build & Release Guide](docs/android-release.md)** | Gradle compilation, PDFBox-Android integration, APK signing & distribution | [![Android](https://img.shields.io/badge/Android-APK-3DDC84?style=flat-square)](docs/android-release.md) |
 | 🌐 **[Web Architecture Blueprint](docs/web-architecture.md)** | Scalable browser/cloud translation service, WebAssembly & worker pools | [![Web](https://img.shields.io/badge/Web-Blueprint-0969da?style=flat-square)](docs/web-architecture.md) |
 | 🧠 **[Agent Knowledge Base](agent-knowledge/index.md)** | AI assistant context, invariant rules, test regression history & domain patterns | [![Knowledge](https://img.shields.io/badge/AI-Knowledge_Base-orange?style=flat-square)](agent-knowledge/index.md) |
 | 🛡️ **[Preservation Rules Reference](references/preservation-rules.md)** | Mathematical symbol matrices, regex tokens, non-prose grammar invariants | [![Math](https://img.shields.io/badge/LaTeX-Zero_Corruption-informational?style=flat-square)](references/preservation-rules.md) |
 | 🤖 **[Agent Skill Specification](SKILL.md)** | Command schema, skill definition, dual-engine CLI workflows for AI pair programmers | [![Skill](https://img.shields.io/badge/Skill-AgentSkills.io-8A2BE2?style=flat-square)](SKILL.md) |
-| 📋 **[Changelog & Version History](CHANGELOG.md)** | Comprehensive release notes, migration paths, and version audit logs | [![Changelog](https://img.shields.io/badge/Version-v1.0.0-blue?style=flat-square)](CHANGELOG.md) |
+| 📋 **[Changelog & Version History](CHANGELOG.md)** | Comprehensive release notes, migration paths, and version audit logs | [![Changelog](https://img.shields.io/badge/Version-v1.1.0-blue?style=flat-square)](CHANGELOG.md) |
 
 ---
 

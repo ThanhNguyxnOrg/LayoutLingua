@@ -52,4 +52,6 @@ desktop.ini
 /.claude/settings.local.json
 .agents/
 skills-lock.json
+CapCut_*.png
+
 

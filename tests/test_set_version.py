@@ -27,12 +27,18 @@ class SetVersionTests(unittest.TestCase):
             citation = root / "CITATION.cff"
             citation.write_text('cff-version: 1.2.0\nversion: 0.1.0\n', encoding="utf-8")
 
+            readme = root / "README.md"
+            readme.write_text('<img src="https://img.shields.io/badge/Changelog-v0.1.0-blue?style=flat-square">\n<img src="https://img.shields.io/badge/Version-v0.1.0-blue?style=flat-square">\n', encoding="utf-8")
+
             ver = set_version_in_root("v1.2.3", root=root)
             self.assertEqual(ver, "1.2.3")
             self.assertIn('APP_VERSION = "1.2.3"', update_py.read_text(encoding="utf-8"))
             self.assertIn('val appVersionName = "1.2.3"', gradle_kts.read_text(encoding="utf-8"))
             self.assertIn('Version-v1.2.3-blue', changelog.read_text(encoding="utf-8"))
+            self.assertIn('cff-version: 1.2.0', citation.read_text(encoding="utf-8"))
             self.assertIn('version: 1.2.3', citation.read_text(encoding="utf-8"))
+            self.assertIn('Changelog-v1.2.3-blue', readme.read_text(encoding="utf-8"))
+            self.assertIn('Version-v1.2.3-blue', readme.read_text(encoding="utf-8"))
 
     def test_invalid_version_raises(self):
         with self.assertRaises(ValueError):

@@ -44,14 +44,25 @@ def set_version_in_root(version: str, root: Path | None = None) -> str:
             changelog.write_text(new_content, encoding="utf-8")
             print(f"[OK] CHANGELOG.md -> Version badge = \"v{clean}\"")
 
-    # 4. CITATION.cff version
+    # 4. CITATION.cff version & date
     citation_cff = target_root / "CITATION.cff"
     if citation_cff.is_file():
         content = citation_cff.read_text(encoding="utf-8")
-        new_content, count = re.subn(r'version:\s*[0-9.]+', f'version: {clean}', content)
+        new_content, count = re.subn(r'(?m)^version:\s*[0-9.]+', f'version: {clean}', content)
         if count > 0:
             citation_cff.write_text(new_content, encoding="utf-8")
             print(f"[OK] CITATION.cff -> version = \"{clean}\"")
+
+    # 5. README.md badges
+    readme = target_root / "README.md"
+    if readme.is_file():
+        content = readme.read_text(encoding="utf-8")
+        new_content, count1 = re.subn(r'badge/Changelog-v[0-9.]+-blue', f'badge/Changelog-v{clean}-blue', content)
+        new_content, count2 = re.subn(r'badge/Version-v[0-9.]+-blue', f'badge/Version-v{clean}-blue', new_content)
+        new_content, count3 = re.subn(r'badge/Roadmap-v[0-9.]+-blueviolet', f'badge/Roadmap-v{clean}-blueviolet', new_content)
+        if count1 > 0 or count2 > 0 or count3 > 0:
+            readme.write_text(new_content, encoding="utf-8")
+            print(f"[OK] README.md -> Version badges = \"v{clean}\"")
 
     return clean
 

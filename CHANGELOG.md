@@ -1,7 +1,7 @@
 # 📋 Changelog & Release Notes
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Version-v1.0.0-blue?style=flat-square" alt="Version 1.0.0">
+  <img src="https://img.shields.io/badge/Version-v1.1.0-blue?style=flat-square" alt="Version 1.1.0">
   <img src="https://img.shields.io/badge/Release_Status-Production_Ready-brightgreen?style=flat-square" alt="Production Ready">
   <img src="https://img.shields.io/badge/SemVer-2.0.0-informational?style=flat-square" alt="SemVer">
 </p>
@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## [Unreleased]
+
+### 🚀 Added
+
+### 🔧 Changed
+
+### 🐛 Fixed
+
+---
+
+## [1.1.0] - 2026-09-05 — Document AI & Architecture Upgrade 🧠⚡
 
 ### 🚀 Added
 - 🧠 **Canonical Semantic Document IR (`pdf2zh/ir.py`)**:
@@ -55,7 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Graceful fallback to single-segment translation on delimiter mismatch.
 - 🎨 **Desktop GUI Enhancements (`app/gui.py`)**:
   - Added sleek vector dropzone upload illustration with cyan neon accents ([dropzone_upload.png](app/assets/dropzone_upload.png)).
-  - Added interactive in-app What's New & Changelog viewer dialog.
+  - Added interactive native CustomTkinter visual card-based Changelog viewer dialog.
+  - Filtered changelog viewer to present released stable versions cleanly to end users.
+  - Added automatic GitHub Issue Diagnostics pre-fill (`open_bug_report`) detecting platform, version, and language directly into issue URLs.
   - Added Open-Source Credits & Research Foundation attribution tab.
   - Added direct one-click `Report Issue ↗` button in footer linking straight to GitHub issue templates.
 - 🛠️ **Extended CLI Options (`scripts/translate_pdf.py`)**:
@@ -67,16 +79,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automated page dimension matching, visual pixel-difference calculation, difference heatmap generation, and JSON report export.
 - 🧪 **Real-World Bug Stress Benchmark PDF (`scripts/generate_sample_pdf.py`)**:
   - Embedded vertical rotated margin text, bullet lists with hanging indents, numeric uncertainty bounds (`±`), p-values (`p < 0.001`), currencies (`$`, `€`), inline math, and multi-range DOIs into `examples/sample_scientific_document.pdf`.
+  - Added mathematically correct Unicode subscripts (`ₘᵢₙ`, `ₘₐₓ`, `ᵢ`, `ₜ`) for bounding box and learning rate variables.
+- 🔄 **Cross-Project Version Synchronization (`scripts/set_version.py`)**:
+  - Automated version synchronization across `app/update.py`, `android/app/build.gradle.kts`, `CHANGELOG.md`, `CITATION.cff`, and `README.md`.
 
 ### 🔧 Changed
 - Refactored `pdf2zh/translator.py` to pre-normalize translation responses using `normalize_mt_placeholders`.
 - Enhanced `scripts/translate_pdf.py` execution workflow to support batch reporting, defect manifests, and verification routines.
 - Synchronized release asset filenames across all platforms (`LayoutLingua-windows-x86_64.zip`, `LayoutLingua-linux-x86_64.tar.gz`, `LayoutLingua-macos-apple-silicon.dmg`).
+- Updated CI testing pipeline (`.github/workflows/test.yml`) with `xvfb` virtual display support to ensure robust automated headless GUI testing across platforms.
 
 ### 🐛 Fixed
 - Fixed non-breaking space (`\xa0`) being falsely identified as formula tokens by `vflag()` in justified documents.
 - Fixed formula placeholder formatting failures caused by MT services inserting spaces (`< b 1 >`) or escaping HTML entities (`&lt;b1&gt;`).
 - Resolved multi-column reading order jumps where text from adjacent columns interleaved.
+- Fixed headless `tkinter.TclError` in continuous integration environments by wrapping test runs with virtual X display (`xvfb-run`).
 
 ---
 
@@ -93,4 +110,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[Unreleased]: https://github.com/ThanhNguyxnOrg/LayoutLingua/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/ThanhNguyxnOrg/LayoutLingua/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/tag/v1.0.0
