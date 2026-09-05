@@ -282,7 +282,7 @@ def generate_benchmark_pdf(output_path: Path) -> None:
     ]
     b_y = 704
     for b_text in bullet_items:
-        p1.insert_textbox(fitz.Rect(58, b_y, 545, b_y + 13), b_text, fontsize=7.4, fontname="helv", color=c_body, lineheight=1.1)
+        p1.insert_textbox(fitz.Rect(58, b_y, 545, b_y + 13), b_text, fontsize=7.4, fontname=f_acad1, color=c_body, lineheight=1.1)
         b_y += 13
 
     # Vertical Rotated Text Margin Annotation (BabelDOC #89 & rotated text edge case)

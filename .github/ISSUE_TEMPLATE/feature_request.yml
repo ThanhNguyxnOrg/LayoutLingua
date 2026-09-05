@@ -1,0 +1,32 @@
+name: "Feature Request / Đề xuất tính năng mới"
+description: "Gợi ý ý tưởng mới, hỗ trợ định dạng tài liệu, hoặc cải tiến hiệu năng"
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cảm ơn bạn đã đóng góp ý tưởng để LayoutLingua ngày càng hoàn thiện hơn!
+
+  - type: textarea
+    id: feature_description
+    attributes:
+      label: "Mô tả tính năng đề xuất (Feature Description)"
+      description: "Mô tả ngắn gọn và rõ ràng tính năng bạn muốn có"
+      placeholder: "Ví dụ: Hỗ trợ tự động xuất song ngữ theo từng trang đối xứng (bilingual side-by-side)..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: "Trường hợp sử dụng & Lý do cần thiết (Use Case & Motivation)"
+      description: "Tính năng này giải quyết vấn đề gì trong công việc nghiên cứu / đọc tài liệu của bạn?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Giải pháp thay thế đã cân nhắc (Alternatives Considered)"
+      description: "Bạn đã thử giải pháp nào khác chưa và vì sao chưa tối ưu?"

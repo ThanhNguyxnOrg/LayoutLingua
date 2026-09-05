@@ -541,10 +541,14 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.update_link.bind("<Button-1>", lambda _event: self._on_update_link())
         self.update_link.pack_forget()
 
-        ctk.CTkLabel(
-            right_box, text=f"v{APP_VERSION}", anchor="e",
-            font=ctk.CTkFont(self.mono_font, size=11), text_color=MUTED,
-        ).pack(anchor="e")
+        self.version_btn = ctk.CTkButton(
+            right_box, text=f"v{APP_VERSION} • What's New", width=128, height=24,
+            fg_color="transparent", border_width=1, border_color=BORDER_IDLE,
+            text_color=ACCENT, hover_color=HOVER, corner_radius=12,
+            font=ctk.CTkFont(self.mono_font, size=10, weight="bold"),
+            command=lambda: self._show_info_modal("changelog"),
+        )
+        self.version_btn.pack(anchor="e")
 
     def _build_dropzone(self) -> None:
         self.dropzone = ctk.CTkFrame(
@@ -557,10 +561,17 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.dropzone.grid_rowconfigure(0, weight=1)
         self.dropzone.grid_rowconfigure(4, weight=1)
 
-        self.dropzone_glyph = ctk.CTkLabel(
-            self.dropzone, text="↓", text_color=ACCENT,
-            font=ctk.CTkFont(self.ui_font, size=26, weight="bold"),
-        )
+        dropzone_icon_path = ASSET_DIRECTORY / "dropzone_upload.png"
+        if dropzone_icon_path.is_file():
+            self.dropzone_image = ctk.CTkImage(Image.open(dropzone_icon_path), size=(40, 40))
+            self.dropzone_glyph = ctk.CTkLabel(
+                self.dropzone, image=self.dropzone_image, text="",
+            )
+        else:
+            self.dropzone_glyph = ctk.CTkLabel(
+                self.dropzone, text="↓", text_color=ACCENT,
+                font=ctk.CTkFont(self.ui_font, size=26, weight="bold"),
+            )
         self.dropzone_glyph.grid(row=0, column=0, pady=(GAP - 2, 0), sticky="s")
 
         self.dropzone_text = ctk.CTkLabel(
@@ -707,12 +718,25 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         )
         self.status.grid(row=1, column=0, sticky="w")
 
+        footer_links = ctk.CTkFrame(footer, fg_color="transparent")
+        footer_links.grid(row=1, column=1, sticky="e")
+
+        for label, tab in (("Changelog", "changelog"), ("Credits", "credits"), ("Report Issue", "report")):
+            btn = ctk.CTkLabel(
+                footer_links, text=label, cursor="hand2", text_color=MUTED,
+                font=ctk.CTkFont(self.ui_font, size=11, underline=True),
+            )
+            btn.pack(side="left", padx=PAD // 2)
+            btn.bind("<Button-1>", lambda _e, t=tab: self._show_info_modal(t))
+            btn.bind("<Enter>", lambda _e, b=btn: b.configure(text_color=ACCENT))
+            btn.bind("<Leave>", lambda _e, b=btn: b.configure(text_color=MUTED))
+
         self.output_link = ctk.CTkLabel(
             footer, text="", anchor="w", justify="left", cursor="hand2",
             font=ctk.CTkFont(self.ui_font, size=12, underline=True),
             text_color=ACCENT, wraplength=680,
         )
-        self.output_link.grid(row=2, column=0, pady=(PAD // 2, 0), sticky="w")
+        self.output_link.grid(row=2, column=0, columnspan=2, pady=(PAD // 2, 0), sticky="w")
         self.output_link.bind("<Button-1>", lambda _event: self._open(self.last_output))
         self.output_link.grid_remove()
 
@@ -1113,20 +1137,30 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
             self.clipboard_append(report)
             copied.configure(text="Copied to clipboard")
 
+        def report_github() -> None:
+            copy_report()
+            webbrowser.open_new_tab(f"https://github.com/{REPOSITORY}/issues/new?template=bug_report.yml")
+
         ctk.CTkButton(
-            buttons, text="Copy Report", width=150, height=32,
+            buttons, text="Copy Report", width=120, height=32,
             command=copy_report, font=ctk.CTkFont(self.ui_font, size=13),
         ).pack(side="left")
+        ctk.CTkButton(
+            buttons, text="Report on GitHub ↗", width=150, height=32,
+            fg_color="transparent", border_width=1, border_color=ACCENT,
+            text_color=ACCENT, hover_color=HOVER,
+            command=report_github, font=ctk.CTkFont(self.ui_font, size=13),
+        ).pack(side="left", padx=(PAD, 0))
         if log is not None:
             ctk.CTkButton(
-                buttons, text="Open Log File", width=120, height=32,
+                buttons, text="Open Log File", width=110, height=32,
                 fg_color="transparent", border_width=1, border_color=BORDER_IDLE,
-                text_color=ACCENT, hover_color=HOVER,
+                text_color=MUTED, hover_color=HOVER,
                 command=lambda: self._open(log),
                 font=ctk.CTkFont(self.ui_font, size=13),
             ).pack(side="left", padx=(PAD, 0))
         ctk.CTkButton(
-            buttons, text="Close", width=90, height=32,
+            buttons, text="Close", width=80, height=32,
             fg_color="transparent", border_width=1, border_color=BORDER_IDLE,
             text_color=MUTED, hover_color=HOVER, command=dialog.destroy,
             font=ctk.CTkFont(self.ui_font, size=13),
@@ -1134,6 +1168,216 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         copied.pack(side="right", padx=(0, PAD))
 
         # Grab only after the window exists, or Tk raises on some platforms.
+        dialog.after(120, dialog.grab_set)
+
+    def _show_info_modal(self, initial_tab: str = "changelog") -> None:
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("LayoutLingua — About, Changelog & Issues")
+        dialog.geometry("700x540")
+        dialog.transient(self)
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_rowconfigure(2, weight=1)
+
+        # Top Bar with Title and Close
+        top_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        top_frame.grid(row=0, column=0, padx=EDGE, pady=(EDGE, PAD), sticky="ew")
+        top_frame.grid_columnconfigure(1, weight=1)
+
+        logo = ASSET_DIRECTORY / "icon.png"
+        if logo.is_file():
+            self.dialog_logo = ctk.CTkImage(Image.open(logo), size=(32, 32))
+            ctk.CTkLabel(top_frame, image=self.dialog_logo, text="").grid(
+                row=0, column=0, padx=(0, PAD)
+            )
+
+        title_box = ctk.CTkFrame(top_frame, fg_color="transparent")
+        title_box.grid(row=0, column=1, sticky="w")
+        ctk.CTkLabel(
+            title_box, text=f"LayoutLingua v{APP_VERSION}",
+            font=ctk.CTkFont(self.ui_font, size=16, weight="bold"),
+            text_color=("gray15", "#F8FAFC"),
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            title_box, text="SOTA Scientific Document Layout & Math Preservation Engine",
+            font=ctk.CTkFont(self.ui_font, size=11), text_color=MUTED,
+        ).pack(anchor="w")
+
+        # Tab selector
+        tab_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        tab_frame.grid(row=1, column=0, padx=EDGE, pady=(0, PAD), sticky="ew")
+
+        content_container = ctk.CTkFrame(dialog, corner_radius=8, fg_color=SURFACE, border_width=1, border_color=BORDER_IDLE)
+        content_container.grid(row=2, column=0, padx=EDGE, pady=(0, PAD), sticky="nsew")
+        content_container.grid_columnconfigure(0, weight=1)
+        content_container.grid_rowconfigure(0, weight=1)
+
+        tabs: dict[str, ctk.CTkFrame] = {}
+        tab_buttons: dict[str, ctk.CTkButton] = {}
+
+        def switch_tab(tab_name: str) -> None:
+            for name, frame in tabs.items():
+                if name == tab_name:
+                    frame.grid(row=0, column=0, sticky="nsew", padx=PAD, pady=PAD)
+                    tab_buttons[name].configure(fg_color=HOVER, border_color=ACCENT, text_color=ACCENT)
+                else:
+                    frame.grid_forget()
+                    tab_buttons[name].configure(fg_color="transparent", border_color=BORDER_IDLE, text_color=MUTED)
+
+        # Tab 1: Changelog
+        changelog_frame = ctk.CTkFrame(content_container, fg_color="transparent")
+        changelog_frame.grid_columnconfigure(0, weight=1)
+        changelog_frame.grid_rowconfigure(0, weight=1)
+        tabs["changelog"] = changelog_frame
+
+        changelog_text = ctk.CTkTextbox(
+            changelog_frame, wrap="word",
+            font=ctk.CTkFont(self.mono_font, size=11),
+            fg_color="transparent",
+        )
+        changelog_text.grid(row=0, column=0, sticky="nsew")
+
+        changelog_path = APP_ROOT / "CHANGELOG.md"
+        if changelog_path.is_file():
+            try:
+                changelog_text.insert("1.0", changelog_path.read_text(encoding="utf-8"))
+            except Exception:
+                changelog_text.insert("1.0", "Failed to load CHANGELOG.md.")
+        else:
+            changelog_text.insert("1.0", f"LayoutLingua v{APP_VERSION}\n\nNo local changelog found.")
+        changelog_text.configure(state="disabled")
+
+        # Tab 2: Credits & Research
+        credits_frame = ctk.CTkFrame(content_container, fg_color="transparent")
+        credits_frame.grid_columnconfigure(0, weight=1)
+        tabs["credits"] = credits_frame
+
+        credits_scroll = ctk.CTkScrollableFrame(credits_frame, fg_color="transparent")
+        credits_scroll.pack(fill="both", expand=True)
+        credits_scroll.grid_columnconfigure(0, weight=1)
+
+        credit_items = [
+            ("BabelDOC (ACL 2026)", "Advanced multi-space adaptive constraint solver, dynamic diacritic headroom compensation, and visual Bleed preservation bounds."),
+            ("Docling (IBM Research)", "Unified multimodal document representation, structure-aware reading order extraction, and granular layout bounding."),
+            ("Surya & Marker (Vik Paruchuri)", "Column gutter gap slicing and topological reading order DAG inference."),
+            ("TATR & PubTables-1M", "Structure-aware table cell decomposition and cell-level coordinate isolation."),
+            ("PDFMathTranslate", "100% native vector math operator preservation without image re-rasterization."),
+            ("PyMuPDF & pdfminer.six", "Underlying high-fidelity PDF stream interpreter, graphics state matrix, and font glyph mapping."),
+        ]
+
+        ctk.CTkLabel(
+            credits_scroll, text="Scientific Foundation & Open-Source Acknowledgements",
+            font=ctk.CTkFont(self.ui_font, size=13, weight="bold"),
+            text_color=("gray15", "#F8FAFC"), anchor="w",
+        ).pack(fill="x", pady=(0, PAD))
+
+        for title, desc in credit_items:
+            card = ctk.CTkFrame(credits_scroll, corner_radius=6, fg_color=HOVER, border_width=1, border_color=BORDER_IDLE)
+            card.pack(fill="x", pady=4)
+            ctk.CTkLabel(
+                card, text=title, font=ctk.CTkFont(self.ui_font, size=12, weight="bold"),
+                text_color=ACCENT, anchor="w",
+            ).pack(fill="x", padx=PAD, pady=(PAD, 2))
+            ctk.CTkLabel(
+                card, text=desc, font=ctk.CTkFont(self.ui_font, size=11),
+                text_color=MUTED, anchor="w", justify="left", wraplength=580,
+            ).pack(fill="x", padx=PAD, pady=(0, PAD))
+
+        # Tab 3: Report Issue
+        report_frame = ctk.CTkFrame(content_container, fg_color="transparent")
+        report_frame.grid_columnconfigure(0, weight=1)
+        tabs["report"] = report_frame
+
+        ctk.CTkLabel(
+            report_frame, text="Report an Issue or Request a Feature",
+            font=ctk.CTkFont(self.ui_font, size=13, weight="bold"),
+            text_color=("gray15", "#F8FAFC"), anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(
+            report_frame,
+            text="LayoutLingua follows strict fail-closed preservation: if a formula or table cell cannot be translated with 100% geometric fidelity, it is preserved in the source language. If you find a bug or unexpected behavior, please submit a report directly to GitHub!",
+            font=ctk.CTkFont(self.ui_font, size=11), text_color=MUTED, justify="left", wraplength=600, anchor="w",
+        ).pack(fill="x", pady=(0, PAD))
+
+        # System Diagnostics info box
+        import platform
+        import fitz
+        diag_info = (
+            f"LayoutLingua: v{APP_VERSION}\n"
+            f"OS: {platform.system()} {platform.release()} ({platform.machine()})\n"
+            f"Python: {platform.python_version()} ({platform.python_implementation()})\n"
+            f"PyMuPDF (fitz): {fitz.__version__}\n"
+            f"Repository: https://github.com/{REPOSITORY}\n"
+        )
+        diag_box = ctk.CTkTextbox(
+            report_frame, height=90, font=ctk.CTkFont(self.mono_font, size=11),
+        )
+        diag_box.pack(fill="x", pady=(0, PAD))
+        diag_box.insert("1.0", diag_info)
+        diag_box.configure(state="disabled")
+
+        action_row = ctk.CTkFrame(report_frame, fg_color="transparent")
+        action_row.pack(fill="x", pady=PAD)
+
+        def copy_diag() -> None:
+            self.clipboard_clear()
+            self.clipboard_append(diag_info)
+            diag_status.configure(text="Diagnostics copied to clipboard!")
+
+        ctk.CTkButton(
+            action_row, text="📋 Copy Diagnostics", width=140, height=32,
+            fg_color="transparent", border_width=1, border_color=BORDER_IDLE,
+            text_color=MUTED, hover_color=HOVER, command=copy_diag,
+            font=ctk.CTkFont(self.ui_font, size=12),
+        ).pack(side="left", padx=(0, PAD))
+
+        ctk.CTkButton(
+            action_row, text="🐞 Open GitHub Bug Report ↗", width=190, height=32,
+            command=lambda: webbrowser.open_new_tab(f"https://github.com/{REPOSITORY}/issues/new?template=bug_report.yml"),
+            font=ctk.CTkFont(self.ui_font, size=12, weight="bold"),
+        ).pack(side="left", padx=(0, PAD))
+
+        ctk.CTkButton(
+            action_row, text="💡 Feature Request ↗", width=160, height=32,
+            fg_color="transparent", border_width=1, border_color=ACCENT,
+            text_color=ACCENT, hover_color=HOVER,
+            command=lambda: webbrowser.open_new_tab(f"https://github.com/{REPOSITORY}/issues/new?template=feature_request.yml"),
+            font=ctk.CTkFont(self.ui_font, size=12),
+        ).pack(side="left")
+
+        diag_status = ctk.CTkLabel(report_frame, text="", text_color=STATUS_COLORS["done"], font=ctk.CTkFont(self.ui_font, size=11))
+        diag_status.pack(anchor="w", pady=(2, 0))
+
+        # Build Tab buttons in tab_frame
+        for name, label in (("changelog", "📋 Changelog"), ("credits", "🎖️ Credits & Research"), ("report", "🐞 Report Issue")):
+            btn = ctk.CTkButton(
+                tab_frame, text=label, width=130, height=28, corner_radius=6,
+                fg_color="transparent", border_width=1, border_color=BORDER_IDLE,
+                text_color=MUTED, hover_color=HOVER,
+                font=ctk.CTkFont(self.ui_font, size=12),
+                command=lambda n=name: switch_tab(n),
+            )
+            btn.pack(side="left", padx=(0, PAD // 2))
+            tab_buttons[name] = btn
+
+        # Bottom Bar
+        bottom_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        bottom_frame.grid(row=3, column=0, padx=EDGE, pady=(0, EDGE), sticky="ew")
+
+        ctk.CTkButton(
+            bottom_frame, text="GitHub Repository ↗", width=160, height=32,
+            fg_color="transparent", border_width=1, border_color=BORDER_IDLE,
+            text_color=ACCENT, hover_color=HOVER,
+            command=lambda: webbrowser.open_new_tab(f"https://github.com/{REPOSITORY}"),
+            font=ctk.CTkFont(self.ui_font, size=12),
+        ).pack(side="left")
+
+        ctk.CTkButton(
+            bottom_frame, text="Close", width=90, height=32, command=dialog.destroy,
+            font=ctk.CTkFont(self.ui_font, size=12),
+        ).pack(side="right")
+
+        switch_tab(initial_tab if initial_tab in tabs else "changelog")
         dialog.after(120, dialog.grab_set)
 
     def _go_determinate(self) -> None:

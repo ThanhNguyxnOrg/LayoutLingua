@@ -64,6 +64,18 @@ def normalize_mt_placeholders(text: str) -> str:
     # Step 4: Collapse space between paired tags (<b1>  </b1> -> <b1></b1>)
     cleaned = PAIRED_PLACEHOLDER.sub(r"<b\1></b\1>", cleaned)
 
+    # Step 5: Auto-close unclosed style tags at end of segment if MT dropped them
+    style_stack: list[str] = []
+    for match in re.finditer(r"<(/?)s([123])>", cleaned, flags=re.IGNORECASE):
+        closing, identifier = match.groups()
+        if not closing:
+            style_stack.append(identifier)
+        elif style_stack and style_stack[-1] == identifier:
+            style_stack.pop()
+    while style_stack:
+        unclosed_id = style_stack.pop()
+        cleaned += f"</s{unclosed_id}>"
+
     return cleaned
 
 

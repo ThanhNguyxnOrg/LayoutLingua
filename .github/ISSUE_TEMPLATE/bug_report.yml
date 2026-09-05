@@ -1,0 +1,82 @@
+name: "Bug Report / Báo lỗi dịch thuật & bố cục"
+description: "Báo cáo lỗi vỡ layout, mất công thức toán học, tràn bảng, hoặc crash ứng dụng"
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cảm ơn bạn đã báo lỗi để cải thiện LayoutLingua! 
+        Vui lòng cung cấp chi tiết bên dưới để đội ngũ kỹ thuật có thể tái hiện và sửa lỗi nhanh nhất.
+
+  - type: dropdown
+    id: issue_category
+    attributes:
+      label: "Phân loại sự cố (Issue Category)"
+      description: "Chọn danh mục phản ánh đúng nhất sự cố bạn gặp phải"
+      options:
+        - "Formula Dropped / Broken (Công thức toán bị mất hoặc vỡ ký hiệu)"
+        - "Layout Overlap / Tràn văn bản (Chữ dịch đè lên cột hoặc hình khác)"
+        - "Table Structure Breakage (Vỡ đường viền hoặc lệch ô bảng)"
+        - "Translation Engine Error / Untranslated Segments (Lỗi dịch máy)"
+        - "App GUI Crash / Freeze (Treo hoặc văng ứng dụng)"
+        - "Other (Khác)"
+    validations:
+      required: true
+
+  - type: input
+    id: target_language
+    attributes:
+      label: "Ngôn ngữ đích (Target Language)"
+      description: "Ví dụ: Tiếng Việt (vi), Trung giản thể (zh), Pháp (fr)..."
+      placeholder: "vi"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: "Hệ điều hành (Operating System)"
+      options:
+        - "Windows 10 / 11"
+        - "macOS (Apple Silicon M1/M2/M3)"
+        - "macOS (Intel)"
+        - "Linux (Ubuntu / Debian / Fedora)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "Mô tả chi tiết sự cố (Description)"
+      description: "Điều gì đã xảy ra khác so với kỳ vọng?"
+      placeholder: "Ví dụ: Khi dịch trang 3, phương trình Dirac bị giữ nguyên tiếng Anh và báo 1 segment(s) untranslated..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: "Các bước tái hiện (Steps to Reproduce)"
+      placeholder: |
+        1. Kéo thả file PDF vào giao diện LayoutLingua
+        2. Chọn ngôn ngữ đích
+        3. Nhấn 'Translate All'
+        4. Quan sát lỗi trong danh sách hoặc file PDF đầu ra
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Log Terminal / Thông báo lỗi (Terminal Output / Error Log)"
+      description: "Dán thông báo lỗi từ Terminal hoặc file log (nếu có)"
+      render: shell
+
+  - type: checkboxes
+    id: fail_closed_acknowledged
+    attributes:
+      label: "Xác nhận nguyên lý Fail-Closed"
+      options:
+        - label: "Tôi hiểu rằng LayoutLingua ưu tiên giữ nguyên văn bản gốc (fail-closed) thay vì tạo ra bản dịch làm hỏng công thức hoặc bảng biểu."
+          required: false

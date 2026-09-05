@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "LayoutLingua GitHub Discussions"
+    url: "https://github.com/ThanhNguyxnOrg/LayoutLingua/discussions"
+    about: "Thảo luận, chia sẻ kinh nghiệm và đặt câu hỏi về cách sử dụng"
+  - name: "Documentation & Research Map"
+    url: "https://github.com/ThanhNguyxnOrg/LayoutLingua#architecture--research-invariants"
+    about: "Đọc tài liệu kiến trúc kỹ thuật và bản đồ nghiên cứu SOTA"
