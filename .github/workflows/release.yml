@@ -1,4 +1,4 @@
-name: Release 4 Platforms
+﻿name: Release 4 Platforms
 
 # Automatically builds and publishes releases for all 4 supported platforms:
 # Windows (zip), macOS (dmg), Linux (tar.gz), and Android (apk).
@@ -329,7 +329,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           git config user.name "ThanhNguyxnAgent[bot]"
-          git config user.email "4125740+thanhnguyxnagent[bot]@users.noreply.github.com"
+          git config user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
           git tag "android-${{ needs.check-release.outputs.tag }}" || true
           git push origin "android-${{ needs.check-release.outputs.tag }}" || true
 
@@ -342,8 +342,9 @@ jobs:
           python3 scripts/set_version.py "${{ needs.check-release.outputs.version }}"
           if ! git diff --quiet; then
             git config user.name "ThanhNguyxnAgent[bot]"
-            git config user.email "4125740+thanhnguyxnagent[bot]@users.noreply.github.com"
+            git config user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
             git add app/update.py android/app/build.gradle.kts
             git commit -m "chore(release): bump version to ${{ needs.check-release.outputs.version }} [skip ci]"
             git push origin main
           fi
+
