@@ -37,6 +37,7 @@ jobs:
   check-release:
     name: Detect Release & Resolve Version
     runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       version: ${{ steps.check.outputs.version }}
