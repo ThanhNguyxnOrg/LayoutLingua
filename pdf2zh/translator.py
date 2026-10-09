@@ -15,6 +15,7 @@ from typing import Any, ClassVar
 
 import requests
 
+from pdf2zh.batch import BATCH_DELIMITER
 from pdf2zh.cache import TranslationCache
 
 logger = logging.getLogger(__name__)
@@ -463,6 +464,14 @@ def load_segment_table(path: str | None) -> dict[str, str]:
             if not isinstance(source, str) or not isinstance(translation, str):
                 raise ValueError(f"{path} line {number}: 'src' and 'dst' must be strings")
             if not translation:
+                continue
+            if BATCH_DELIMITER.strip() in source:
+                logger.warning(
+                    "%s line %d: source carries a batch delimiter from a joined "
+                    "request; segment left untranslated",
+                    path,
+                    number,
+                )
                 continue
             # Old converter versions emitted {vN}; normalise those records so
             # existing handoff files remain usable with the documented tags.

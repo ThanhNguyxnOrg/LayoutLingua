@@ -1217,8 +1217,10 @@ class TranslateConverter(PDFConverterEx):
         self.translatable_segments += translatable
         self.segments_by_page[ltpage.pageid] += translatable
 
-        # Short marker-free prose shares one request per batch instead of one
-        # per segment, so a book makes roughly a tenth of the HTTP calls.
+        # Batching only pays for network engines: a table lookup answers in
+        # microseconds, and joining segments would record one delimiter-glued
+        # miss the caller can never translate back piece by piece.
+        can_batch = self.translator.name != "handoff"
         batcher = TranslationBatcher(guarded_translate)
         news: list[str] = [""] * len(sstk)
         batch_positions: list[int] = []
@@ -1236,7 +1238,7 @@ class TranslateConverter(PDFConverterEx):
             if glossary_hit is not None:
                 news[index] = glossary_hit
                 continue
-            if _is_batchable_segment(segment, batcher.max_batch_chars):
+            if _is_batchable_segment(segment, batcher.max_batch_chars) and can_batch:
                 batch_positions.append(index)
                 batch_texts.append(segment)
             else:

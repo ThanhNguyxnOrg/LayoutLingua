@@ -257,6 +257,26 @@ class ExternalGlossaryTests(unittest.TestCase):
         self.assertIsNone(apply_glossary("a <b0></b0> b"))
         self.assertIsNone(apply_glossary("unlisted segment"))
 
+    def test_delimiter_joined_records_are_skipped(self):
+        table_path = Path(tempfile.mkdtemp()) / "dirty.jsonl"
+        table_path.write_text(
+            "\n".join(
+                [
+                    json.dumps({"src": "ok segment", "dst": "đoạn ổn"}),
+                    json.dumps(
+                        {
+                            "src": "a ===LL_SPLIT=== b",
+                            "dst": "a ===LL_SPLIT=== b",
+                        }
+                    ),
+                ]
+            ),
+            encoding="utf-8",
+        )
+        from pdf2zh.translator import load_segment_table
+        table = load_segment_table(str(table_path))
+        self.assertEqual(table, {"ok segment": "đoạn ổn"})
+
 
 class DeepLXTranslatorTests(unittest.TestCase):
     def _translator(self, **kwargs):
