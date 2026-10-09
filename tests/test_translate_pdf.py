@@ -39,6 +39,13 @@ class FailureReportingTests(unittest.TestCase):
             sum("translation engine failed" in line for line in lines), 1
         )
 
+    def test_rate_limited_segments_tell_the_user_what_to_do(self):
+        lines = translate_pdf._describe_failures(Counter({"RateLimited": 3}))
+        self.assertEqual(len(lines), 1)
+        self.assertIn("3 segments", lines[0])
+        self.assertIn("rate-limited", lines[0])
+        self.assertIn("handoff", lines[0])
+
 
 class TranslatePdfTests(unittest.TestCase):
     def setUp(self) -> None:

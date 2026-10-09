@@ -52,7 +52,10 @@ class TranslationBatcher:
 
             if len(current_batch) == 1:
                 idx = current_batch[0]
-                results[idx] = self.translate_func(segments[idx])
+                try:
+                    results[idx] = self.translate_func(segments[idx])
+                except Exception:
+                    results[idx] = segments[idx]
                 current_batch = []
                 current_batch_len = 0
                 return

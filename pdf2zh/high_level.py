@@ -326,7 +326,7 @@ def _layout_cache_for(
     if model is None or ignore_cache:
         return None
     try:
-        fingerprint = os.stat(model.model_path)
+        fingerprint = Path(model.model_path).stat()
         identity = f"{model.model_path}:{fingerprint.st_mtime_ns}:{fingerprint.st_size}"
     except OSError:
         return None

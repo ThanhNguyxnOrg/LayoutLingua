@@ -357,3 +357,16 @@ class LayoutCacheTests(unittest.TestCase):
         self.assertIsNone(_decode_page_layout("not-json"))
         self.assertIsNone(_decode_page_layout('{"names": {}, "rows": [[1, 2]]}'))
         self.assertIsNone(_decode_page_layout('{"names": {}}'))
+
+    def test_failure_reason_is_actionable(self):
+        from pdf2zh.converter import _failure_reason
+        from pdf2zh.translator import CircuitOpenError
+        self.assertEqual(_failure_reason(CircuitOpenError("blocked")), "RateLimited")
+        self.assertEqual(
+            _failure_reason(_status_error(429)),
+            "RateLimited",
+        )
+        self.assertEqual(
+            _failure_reason(ValueError("bad")),
+            "ValueError",
+        )

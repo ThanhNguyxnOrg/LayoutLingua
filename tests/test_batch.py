@@ -61,6 +61,25 @@ class TestTranslationBatcher(unittest.TestCase):
         # Segment with {v0} must not be grouped into a bulk batch
         self.assertTrue(any("{v0}" in c and "Short A" not in c for c in calls))
 
+    def test_single_item_failure_keeps_source(self):
+        def boom(text: str) -> str:
+            raise RuntimeError("throttled")
+
+        batcher = TranslationBatcher(translate_func=boom)
+        self.assertEqual(
+            batcher.batch_translate_segments(["only segment"]), ["only segment"]
+        )
+
+    def test_mismatch_fallback_failure_keeps_source(self):
+        def faulty_translate(text: str) -> str:
+            if "Phần" in text and "===" not in text:
+                raise RuntimeError("throttled")
+            return "Bản dịch bị nuốt mất delimiter"
+
+        batcher = TranslationBatcher(translate_func=faulty_translate, max_batch_size=3)
+        results = batcher.batch_translate_segments(["Phần 1", "Phần 2"])
+        self.assertEqual(results, ["Phần 1", "Phần 2"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -67,6 +67,7 @@ class Translation(NamedTuple):
 _FIT_MARKERS = ("font size", "cannot fit")
 _FORMULA_REASON = "FormulaPlaceholderError"
 _TOO_LONG_REASON = "SegmentTooLongError"
+_RATE_LIMIT_REASON = "RateLimited"
 
 
 def _count_of_segments(count: int) -> str:
@@ -81,10 +82,13 @@ def _describe_failures(reasons: Mapping[str, int]) -> list[str]:
     fit = sum(count for reason, count in reasons.items() if is_fit(reason))
     formula = reasons.get(_FORMULA_REASON, 0)
     too_long = reasons.get(_TOO_LONG_REASON, 0)
+    limited = reasons.get(_RATE_LIMIT_REASON, 0)
     engine = {
         reason: count
         for reason, count in reasons.items()
-        if reason not in (_FORMULA_REASON, _TOO_LONG_REASON) and not is_fit(reason)
+        if reason
+        not in (_FORMULA_REASON, _TOO_LONG_REASON, _RATE_LIMIT_REASON)
+        and not is_fit(reason)
     }
 
     lines: list[str] = []
@@ -102,6 +106,12 @@ def _describe_failures(reasons: Mapping[str, int]) -> list[str]:
         lines.append(
             f"{_count_of_segments(too_long)} stayed in the source language because the "
             "paragraph was longer than the translation service accepts in one request"
+        )
+    if limited:
+        lines.append(
+            f"{_count_of_segments(limited)} stayed in the source language "
+            "because the service rate-limited this IP — wait a while, use "
+            "fewer --threads, switch --engine, or use handoff"
         )
     if engine:
         names = ", ".join(f"{name} x{count}" for name, count in sorted(engine.items()))

@@ -36,6 +36,7 @@ from pdf2zh.rules import (
 from pdf2zh.translator import (
     ENGINES,
     BaseTranslator,
+    CircuitOpenError,
     encode_formula_placeholders,
     load_segment_table,
     restore_formula_placeholders,
@@ -54,6 +55,20 @@ BASE14_STYLE_FONTS = {0: "tiro", 1: "tibo", 2: "tiit", 3: "tibi"}
 _TRANSIENT_ERROR_NAMES = frozenset(
     {"ConnectionError", "Timeout", "ChunkedEncodingError", "RemoteDisconnected"}
 )
+
+
+def _failure_reason(error: BaseException) -> str:
+    """User-actionable failure reason for the translation report.
+
+    A bare exception name tells the user nothing to do differently; a rate
+    limit means waiting, switching engines, or using handoff instead.
+    """
+    if isinstance(error, CircuitOpenError):
+        return "RateLimited"
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    if status == 429:
+        return "RateLimited"
+    return type(error).__name__
 
 
 def _is_transient_translation_error(exc: BaseException) -> bool:
@@ -1177,7 +1192,7 @@ class TranslateConverter(PDFConverterEx):
                     log.exception(e)
                 else:
                     log.exception(e, exc_info=False)
-                self.record_translation_failure(s, type(e).__name__)
+                self.record_translation_failure(s, _failure_reason(e))
                 return s
 
         def guarded_translate(text: str) -> str:
@@ -1187,7 +1202,7 @@ class TranslateConverter(PDFConverterEx):
                 return translate_segment(text)
             except Exception as e:
                 if BATCH_DELIMITER.strip() not in text:
-                    self.record_translation_failure(text, type(e).__name__)
+                    self.record_translation_failure(text, _failure_reason(e))
                 raise
 
         # Counted here rather than inside worker: worker runs on the pool, and
