@@ -16,6 +16,7 @@ from pdf2zh.rules import (
     CJK_WRAP_LANGUAGES,
     PROSE_WORD_PATTERN,
     _is_cjk_char,
+    add_cjk_latin_spacing,
     can_break_cjk_line,
     classify_preserved_page,
     cluster_table_words,
@@ -205,6 +206,16 @@ class PreservationRuleTests(unittest.TestCase):
         for language in ("vi", "en", "fr"):
             with self.subTest(language=language):
                 self.assertNotIn(language, CJK_WRAP_LANGUAGES)
+
+    def test_cjk_latin_spacing_only_touches_adjacency(self):
+        self.assertEqual(add_cjk_latin_spacing("中文ABC"), "中文 ABC")
+        self.assertEqual(add_cjk_latin_spacing("ABC中文"), "ABC 中文")
+        self.assertEqual(add_cjk_latin_spacing("100中文"), "100 中文")
+        self.assertEqual(add_cjk_latin_spacing("中文 ABC"), "中文 ABC")
+        self.assertEqual(add_cjk_latin_spacing("中文，ABC"), "中文，ABC")
+        self.assertEqual(
+            add_cjk_latin_spacing("a <b0></b0> b"), "a <b0></b0> b"
+        )
 
     def test_every_target_can_be_typeset_without_lines_touching(self):
         for language in ("vi", "en", "fr", "de", "unknown-code"):

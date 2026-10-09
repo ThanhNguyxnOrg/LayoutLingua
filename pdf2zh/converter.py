@@ -27,6 +27,7 @@ from pdf2zh.rules import (
     CJK_WRAP_LANGUAGES,
     PROSE_WORD_PATTERN,
     _is_cjk_char,
+    add_cjk_latin_spacing,
     can_break_cjk_line,
     is_bullet_character,
     is_formula_font,
@@ -1177,7 +1178,10 @@ class TranslateConverter(PDFConverterEx):
                 return glossary_hit
             encoded = encode_formula_placeholders(s)
             translated = request_translation(encoded)
-            return restore_formula_placeholders(s, translated)
+            restored = restore_formula_placeholders(s, translated)
+            if self.translator.lang_out.lower() in CJK_WRAP_LANGUAGES:
+                restored = add_cjk_latin_spacing(restored)
+            return restored
 
         def worker(s: str) -> str:
             if not is_translatable_segment(s, preserved_segments):

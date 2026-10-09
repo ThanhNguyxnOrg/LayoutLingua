@@ -60,6 +60,22 @@ def can_break_cjk_line(previous: str, character: str) -> bool:
     if character in _CJK_CLOSERS or previous in _CJK_OPENERS:
         return False
     return True
+
+
+_CJK_BLOCKS = "\u2e80-\u2eff\u3000-\u303f\u3040-\u30ff\uac00-\ud7af\u4e00-\u9fff"
+_CJK_BEFORE_LATIN = re.compile(f"([{_CJK_BLOCKS}])([A-Za-z0-9])")
+_CJK_AFTER_LATIN = re.compile(f"([A-Za-z0-9])([{_CJK_BLOCKS}])")
+
+
+def add_cjk_latin_spacing(text: str) -> str:
+    """Insert one half-width space where CJK meets Latin letters or digits.
+
+    CJK has no word spaces, so a Latin run glued to ideographs reads as one
+    block and breaks width fitting. Only direct adjacency is spaced, so
+    existing spaces, punctuation, and markers are never doubled or moved.
+    """
+    text = _CJK_BEFORE_LATIN.sub(r"\1 \2", text)
+    return _CJK_AFTER_LATIN.sub(r"\1 \2", text)
 PROSE_WORD_PATTERN = re.compile(
     r"[a-z]{3,}|"
     r"[a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]*[\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9][a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]+|"
