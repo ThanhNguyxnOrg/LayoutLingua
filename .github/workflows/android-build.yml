@@ -172,9 +172,19 @@ jobs:
           name: ${{ needs.build.outputs.apk }}
           path: android
 
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: Android ${{ needs.build.outputs.version }}
           files: android/${{ needs.build.outputs.apk }}
           fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
