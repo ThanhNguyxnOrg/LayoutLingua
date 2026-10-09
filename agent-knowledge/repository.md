@@ -57,3 +57,13 @@ implementation text. Preserve unrelated dirty-worktree changes.
 Commit subjects are short and imperative. PRs state user impact, validation,
 and representative visual evidence for GUI/PDF changes. Never commit local
 test PDFs or packaged artifacts.
+
+## Fast Review Path (read-only, no heavy gate)
+
+Core = `pdf2zh/`, `scripts/translate_pdf.py`, preservation contract.
+Review = read-only diff inspection, never mutate, never run the full gate.
+
+- `git diff --stat` first, then hunks only; prefer three-dot `BASE...HEAD`.
+- Validate `git rev-parse BASE` and non-empty diff before spawning reviewers.
+- Respect `.gitignore`: never scan `.venv/`, `build/`, `dist/`, `output/`, `tmp/`; exclude binaries with ` -- . ':!*.pdf' ':!*.onnx' ':!*.ttf'`.
+- Never run full `unittest`, render QA, or `--smoke-test` during review; only targeted tests for touched files. Cap report at 400 words per axis.

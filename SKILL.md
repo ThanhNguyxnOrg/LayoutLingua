@@ -106,7 +106,7 @@ Read `segments.jsonl` in manageable batches. Write one JSON object per line to `
 {"src":"exact source text","dst":"translated text"}
 ```
 
-Copy each `src` value exactly. Preserve URLs, paths, identifiers, citation markers, and numbers.
+Copy each `src` value exactly. Preserve URLs, paths, identifiers, citation markers, and numbers. Use deterministic decoding (`temperature=0`): sampling randomness is what corrupts formula and style markers.
 
 Formula and code placeholders such as `<b0></b0>` are immutable. Every opening and closing tag must retain the same identifier, count, and order as the source. The loader rejects a record whose placeholders differ, leaving that segment untranslated.
 
