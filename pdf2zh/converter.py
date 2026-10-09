@@ -1,10 +1,13 @@
 import concurrent.futures
 import logging
 import math
+import os
 import re
 import unicodedata
 from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from enum import Enum, IntEnum
 from string import Template
 from typing import Dict
@@ -16,10 +19,15 @@ from pdfminer.pdffont import PDFCIDFont, PDFUnicodeNotDefined
 from pdfminer.pdfinterp import PDFGraphicState, PDFResourceManager
 from pdfminer.utils import apply_matrix_pt, mult_matrix
 from pymupdf import Font
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_combine, wait_exponential_jitter
+from tenacity.wait import wait_base
 
+from pdf2zh.batch import BATCH_DELIMITER, TranslationBatcher
 from pdf2zh.rules import (
+    CJK_WRAP_LANGUAGES,
     PROSE_WORD_PATTERN,
+    _is_cjk_char,
+    can_break_cjk_line,
     is_bullet_character,
     is_formula_font,
     line_height_for_language,
@@ -29,6 +37,7 @@ from pdf2zh.translator import (
     ENGINES,
     BaseTranslator,
     encode_formula_placeholders,
+    load_segment_table,
     restore_formula_placeholders,
 )
 
@@ -37,6 +46,50 @@ STYLE_TAG_PATTERN = re.compile(r"<(/?)s([123])>", re.IGNORECASE)
 PLACEHOLDER_ONLY_PATTERN = re.compile(r"\{v\d+\}")
 IDENTITY_ORIENTATION = (1.0, 0.0, 0.0, 1.0)
 BASE14_STYLE_FONTS = {0: "tiro", 1: "tibo", 2: "tiit", 3: "tibi"}
+
+
+# Only throttle (429) and server (5xx) errors deserve a retry: a 400 or a
+# damaged placeholder will fail the same way every time, so fail fast and
+# keep the source text instead of stalling the page.
+_TRANSIENT_ERROR_NAMES = frozenset(
+    {"ConnectionError", "Timeout", "ChunkedEncodingError", "RemoteDisconnected"}
+)
+
+
+def _is_transient_translation_error(exc: BaseException) -> bool:
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status == 429 or (isinstance(status, int) and 500 <= status < 600):
+        return True
+    return type(exc).__name__ in _TRANSIENT_ERROR_NAMES
+
+
+def _retry_after_seconds(exc: BaseException) -> float | None:
+    """Seconds the server asked to wait, or None to use the backoff instead."""
+    raw = getattr(getattr(getattr(exc, "response", None), "headers", None), "get", lambda _: None)("Retry-After")
+    if raw is None:
+        return None
+    try:
+        return max(0.0, min(float(raw), 60.0))
+    except (TypeError, ValueError):
+        pass
+    try:
+        delta = (parsedate_to_datetime(raw) - datetime.now(timezone.utc)).total_seconds()
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return max(0.0, min(delta, 60.0))
+
+
+class _RetryAfterWait(wait_base):
+    """Honor server-sent Retry-After; 0.0 defers to the combined backoff."""
+
+    def __call__(self, retry_state) -> float:
+        try:
+            exc = retry_state.outcome.exception() if retry_state.outcome else None
+            if exc is None:
+                return 0.0
+            return _retry_after_seconds(exc) or 0.0
+        except Exception:
+            return 0.0
 
 
 class TextStyle(IntEnum):
@@ -402,6 +455,37 @@ def preferred_translation(text: str, language: str) -> str | None:
     if style:
         return f"{leading}{style.group(1)}{replacement}{style.group(2)}{trailing}"
     return f"{leading}{replacement}{trailing}"
+
+
+def _is_batchable_segment(segment: str, max_chars: int) -> bool:
+    """Whether a segment may share one batched request with other prose.
+
+    Batched text skips per-segment placeholder validation, so anything
+    carrying formula or style markers, or longer than one batch, goes alone.
+    """
+    return (
+        "{v" not in segment
+        and "<s" not in segment
+        and "<b" not in segment
+        and len(segment) <= max_chars
+    )
+
+
+_glossary_table: dict[str, str] | None = None
+
+
+def apply_glossary(text: str) -> str | None:
+    """Return the external glossary hit for an exact segment match, if any.
+
+    The table loads once from ``LAYOUTLINGUA_GLOSSARY`` (JSONL ``src``/``dst``
+    records) through the same validating loader the handoff engine uses, so
+    entries with damaged placeholders never enter the map. An exact match
+    needs no network and no placeholder round-trip.
+    """
+    global _glossary_table
+    if _glossary_table is None:
+        _glossary_table = load_segment_table(os.environ.get("LAYOUTLINGUA_GLOSSARY"))
+    return _glossary_table.get(text)
 
 
 def should_translate_rotated_text(text: str) -> bool:
@@ -1055,11 +1139,15 @@ class TranslateConverter(PDFConverterEx):
         log.debug("\n==========[SSTACK]==========\n")
 
         # Google throttles a long document, so back off instead of hammering it.
-        # Roughly two minutes of patience per segment, then give up rather than
-        # hang the run forever the way an unbounded retry used to.
+        # Roughly a few seconds of patience per segment, then keep source text
+        # rather than stall the whole page the way an unbounded retry used to.
         @retry(
-            wait=wait_exponential(multiplier=1, min=1, max=60),
-            stop=stop_after_attempt(8),
+            wait=wait_combine(
+                _RetryAfterWait(),
+                wait_exponential_jitter(initial=1, max=60, jitter=2),
+            ),
+            stop=stop_after_attempt(4),
+            retry=retry_if_exception(_is_transient_translation_error),
             reraise=True,
         )
         def request_translation(s: str) -> str:
@@ -1069,6 +1157,9 @@ class TranslateConverter(PDFConverterEx):
             preferred = preferred_translation(s, self.translator.lang_out)
             if preferred is not None:
                 return preferred
+            glossary_hit = apply_glossary(s)
+            if glossary_hit is not None:
+                return glossary_hit
             encoded = encode_formula_placeholders(s)
             translated = request_translation(encoded)
             return restore_formula_placeholders(s, translated)
@@ -1088,6 +1179,17 @@ class TranslateConverter(PDFConverterEx):
                     log.exception(e, exc_info=False)
                 self.record_translation_failure(s, type(e).__name__)
                 return s
+
+        def guarded_translate(text: str) -> str:
+            # Batch-level failures fall back to individual requests below, so
+            # only record failures for delimiter-free (individual) requests.
+            try:
+                return translate_segment(text)
+            except Exception as e:
+                if BATCH_DELIMITER.strip() not in text:
+                    self.record_translation_failure(text, type(e).__name__)
+                raise
+
         # Counted here rather than inside worker: worker runs on the pool, and
         # "+= 1" from several threads drops updates.
         translatable = sum(
@@ -1096,10 +1198,43 @@ class TranslateConverter(PDFConverterEx):
         self.translatable_segments += translatable
         self.segments_by_page[ltpage.pageid] += translatable
 
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=self.thread
-        ) as executor:
-            news = list(executor.map(worker, sstk))
+        # Short marker-free prose shares one request per batch instead of one
+        # per segment, so a book makes roughly a tenth of the HTTP calls.
+        batcher = TranslationBatcher(guarded_translate)
+        news: list[str] = [""] * len(sstk)
+        batch_positions: list[int] = []
+        batch_texts: list[str] = []
+        pending: list[tuple[int, str]] = []
+        for index, segment in enumerate(sstk):
+            if not is_translatable_segment(segment, preserved_segments):
+                news[index] = segment
+                continue
+            preferred = preferred_translation(segment, self.translator.lang_out)
+            if preferred is not None:
+                news[index] = preferred
+                continue
+            glossary_hit = apply_glossary(segment)
+            if glossary_hit is not None:
+                news[index] = glossary_hit
+                continue
+            if _is_batchable_segment(segment, batcher.max_batch_chars):
+                batch_positions.append(index)
+                batch_texts.append(segment)
+            else:
+                pending.append((index, segment))
+        if batch_texts:
+            for position, translated in zip(
+                batch_positions, batcher.batch_translate_segments(batch_texts)
+            ):
+                news[position] = translated
+        if pending:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=self.thread
+            ) as executor:
+                for (index, _), translated in zip(
+                    pending, executor.map(worker, [s for _, s in pending])
+                ):
+                    news[index] = translated
 
         ############################################################
         def raw_string(fcur: str, cstk: str):
@@ -1458,9 +1593,14 @@ class TranslateConverter(PDFConverterEx):
                     return output_font(c, int(style), size)[1]
 
                 break_positions = set()
+                cjk_breaks: list[int] = []
+                cjk_mode = self.translator.lang_out.lower() in CJK_WRAP_LANGUAGES
                 cur_x = x
                 last_space_ptr = -1
                 last_space_x_after = cur_x
+                last_cjk_ptr = -1
+                last_cjk_x_after = cur_x
+                previous_ch = ""
                 p2 = 0
                 wrap_style = TextStyle.REGULAR
                 while p2 < len(new):
@@ -1487,6 +1627,11 @@ class TranslateConverter(PDFConverterEx):
                                 cur_x = x0 + (cur_x - last_space_x_after)
                                 last_space_ptr = -1
                                 last_space_x_after = x0
+                                last_cjk_ptr = -1
+                            elif last_cjk_ptr >= 0:
+                                cjk_breaks.append(last_cjk_ptr)
+                                cur_x = x0 + (cur_x - last_cjk_x_after)
+                                last_cjk_ptr = -1
                         cur_x += cw
                         p2 += len(vr2.group(0))
                     else:
@@ -1495,17 +1640,40 @@ class TranslateConverter(PDFConverterEx):
                         if ch2 == ' ':
                             last_space_ptr = p2
                             last_space_x_after = cur_x + cw
+                        if (
+                            cjk_mode
+                            and ch2 != ' '
+                            and previous_ch != ''
+                            and (
+                                _is_cjk_char(ch2)
+                                or _is_cjk_char(previous_ch)
+                            )
+                            and can_break_cjk_line(previous_ch, ch2)
+                        ):
+                            last_cjk_ptr = p2
+                            last_cjk_x_after = cur_x
                         if cur_x + cw > x1 + 0.1 * size and cur_x > x0 + 0.1 * size:
                             if last_space_ptr >= 0:
                                 break_positions.add(last_space_ptr + 1)
                                 cur_x = x0 + (cur_x - last_space_x_after)
                                 last_space_ptr = -1
                                 last_space_x_after = x0
+                                last_cjk_ptr = -1
+                            elif last_cjk_ptr >= 0:
+                                cjk_breaks.append(last_cjk_ptr)
+                                cur_x = x0 + (cur_x - last_cjk_x_after)
+                                last_cjk_ptr = -1
                         cur_x += cw
+                        previous_ch = ch2
                         p2 += 1
                 # Replace spaces at break positions with newlines (process in reverse)
                 for bp in sorted(break_positions, reverse=True):
                     new = new[:bp - 1] + '\n' + new[bp:]
+                # CJK breaks have no space to replace: insert newlines instead.
+                # Length-preserving space edits ran first, so these positions
+                # are still valid; insert back to front to keep them so.
+                for bp in sorted(cjk_breaks, reverse=True):
+                    new = new[:bp] + '\n' + new[bp:]
 
             cstk: str = ""
             fcur: str = None

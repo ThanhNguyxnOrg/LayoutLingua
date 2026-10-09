@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from statistics import median
@@ -18,6 +19,47 @@ FORMULA_FONT_PATTERN = re.compile(
 MATH_OPERATOR_PATTERN = re.compile(
     r"[=≤≥≈≠±×÷·∑∫∬∭∮∂∇√∞∝+*/^→⇄⇌↔≡∼≅≲≳∈∉⊂⊆∪∩⊥∠∥]"
 )
+
+CJK_WRAP_LANGUAGES = frozenset(
+    {"zh", "zh-cn", "zh-tw", "zh-hans", "zh-hant", "ja", "ko"}
+)
+
+# Kinboku: a line must not open with closing punctuation (burasagari) nor
+# close with an opening bracket (gyomatsu). Read-only line breaking only.
+_CJK_CLOSERS = frozenset("，。：？！”)]}…—·、。」「』")
+_CJK_OPENERS = frozenset("“‘「『([{（〔〈《〖〘〚")
+
+
+def _is_cjk_char(character: str) -> bool:
+    """Whether a character belongs to a CJK script block."""
+    code = ord(character)
+    if (
+        0x3000 <= code <= 0x303F
+        or 0x3040 <= code <= 0x30FF
+        or 0xAC00 <= code <= 0xD7AF
+        or 0x4E00 <= code <= 0x9FFF
+        or 0x2E80 <= code <= 0x2EFF
+    ):
+        return True
+    try:
+        name = unicodedata.name(character)
+    except (TypeError, ValueError):
+        return False
+    return "CJK UNIFIED IDEOGRAPH" in name or "FULLWIDTH" in name
+
+
+def can_break_cjk_line(previous: str, character: str) -> bool:
+    """Whether a CJK line may break between two characters.
+
+    Latin and digit runs stay unbroken; otherwise anything goes except a
+    break that would open a line with closing punctuation or close one
+    with an opening bracket.
+    """
+    if previous.isascii() and previous.isalnum() and character.isascii() and character.isalnum():
+        return False
+    if character in _CJK_CLOSERS or previous in _CJK_OPENERS:
+        return False
+    return True
 PROSE_WORD_PATTERN = re.compile(
     r"[a-z]{3,}|"
     r"[a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]*[\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9][a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]+|"
@@ -55,21 +97,50 @@ LANGUAGE_LINE_HEIGHT = {
     "ja": 1.1,
     "ko": 1.2,
     "en": 1.2,
-    "ar": 1.0,
-    "ru": 0.8,
-    "uk": 0.8,
-    "ta": 0.8,
+    "ar": 2.0,
+    "ru": 1.4,
+    "uk": 1.4,
+    "bg": 1.4,
+    "sr": 1.4,
+    "ta": 1.2,
+    "th": 1.2,
+    "hi": 1.4,
+    "bn": 1.4,
+    "te": 1.4,
+    "kn": 1.4,
+    "gu": 1.3,
+    "ml": 1.3,
+    "he": 1.2,
+    "el": 1.2,
     "vi": 1.2,
 }
 
 # Measured ink extents, not preferences: see min_line_height_for_language.
-DEFAULT_MIN_LINE_HEIGHT = 0.95
+DEFAULT_MIN_LINE_HEIGHT = 1.01
 LANGUAGE_MIN_LINE_HEIGHT = {
     "vi": 1.10,
-    "ru": 0.75,
-    "uk": 0.75,
-    "ta": 0.75,
-    "ar": 0.85,
+    "ru": 1.32,
+    "uk": 1.32,
+    "bg": 1.32,
+    "sr": 1.32,
+    "ta": 1.17,
+    "th": 1.12,
+    "hi": 1.32,
+    "bn": 1.32,
+    "te": 1.34,
+    "kn": 1.34,
+    "gu": 1.29,
+    "ml": 1.24,
+    "he": 1.13,
+    "el": 1.15,
+    "ar": 1.91,
+    "zh": 1.00,
+    "zh-cn": 1.00,
+    "zh-tw": 1.00,
+    "zh-hans": 1.00,
+    "zh-hant": 1.00,
+    "ja": 1.00,
+    "ko": 1.00,
 }
 
 
@@ -120,11 +191,14 @@ def min_line_height_for_language(language: str) -> float:
 
     A paragraph that grew in translation used to buy room by crushing its
     leading to 0.75, which is below the ink of the glyphs being drawn. Measured
-    by rendering every letter in the output font and reading the real ink
-    extent, in em above and below the baseline:
+    from real glyph outlines in the output fonts (GoNotoKurrent for most
+    scripts, msyh/malgun for CJK), in em above and below the baseline:
 
         English lowercase   0.695 up + 0.210 down = 0.905
         Vietnamese          0.890 up + 0.210 down = 1.100
+        Thai                0.846 up + 0.265 down = 1.111
+        Hindi               0.917 up + 0.394 down = 1.311
+        Arabic              1.359 up + 0.548 down = 1.907
 
     Stacked tone marks (e-circumflex-acute, o-horn-grave) reach far higher than
     a plain ascender, so Vietnamese needs more room than English rather than

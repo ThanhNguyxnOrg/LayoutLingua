@@ -10,9 +10,13 @@ from pdf2zh.converter import (
     is_translatable_segment,
     run_is_prose,
 )
+from pdf2zh.high_level import _classify_fully_preserved_page
 from pdf2zh.rules import (
     BULLET_CHARACTERS,
+    CJK_WRAP_LANGUAGES,
     PROSE_WORD_PATTERN,
+    _is_cjk_char,
+    can_break_cjk_line,
     classify_preserved_page,
     cluster_table_words,
     formula_regions,
@@ -154,6 +158,54 @@ class PreservationRuleTests(unittest.TestCase):
         used to be compressed to 0.75 to buy room for a longer translation."""
         self.assertGreaterEqual(min_line_height_for_language("vi"), 1.10)
 
+    def test_tall_scripts_keep_a_measured_floor(self):
+        """Glyph outlines measured in the output fonts (GoNotoKurrent,
+        msyh/malgun for CJK) reach above the old floors: Thai 1.111, Hindi
+        1.311, Arabic 1.907. A floor below the ink draws lines through each
+        other, so each tall script keeps its measured minimum and a line
+        height at or above it."""
+        measured = {
+            "th": 1.12,
+            "hi": 1.32,
+            "ar": 1.91,
+            "he": 1.13,
+            "bn": 1.32,
+            "te": 1.34,
+            "ta": 1.17,
+            "ru": 1.32,
+            "el": 1.15,
+            "zh": 1.00,
+            "ja": 1.00,
+            "ko": 1.00,
+        }
+        for language, ink in measured.items():
+            with self.subTest(language=language):
+                self.assertGreaterEqual(min_line_height_for_language(language), ink)
+                self.assertLessEqual(
+                    min_line_height_for_language(language),
+                    line_height_for_language(language),
+                )
+
+    def test_cjk_line_breaks_respect_kinboku(self):
+        """A CJK line must not open with closing punctuation nor close with
+        an opening bracket, while Latin and digit runs stay unbroken. Only
+        CJK targets opt into this wrapping; every other language keeps the
+        space-only behavior."""
+        self.assertTrue(_is_cjk_char("中"))
+        self.assertTrue(_is_cjk_char("あ"))
+        self.assertFalse(_is_cjk_char("A"))
+        self.assertTrue(can_break_cjk_line("中", "文"))
+        self.assertFalse(can_break_cjk_line("中", "，"))
+        self.assertFalse(can_break_cjk_line("（", "中"))
+        self.assertFalse(can_break_cjk_line("a", "b"))
+        self.assertTrue(can_break_cjk_line("文", "A"))
+        for language in ("zh", "zh-cn", "zh-tw", "ja", "ko"):
+            with self.subTest(language=language):
+                self.assertIn(language, CJK_WRAP_LANGUAGES)
+        for language in ("vi", "en", "fr"):
+            with self.subTest(language=language):
+                self.assertNotIn(language, CJK_WRAP_LANGUAGES)
+
     def test_every_target_can_be_typeset_without_lines_touching(self):
         for language in ("vi", "en", "fr", "de", "unknown-code"):
             with self.subTest(language=language):
@@ -177,6 +229,27 @@ class PreservationRuleTests(unittest.TestCase):
         )
         self.assertFalse(
             is_scanned_page([{"type": 1, "bbox": (0, 0, 20, 20)}], 10_000)
+        )
+
+    def test_fully_preserved_pages_skip_layout_inference(self):
+        toc = "Table of Contents\n" + "\n".join(
+            f"Chapter {index} .......... {index * 3}" for index in range(1, 10)
+        )
+        self.assertEqual(_classify_fully_preserved_page(toc, 0), "TOC")
+        index_text = "Index\n" + "\n".join(
+            f"Term {index}, {index}" for index in range(1, 13)
+        )
+        self.assertEqual(_classify_fully_preserved_page(index_text, 1), "INDEX")
+        refs = "References\n" + "\n".join(
+            f"[{index}] Author, Instrumentation. (200{index % 10})."
+            for index in range(1, 8)
+        )
+        self.assertEqual(_classify_fully_preserved_page(refs, 2), "REFERENCES")
+        self.assertEqual(_classify_fully_preserved_page("   \n  ", 3), "BLANK")
+        self.assertIsNone(
+            _classify_fully_preserved_page(
+                "This ordinary paragraph keeps its layout inference.", 4
+            )
         )
 
     def test_table_of_contents_page_keeps_number_alignment(self):

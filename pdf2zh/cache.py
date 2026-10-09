@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import random
+import threading
 from typing import Optional
 
 from peewee import SQL, AutoField, CharField, Model, SqliteDatabase, TextField
@@ -8,6 +10,10 @@ from peewee import SQL, AutoField, CharField, Model, SqliteDatabase, TextField
 # we don't init the database here
 db = SqliteDatabase(None)
 logger = logging.getLogger(__name__)
+
+MAX_CACHE_ROWS = 50_000
+CLEAN_PROBABILITY = 0.001
+_cleanup_lock = threading.Lock()
 
 
 class _TranslationCache(Model):
@@ -89,6 +95,35 @@ class TranslationCache:
             )
         except Exception as e:
             logger.debug(f"Error setting cache: {e}")
+        _maybe_clean_cache()
+
+
+def _maybe_clean_cache() -> None:
+    """Probabilistically drop the oldest rows past the row cap.
+
+    A book that is retranslated on every run grows the cache without bound,
+    so a rare probabilistic cleanup keeps the database small without paying
+    a count query on every write or blocking worker threads behind a lock.
+    """
+    if random.random() >= CLEAN_PROBABILITY:
+        return
+    if not _cleanup_lock.acquire(blocking=False):
+        return
+    try:
+        overflow = _TranslationCache.select().count() - MAX_CACHE_ROWS
+        if overflow > 0:
+            oldest = (
+                _TranslationCache.select(_TranslationCache.id)
+                .order_by(_TranslationCache.id)
+                .limit(overflow)
+            )
+            _TranslationCache.delete().where(
+                _TranslationCache.id.in_(oldest)
+            ).execute()
+    except Exception as e:
+        logger.debug(f"Error cleaning cache: {e}")
+    finally:
+        _cleanup_lock.release()
 
 
 def init_db(remove_exists=False):

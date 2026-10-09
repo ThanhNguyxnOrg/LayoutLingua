@@ -5,8 +5,10 @@ from __future__ import annotations
 import html
 import json
 import logging
+import os
 import re
 import threading
+import time
 import unicodedata
 from collections import Counter
 from typing import Any, ClassVar
@@ -25,6 +27,71 @@ STYLE_TAG_PATTERN = re.compile(r"<(/?)s([123])>", re.IGNORECASE)
 
 class FormulaPlaceholderError(ValueError):
     """Raised when a translator damages or reorders protected formula tags."""
+
+
+class RateLimiter:
+    """Leaky-bucket pacing shared across translator threads and documents.
+
+    Worker threads share one translator per document and the GUI translates
+    several documents per process, so unpaced GETs from any of them throttle
+    the whole run. One shared limiter paces them all with the standard
+    library only.
+    """
+
+    def __init__(self, max_qps: float = 5.0) -> None:
+        self._interval = 1.0 / max_qps
+        self._lock = threading.Lock()
+        self._next_allowed = 0.0
+
+    def wait(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            wait = self._next_allowed - now
+            if wait > 0:
+                time.sleep(wait)
+                now = time.monotonic()
+            self._next_allowed = now + self._interval
+
+
+_shared_rate_limiter = RateLimiter()
+
+_CIRCUIT_THRESHOLD = 5
+_CIRCUIT_COOLDOWN = 60.0
+_circuit_lock = threading.Lock()
+_consecutive_429s = 0
+_circuit_opened_at: float | None = None
+
+
+class CircuitOpenError(RuntimeError):
+    """Raised when too many consecutive 429s tripped the shared breaker."""
+
+
+def _circuit_allows_request() -> None:
+    """Fail fast while the endpoint is known to block this IP."""
+    global _consecutive_429s, _circuit_opened_at
+    with _circuit_lock:
+        if _circuit_opened_at is None:
+            return
+        if time.monotonic() - _circuit_opened_at >= _CIRCUIT_COOLDOWN:
+            _circuit_opened_at = None
+            _consecutive_429s = 0
+            return
+        raise CircuitOpenError("translation endpoint is rate-limiting this IP")
+
+
+def _circuit_record_success() -> None:
+    global _consecutive_429s, _circuit_opened_at
+    with _circuit_lock:
+        _consecutive_429s = 0
+        _circuit_opened_at = None
+
+
+def _circuit_record_429() -> None:
+    global _consecutive_429s, _circuit_opened_at
+    with _circuit_lock:
+        _consecutive_429s += 1
+        if _consecutive_429s >= _CIRCUIT_THRESHOLD:
+            _circuit_opened_at = time.monotonic()
 
 
 class SegmentTooLongError(ValueError):
@@ -153,6 +220,9 @@ class GoogleTranslator(BaseTranslator):
             )
         }
 
+    def _throttle(self) -> None:
+        _shared_rate_limiter.wait()
+
     # The /m endpoint carries the text in the query string and rejects more
     # than this; it is the service's limit, not a preference.
     MAXIMUM_SEGMENT_CHARACTERS = 5000
@@ -163,6 +233,8 @@ class GoogleTranslator(BaseTranslator):
                 f"segment of {len(text)} characters exceeds the "
                 f"{self.MAXIMUM_SEGMENT_CHARACTERS} the service accepts"
             )
+        self._throttle()
+        _circuit_allows_request()
         response = self.session.get(
             self.endpoint,
             params={"tl": self.lang_out, "sl": self.lang_in, "q": text},
@@ -171,7 +243,13 @@ class GoogleTranslator(BaseTranslator):
         )
         if response.status_code == 400:
             raise RuntimeError("Google Translate rejected the text segment")
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError:
+            if response.status_code == 429:
+                _circuit_record_429()
+            raise
+        _circuit_record_success()
         match = re.search(
             r'(?s)class="(?:t0|result-container)">(.*?)<',
             response.text,
@@ -179,6 +257,107 @@ class GoogleTranslator(BaseTranslator):
         if match is None:
             raise RuntimeError("Google Translate response did not contain a translation result")
         return remove_control_characters(html.unescape(match.group(1)))
+
+
+class DeepLXTranslator(BaseTranslator):
+    """Translate through a self-hosted DeepLX endpoint (no browser scraping).
+
+    DeepLX ignores ``tag_handling``, so formula/style markers may come back
+    damaged; the converter's validators still reject such output and keep
+    the source text, exactly as with every other engine.
+    """
+
+    name = "deeplx"
+    lang_map: ClassVar[dict[str, str]] = {
+        "zh": "ZH",
+        "zh-cn": "ZH",
+        "zh-hans": "ZH",
+        "zh-tw": "ZH-HANT",
+        "zh-hant": "ZH-HANT",
+        "en": "EN",
+        "pt": "PT",
+    }
+    source_lang_map: ClassVar[dict[str, str]] = {
+        "en": "en",
+        "pt": "pt",
+        "zh": "zh",
+        "zh-cn": "zh",
+        "zh-hans": "zh",
+        "zh-tw": "zh",
+        "zh-hant": "zh",
+    }
+
+    # Anonymous oneshot limit enforced by DeepLX itself; refuse overlong
+    # segments instead of letting the endpoint truncate them silently.
+    MAXIMUM_SEGMENT_CHARACTERS = 1500
+
+    def __init__(
+        self,
+        lang_in: str,
+        lang_out: str,
+        model: str | None = None,
+        *,
+        ignore_cache: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            lang_in,
+            lang_out,
+            model,
+            ignore_cache=ignore_cache,
+            **kwargs,
+        )
+        self.session = requests.Session()
+        self.endpoint = os.environ.get(
+            "DEEPLX_ENDPOINT", "http://localhost:1188/translate"
+        )
+
+    def _target_code(self) -> str:
+        return self.lang_map.get(self.lang_out.lower(), self.lang_out.upper())
+
+    def _source_code(self) -> str:
+        if self.lang_in.lower() in ("auto", ""):
+            return "auto"
+        return self.source_lang_map.get(self.lang_in.lower(), self.lang_in.lower())
+
+    def _throttle(self) -> None:
+        _shared_rate_limiter.wait()
+
+    def do_translate(self, text: str) -> str:
+        if len(text) > self.MAXIMUM_SEGMENT_CHARACTERS:
+            raise SegmentTooLongError(
+                f"segment of {len(text)} characters exceeds the "
+                f"{self.MAXIMUM_SEGMENT_CHARACTERS} the service accepts"
+            )
+        self._throttle()
+        _circuit_allows_request()
+        response = self.session.post(
+            self.endpoint,
+            json={
+                "text": text,
+                "source_lang": self._source_code(),
+                "target_lang": self._target_code(),
+            },
+            timeout=30,
+        )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError:
+            if response.status_code == 429:
+                _circuit_record_429()
+            raise
+        _circuit_record_success()
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise RuntimeError("DeepLX response was not JSON") from error
+        if not isinstance(payload, dict) or payload.get("code") != 200:
+            raise RuntimeError(
+                f"DeepLX rejected the text segment: {payload!r:.120}"
+                if isinstance(payload, dict)
+                else f"DeepLX returned an unexpected payload: {payload!r:.120}"
+            )
+        return remove_control_characters(str(payload.get("data", "")))
 
 
 def placeholders(text: str) -> list[str]:
@@ -364,5 +543,6 @@ class HandoffTranslator(BaseTranslator):
 
 
 ENGINES: dict[str, type[BaseTranslator]] = {
-    engine.name: engine for engine in (GoogleTranslator, HandoffTranslator)
+    engine.name: engine
+    for engine in (GoogleTranslator, DeepLXTranslator, HandoffTranslator)
 }

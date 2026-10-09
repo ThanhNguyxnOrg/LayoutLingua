@@ -39,7 +39,7 @@ TARGET_LANGUAGES = frozenset(
     }
 )
 
-ENGINES = ("google", "handoff")
+ENGINES = ("google", "deeplx", "handoff")
 
 # Measured on an eight-page sample: 2 threads 48s, 4 threads 30s, 8 threads 27s,
 # 12 threads 29s. Past four, the layout pass rather than the network is the floor,

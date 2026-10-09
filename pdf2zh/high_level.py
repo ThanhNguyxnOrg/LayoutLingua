@@ -3,6 +3,7 @@
 import asyncio
 import io
 import logging
+import math
 import os
 import re
 import sys
@@ -187,6 +188,129 @@ def check_files(files: List[str]) -> List[str]:
     return missing_files
 
 
+def _classify_fully_preserved_page(page_text: str, pageno: int) -> str | None:
+    """Name the preserved-page kind, or None when the page needs layout.
+
+    TOC, index, nomenclature, reference, and other preserved pages end with
+    every region protected, so running layout inference on them only burns
+    ONNX/CPU time to arrive at an all-zero mask. Text-only pages with no
+    extractable text translate nothing either way.
+    """
+    if not page_text.strip():
+        return "BLANK"
+    lines = [l.strip() for l in page_text.split('\n') if l.strip()]
+    toc_score = 0
+    standalone_nums = 0
+    spaced_page_nums = 0
+    emspace_page_nums = 0
+    for line in lines:
+        # dot leaders: ". . . . ." or "......"
+        if re.search(r'\.{5,}', line) or re.search(r'(\.\s){4,}', line):
+            toc_score += 3
+        # unicode dot leaders / replacement chars used as dot leaders
+        # e.g. "\x08�����" or "───" or other fill chars before page number
+        elif re.search(r'[\x08\ufffd\u2500-\u257f]{3,}', line):
+            toc_score += 3
+        # line ending with page number after fill chars
+        elif re.search(r'[\x08\ufffd\u2500-\u257f]+\s*\d{1,4}\s*$', line):
+            toc_score += 2
+        # text followed by 5+ spaces then a page number (space-padded TOC)
+        elif re.search(r'\S\s{5,}\d{1,4}\s*$', line):
+            spaced_page_nums += 1
+        # standalone page number on its own line (1-4 digits only)
+        elif re.match(r'^\d{1,4}$', line):
+            standalone_nums += 1
+        # em-space / en-space separator before page number or roman numeral
+        if re.search(r'[\u2002\u2003]+\s*\d{1,4}\s*$', line):
+            emspace_page_nums += 1
+        elif re.search(r'[\u2002\u2003]+\s*[ivxlcdm]+\s*$', line, re.IGNORECASE):
+            emspace_page_nums += 1
+    # Check if any line says "Contents" or "Table of Contents"
+    has_contents_header = any(
+        re.match(r'^(table\s+of\s+)?contents?$', l, re.IGNORECASE)
+        for l in lines[:5]
+    )
+    if has_contents_header:
+        toc_score += 5
+    # Space-padded page numbers (text + spaces + number): strong TOC signal
+    if spaced_page_nums >= 5:
+        toc_score += spaced_page_nums
+    # Em-space / en-space separated page numbers: common in e-books
+    if emspace_page_nums >= 5:
+        toc_score += emspace_page_nums
+    # Many standalone numbers = TOC sub-entries, but only if there are other TOC signals
+    if standalone_nums >= 8 and toc_score > 0:
+        toc_score += standalone_nums
+    # High ratio of standalone numbers to total lines indicates TOC-like structure
+    if len(lines) >= 15 and standalone_nums >= 10 and (standalone_nums / len(lines)) > 0.3:
+        toc_score += standalone_nums
+    # Lines ending with "text number" (single-space TOC style): if >80% match, it's TOC
+    if len(lines) >= 15:
+        lines_ending_num = sum(1 for l in lines if re.search(r'\S\s+\d{1,4}\s*$', l))
+        if lines_ending_num / len(lines) > 0.8:
+            toc_score += lines_ending_num
+    if toc_score >= 8:
+        logger.info(f"Page {pageno + 1} detected as TOC (score={toc_score}), preserving original layout")
+        return "TOC"
+
+    # Detect INDEX pages: many lines ending with page numbers, comma+number patterns
+    idx_comma_num = sum(1 for l in lines if re.search(r',\s*\d{1,4}', l))
+    is_index_header = bool(lines and re.match(r'^index$', lines[0], re.IGNORECASE))
+    # Index pages typically have >50% lines ending with "term, number"
+    if len(lines) >= 20 and (idx_comma_num / len(lines)) > 0.4:
+        logger.info(f"Page {pageno + 1} detected as INDEX (comma_num={idx_comma_num}/{len(lines)}), preserving original layout")
+        return "INDEX"
+    elif is_index_header:
+        logger.info(f"Page {pageno + 1} detected as INDEX (header), preserving original layout")
+        return "INDEX"
+
+    # Detect NOMENCLATURE / symbol list pages: short symbol lines alternating with definitions
+    has_nomenclature_header = any(
+        re.match(r'^(nomenclature|list\s+of\s+symbols|symbols?\s+and\s+abbreviations?|glossary|notation)s?$', l, re.IGNORECASE)
+        for l in lines[:5]
+    )
+    if has_nomenclature_header and len(lines) >= 10:
+        # Count symbol-definition pairs: short line (≤15 chars) followed by longer description
+        symbol_def_pairs = sum(
+            1 for i in range(len(lines) - 1)
+            if len(lines[i]) <= 15 and len(lines[i + 1]) > 5 and not lines[i].isdigit()
+        )
+        if symbol_def_pairs / len(lines) > 0.3:
+            logger.info(f"Page {pageno + 1} detected as NOMENCLATURE (pairs={symbol_def_pairs}/{len(lines)}), preserving original layout")
+            return "NOMENCLATURE"
+
+    # Detect REFERENCE / bibliography pages: numbered entries with years, ISBN/DOI
+    has_ref_header = any(
+        re.match(r'^[\xad]?(references?|bibliography|suggested\s+reading|further\s+reading|works?\s+cited)$', l, re.IGNORECASE)
+        for l in lines[:10]
+    )
+    numbered_refs = sum(1 for l in lines if re.match(r'^\d{1,3}\.\s', l))
+    # Author-year style: "Surname, I. (2014)." or "[1] Author..."
+    author_year_refs = sum(1 for l in lines if re.match(r'^[A-Z][a-z]+,?\s.*\(\d{4}\)', l))
+    bracketed_refs = sum(1 for l in lines if re.match(r'^\[\d{1,3}\]', l))
+    year_paren = sum(1 for l in lines if re.search(r'\(\d{4}\)', l))
+    isbn_doi = sum(1 for l in lines if re.search(r'ISBN|ISSN|doi\.org|https?://', l, re.IGNORECASE))
+    all_refs = numbered_refs + author_year_refs + bracketed_refs
+    ref_signals = all_refs + year_paren + isbn_doi
+    if has_ref_header and ref_signals >= 5:
+        logger.info(f"Page {pageno + 1} detected as REFERENCES (header, refs={all_refs}, years={year_paren}, isbn_doi={isbn_doi}), preserving original layout")
+        return "REFERENCES"
+    elif len(lines) >= 10 and all_refs >= 5 and (year_paren + isbn_doi) >= 3:
+        logger.info(f"Page {pageno + 1} detected as REFERENCES (refs={all_refs}, years={year_paren}, isbn_doi={isbn_doi}), preserving original layout")
+        return "REFERENCES"
+
+    preservation = classify_preserved_page(page_text)
+    if preservation is not None:
+        logger.info(
+            "Page %s detected as %s (%s), preserving original layout",
+            pageno + 1,
+            preservation.kind,
+            preservation.detail,
+        )
+        return preservation.kind
+    return None
+
+
 def translate_patch(
     inf: BinaryIO,
     pages: Optional[list[int]] = None,
@@ -267,250 +391,149 @@ def translate_patch(
                 scanned_pages.add(pageno)
             if page_has_image(page_blocks):
                 pages_with_images.add(pageno)
-            pix = doc_zh[page.pageno].get_pixmap()
-            image = np.frombuffer(pix.samples, np.uint8).reshape(
-                pix.height, pix.width, 3
-            )[:, :, ::-1]
-            page_layout = model.predict(image, imgsz=int(pix.height / 32) * 32)[0]
-            box = np.ones((pix.height, pix.width))
-            h, w = box.shape
-            vcls = ["abandon", "figure", "table", "isolate_formula", "formula_caption"]
-            model_table_bounds = []
-            # Process non-vcls boxes in ascending confidence order so that
-            # higher-confidence boxes overwrite lower-confidence ones
-            non_vcls_boxes = [
-                (i, d) for i, d in enumerate(page_layout.boxes)
-                if page_layout.names[int(d.cls)] not in vcls
-            ]
-            page_class_bounds = class_bounds.setdefault(page.pageno, {})
-            for i, d in reversed(non_vcls_boxes):
-                x0, y0, x1, y1 = d.xyxy.squeeze()
-                page_class_bounds[i + 2] = (
-                    float(x0),
-                    float(page_rect.height) - float(y1),
-                    float(x1),
-                    float(page_rect.height) - float(y0),
+            # Text-classified pages need no layout inference: TOC, index,
+            # nomenclature, references, and other preserved pages end fully
+            # protected, and textless pages translate nothing either way.
+            page_text = doc_zh[page.pageno].get_text("text")
+            preserved_kind = _classify_fully_preserved_page(page_text, pageno)
+            if preserved_kind is not None:
+                box = np.zeros(
+                    (math.ceil(page_rect.height), math.ceil(page_rect.width)),
+                    dtype=np.int32,
                 )
-                x0, y0, x1, y1 = (
-                    np.clip(int(x0 - 1), 0, w - 1),
-                    np.clip(int(h - y1 - 1), 0, h - 1),
-                    np.clip(int(x1 + 1), 0, w - 1),
-                    np.clip(int(h - y0 + 1), 0, h - 1),
-                )
-                box[y0:y1, x0:x1] = i + 2
-            for i, d in enumerate(page_layout.boxes):
-                name = page_layout.names[int(d.cls)]
-                if name in vcls:
-                    raw_x0, raw_y0, raw_x1, raw_y1 = (
-                        float(value) for value in d.xyxy.squeeze()
+            else:
+                pix = doc_zh[page.pageno].get_pixmap()
+                image = np.frombuffer(pix.samples, np.uint8).reshape(
+                    pix.height, pix.width, 3
+                )[:, :, ::-1]
+                # DocLayNet reference size: larger inputs cost pixels squared
+                # while boxes rescale to page coordinates either way.
+                page_layout = model.predict(
+                    image, imgsz=min(1024, int(pix.height / 32) * 32)
+                )[0]
+                box = np.ones((pix.height, pix.width), dtype=np.int32)
+                h, w = box.shape
+                vcls = ["abandon", "figure", "table", "isolate_formula", "formula_caption"]
+                model_table_bounds = []
+                # Process non-vcls boxes in ascending confidence order so that
+                # higher-confidence boxes overwrite lower-confidence ones
+                non_vcls_boxes = [
+                    (i, d) for i, d in enumerate(page_layout.boxes)
+                    if page_layout.names[int(d.cls)] not in vcls
+                ]
+                page_class_bounds = class_bounds.setdefault(page.pageno, {})
+                for i, d in reversed(non_vcls_boxes):
+                    x0, y0, x1, y1 = d.xyxy.squeeze()
+                    page_class_bounds[i + 2] = (
+                        float(x0),
+                        float(page_rect.height) - float(y1),
+                        float(x1),
+                        float(page_rect.height) - float(y0),
                     )
-                    if name == "table":
-                        model_table_bounds.append(
-                            (raw_x0, raw_y0, raw_x1, raw_y1)
-                        )
-                    x0, y0, x1, y1 = raw_x0, raw_y0, raw_x1, raw_y1
                     x0, y0, x1, y1 = (
                         np.clip(int(x0 - 1), 0, w - 1),
                         np.clip(int(h - y1 - 1), 0, h - 1),
                         np.clip(int(x1 + 1), 0, w - 1),
                         np.clip(int(h - y0 + 1), 0, h - 1),
                     )
-                    box[y0:y1, x0:x1] = 0
-
-            # A model-detected table stays protected unless PyMuPDF can split
-            # that same region into cells. Each reliable cell gets its own class
-            # so its text is translated independently while the original grid,
-            # fills and borders remain untouched.
-            source_page = doc_zh[page.pageno]
-            try:
-                detected_tables = source_page.find_tables().tables
-            except Exception as error:
-                logger.warning(
-                    "Page %s table-cell detection failed; preserving tables: %s",
-                    pageno + 1,
-                    error,
-                )
-                detected_tables = []
-            next_class = len(page_layout.boxes) + 2
-            page_bounds = layout_bounds.setdefault(page.pageno, {})
-            page_height = float(page_rect.height)
-            page_words = source_page.get_text("words", sort=True)
-            for table_bounds in model_table_bounds:
-                for cell in matching_table_cells(table_bounds, detected_tables):
-                    cx0 = max(float(cell[0]), table_bounds[0])
-                    cy0 = max(float(cell[1]), table_bounds[1])
-                    cx1 = min(float(cell[2]), table_bounds[2])
-                    cy1 = min(float(cell[3]), table_bounds[3])
-                    if cx1 - cx0 <= 4 or cy1 - cy0 <= 1:
-                        continue
-                    cell_words = [
-                        word
-                        for word in page_words
-                        if cx0 <= (float(word[0]) + float(word[2])) / 2 <= cx1
-                        and cy0 <= (float(word[1]) + float(word[3])) / 2 <= cy1
-                    ]
-                    for cluster in cluster_table_words(
-                        cell_words, (cx0, cy0, cx1, cy1)
-                    ):
-                        if not should_translate_table_cell(cluster.text):
-                            continue
-                        for word in cluster.words:
-                            wx0, wy0, wx1, wy1 = (
-                                float(value) for value in word[:4]
-                            )
-                            px0, py0, px1, py1 = (
-                                np.clip(int(wx0 - 1), 0, w - 1),
-                                np.clip(int(h - wy1 - 1), 0, h - 1),
-                                np.clip(int(wx1 + 1), 0, w - 1),
-                                np.clip(int(h - wy0 + 1), 0, h - 1),
-                            )
-                            box[py0:py1, px0:px1] = next_class
-                        bx0, by0, bx1, by1 = cluster.bbox
-                        content_y0 = min(by0, *(float(word[1]) for word in cluster.words))
-                        content_y1 = max(by1, *(float(word[3]) for word in cluster.words))
-                        padded = (
-                            bx0 + 2.0,
-                            page_height - content_y1,
-                            bx1 - 2.0,
-                            page_height - content_y0,
+                    box[y0:y1, x0:x1] = i + 2
+                for i, d in enumerate(page_layout.boxes):
+                    name = page_layout.names[int(d.cls)]
+                    if name in vcls:
+                        raw_x0, raw_y0, raw_x1, raw_y1 = (
+                            float(value) for value in d.xyxy.squeeze()
                         )
-                        if padded[2] > padded[0] and padded[3] > padded[1]:
-                            page_bounds[next_class] = padded
-                        next_class += 1
+                        if name == "table":
+                            model_table_bounds.append(
+                                (raw_x0, raw_y0, raw_x1, raw_y1)
+                            )
+                        x0, y0, x1, y1 = raw_x0, raw_y0, raw_x1, raw_y1
+                        x0, y0, x1, y1 = (
+                            np.clip(int(x0 - 1), 0, w - 1),
+                            np.clip(int(h - y1 - 1), 0, h - 1),
+                            np.clip(int(x1 + 1), 0, w - 1),
+                            np.clip(int(h - y0 + 1), 0, h - 1),
+                        )
+                        box[y0:y1, x0:x1] = 0
 
-            # Technical documents often use ordinary prose fonts for equations.
-            # Protect operator-only blocks and stacked identifiers before the
-            # converter can reflow them. A one-point pad catches their rules and
-            # small subscripts without swallowing adjacent prose.
-            fallback_formulas = formula_regions(
-                source_page.get_text("blocks", sort=True),
-                page_words,
-                stacked_exclusions=model_table_bounds,
-            )
-            for fx0, fy0, fx1, fy1 in fallback_formulas:
-                bx0, by0, bx1, by1 = (
-                    np.clip(int(fx0 - 1), 0, w - 1),
-                    np.clip(int(h - fy1 - 1), 0, h - 1),
-                    np.clip(int(fx1 + 1), 0, w - 1),
-                    np.clip(int(h - fy0 + 1), 0, h - 1),
-                )
-                box[by0:by1, bx0:bx1] = 0
-
-            # Detect TOC pages by analyzing extracted text patterns
-            page_text = doc_zh[page.pageno].get_text("text")
-            lines = [l.strip() for l in page_text.split('\n') if l.strip()]
-            toc_score = 0
-            standalone_nums = 0
-            spaced_page_nums = 0
-            emspace_page_nums = 0
-            for line in lines:
-                # dot leaders: ". . . . ." or "......"
-                if re.search(r'\.{5,}', line) or re.search(r'(\.\s){4,}', line):
-                    toc_score += 3
-                # unicode dot leaders / replacement chars used as dot leaders
-                # e.g. "\x08�����" or "───" or other fill chars before page number
-                elif re.search(r'[\x08\ufffd\u2500-\u257f]{3,}', line):
-                    toc_score += 3
-                # line ending with page number after fill chars
-                elif re.search(r'[\x08\ufffd\u2500-\u257f]+\s*\d{1,4}\s*$', line):
-                    toc_score += 2
-                # text followed by 5+ spaces then a page number (space-padded TOC)
-                elif re.search(r'\S\s{5,}\d{1,4}\s*$', line):
-                    spaced_page_nums += 1
-                # standalone page number on its own line (1-4 digits only)
-                elif re.match(r'^\d{1,4}$', line):
-                    standalone_nums += 1
-                # em-space / en-space separator before page number or roman numeral
-                if re.search(r'[\u2002\u2003]+\s*\d{1,4}\s*$', line):
-                    emspace_page_nums += 1
-                elif re.search(r'[\u2002\u2003]+\s*[ivxlcdm]+\s*$', line, re.IGNORECASE):
-                    emspace_page_nums += 1
-            # Check if any line says "Contents" or "Table of Contents"
-            has_contents_header = any(
-                re.match(r'^(table\s+of\s+)?contents?$', l, re.IGNORECASE)
-                for l in lines[:5]
-            )
-            if has_contents_header:
-                toc_score += 5
-            # Space-padded page numbers (text + spaces + number): strong TOC signal
-            if spaced_page_nums >= 5:
-                toc_score += spaced_page_nums
-            # Em-space / en-space separated page numbers: common in e-books
-            if emspace_page_nums >= 5:
-                toc_score += emspace_page_nums
-            # Many standalone numbers = TOC sub-entries, but only if there are other TOC signals
-            if standalone_nums >= 8 and toc_score > 0:
-                toc_score += standalone_nums
-            # High ratio of standalone numbers to total lines indicates TOC-like structure
-            if len(lines) >= 15 and standalone_nums >= 10 and (standalone_nums / len(lines)) > 0.3:
-                toc_score += standalone_nums
-            # Lines ending with "text number" (single-space TOC style): if >80% match, it's TOC
-            if len(lines) >= 15:
-                lines_ending_num = sum(1 for l in lines if re.search(r'\S\s+\d{1,4}\s*$', l))
-                if lines_ending_num / len(lines) > 0.8:
-                    toc_score += lines_ending_num
-            if toc_score >= 8:
-                logger.info(f"Page {pageno + 1} detected as TOC (score={toc_score}), preserving original layout")
-                box[:, :] = 0
-
-            # Detect INDEX pages: many lines ending with page numbers, comma+number patterns
-            if not (toc_score >= 8):
-                idx_comma_num = sum(1 for l in lines if re.search(r',\s*\d{1,4}', l))
-                is_index_header = bool(lines and re.match(r'^index$', lines[0], re.IGNORECASE))
-                # Index pages typically have >50% lines ending with "term, number"
-                if len(lines) >= 20 and (idx_comma_num / len(lines)) > 0.4:
-                    logger.info(f"Page {pageno + 1} detected as INDEX (comma_num={idx_comma_num}/{len(lines)}), preserving original layout")
-                    box[:, :] = 0
-                elif is_index_header:
-                    logger.info(f"Page {pageno + 1} detected as INDEX (header), preserving original layout")
-                    box[:, :] = 0
-
-            # Detect NOMENCLATURE / symbol list pages: short symbol lines alternating with definitions
-            if not (toc_score >= 8) and box.any():
-                has_nomenclature_header = any(
-                    re.match(r'^(nomenclature|list\s+of\s+symbols|symbols?\s+and\s+abbreviations?|glossary|notation)s?$', l, re.IGNORECASE)
-                    for l in lines[:5]
-                )
-                if has_nomenclature_header and len(lines) >= 10:
-                    # Count symbol-definition pairs: short line (≤15 chars) followed by longer description
-                    symbol_def_pairs = sum(
-                        1 for i in range(len(lines) - 1)
-                        if len(lines[i]) <= 15 and len(lines[i + 1]) > 5 and not lines[i].isdigit()
+                # A model-detected table stays protected unless PyMuPDF can split
+                # that same region into cells. Each reliable cell gets its own class
+                # so its text is translated independently while the original grid,
+                # fills and borders remain untouched.
+                source_page = doc_zh[page.pageno]
+                try:
+                    detected_tables = source_page.find_tables().tables
+                except Exception as error:
+                    logger.warning(
+                        "Page %s table-cell detection failed; preserving tables: %s",
+                        pageno + 1,
+                        error,
                     )
-                    if symbol_def_pairs / len(lines) > 0.3:
-                        logger.info(f"Page {pageno + 1} detected as NOMENCLATURE (pairs={symbol_def_pairs}/{len(lines)}), preserving original layout")
-                        box[:, :] = 0
+                    detected_tables = []
+                next_class = len(page_layout.boxes) + 2
+                page_bounds = layout_bounds.setdefault(page.pageno, {})
+                page_height = float(page_rect.height)
+                page_words = source_page.get_text("words", sort=True)
+                for table_bounds in model_table_bounds:
+                    for cell in matching_table_cells(table_bounds, detected_tables):
+                        cx0 = max(float(cell[0]), table_bounds[0])
+                        cy0 = max(float(cell[1]), table_bounds[1])
+                        cx1 = min(float(cell[2]), table_bounds[2])
+                        cy1 = min(float(cell[3]), table_bounds[3])
+                        if cx1 - cx0 <= 4 or cy1 - cy0 <= 1:
+                            continue
+                        cell_words = [
+                            word
+                            for word in page_words
+                            if cx0 <= (float(word[0]) + float(word[2])) / 2 <= cx1
+                            and cy0 <= (float(word[1]) + float(word[3])) / 2 <= cy1
+                        ]
+                        for cluster in cluster_table_words(
+                            cell_words, (cx0, cy0, cx1, cy1)
+                        ):
+                            if not should_translate_table_cell(cluster.text):
+                                continue
+                            for word in cluster.words:
+                                wx0, wy0, wx1, wy1 = (
+                                    float(value) for value in word[:4]
+                                )
+                                px0, py0, px1, py1 = (
+                                    np.clip(int(wx0 - 1), 0, w - 1),
+                                    np.clip(int(h - wy1 - 1), 0, h - 1),
+                                    np.clip(int(wx1 + 1), 0, w - 1),
+                                    np.clip(int(h - wy0 + 1), 0, h - 1),
+                                )
+                                box[py0:py1, px0:px1] = next_class
+                            bx0, by0, bx1, by1 = cluster.bbox
+                            content_y0 = min(by0, *(float(word[1]) for word in cluster.words))
+                            content_y1 = max(by1, *(float(word[3]) for word in cluster.words))
+                            padded = (
+                                bx0 + 2.0,
+                                page_height - content_y1,
+                                bx1 - 2.0,
+                                page_height - content_y0,
+                            )
+                            if padded[2] > padded[0] and padded[3] > padded[1]:
+                                page_bounds[next_class] = padded
+                            next_class += 1
 
-            # Detect REFERENCE / bibliography pages: numbered entries with years, ISBN/DOI
-            if not (toc_score >= 8) and box.any():
-                has_ref_header = any(
-                    re.match(r'^[\xad]?(references?|bibliography|suggested\s+reading|further\s+reading|works?\s+cited)$', l, re.IGNORECASE)
-                    for l in lines[:10]
+                # Technical documents often use ordinary prose fonts for equations.
+                # Protect operator-only blocks and stacked identifiers before the
+                # converter can reflow them. A one-point pad catches their rules and
+                # small subscripts without swallowing adjacent prose.
+                fallback_formulas = formula_regions(
+                    source_page.get_text("blocks", sort=True),
+                    page_words,
+                    stacked_exclusions=model_table_bounds,
                 )
-                numbered_refs = sum(1 for l in lines if re.match(r'^\d{1,3}\.\s', l))
-                # Author-year style: "Surname, I. (2014)." or "[1] Author..."
-                author_year_refs = sum(1 for l in lines if re.match(r'^[A-Z][a-z]+,?\s.*\(\d{4}\)', l))
-                bracketed_refs = sum(1 for l in lines if re.match(r'^\[\d{1,3}\]', l))
-                year_paren = sum(1 for l in lines if re.search(r'\(\d{4}\)', l))
-                isbn_doi = sum(1 for l in lines if re.search(r'ISBN|ISSN|doi\.org|https?://', l, re.IGNORECASE))
-                all_refs = numbered_refs + author_year_refs + bracketed_refs
-                ref_signals = all_refs + year_paren + isbn_doi
-                if has_ref_header and ref_signals >= 5:
-                    logger.info(f"Page {pageno + 1} detected as REFERENCES (header, refs={all_refs}, years={year_paren}, isbn_doi={isbn_doi}), preserving original layout")
-                    box[:, :] = 0
-                elif len(lines) >= 10 and all_refs >= 5 and (year_paren + isbn_doi) >= 3:
-                    logger.info(f"Page {pageno + 1} detected as REFERENCES (refs={all_refs}, years={year_paren}, isbn_doi={isbn_doi}), preserving original layout")
-                    box[:, :] = 0
-
-            preservation = classify_preserved_page(page_text)
-            if preservation is not None and box.any():
-                logger.info(
-                    "Page %s detected as %s (%s), preserving original layout",
-                    pageno + 1,
-                    preservation.kind,
-                    preservation.detail,
-                )
-                box[:, :] = 0
+                for fx0, fy0, fx1, fy1 in fallback_formulas:
+                    bx0, by0, bx1, by1 = (
+                        np.clip(int(fx0 - 1), 0, w - 1),
+                        np.clip(int(h - fy1 - 1), 0, h - 1),
+                        np.clip(int(fx1 + 1), 0, w - 1),
+                        np.clip(int(h - fy0 + 1), 0, h - 1),
+                    )
+                    box[by0:by1, bx0:bx1] = 0
 
             layout[page.pageno] = box
             if pageno in scanned_pages:
