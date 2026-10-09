@@ -84,6 +84,7 @@
 1. **[Download LayoutLingua for Windows](https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest/download/LayoutLingua-windows.zip)** (`.zip`).
 2. Extract the archive completely.
 3. Run `LayoutLingua.exe`.
+   *(If Windows SmartScreen appears: click **"More info"** ➔ **"Run anyway"**).*
 
 > [!TIP]
 > Windows builds include a background auto-update worker that notifies you whenever a new release is published.
@@ -94,7 +95,13 @@
    - **[Apple Silicon (M1/M2/M3/M4)](https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest/download/LayoutLingua-macos-apple-silicon.dmg)**
    - **[Intel](https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest/download/LayoutLingua-macos-intel.dmg)**
 2. Open the `.dmg` file and drag **LayoutLingua** to your **Applications** folder.
-3. On first launch, right-click the app icon → **Open** → **Open**.
+3. On first launch:
+   - Right-click the app icon → **Open** → **Open**, OR
+   - Run once in Terminal to clear Gatekeeper quarantine:
+     ```bash
+     xattr -cr /Applications/LayoutLingua.app
+     ```
+
 
 ### 🐧 Linux (x86_64)
 
