@@ -1,7 +1,9 @@
 """Functions that can be used for the most common use-cases for pdf2zh.six"""
 
 import asyncio
+import hashlib
 import io
+import json
 import logging
 import math
 import os
@@ -26,8 +28,9 @@ from pdfminer.pdfpage import PDFPage
 from pdfminer.pdfparser import PDFParser
 from pymupdf import Document, Font
 
+from pdf2zh.cache import TranslationCache
 from pdf2zh.converter import TranslateConverter
-from pdf2zh.doclayout import OnnxModel
+from pdf2zh.doclayout import OnnxModel, YoloResult
 from pdf2zh.pdfinterp import PDFPageInterpreterEx
 from pdf2zh.rules import (
     classify_preserved_page,
@@ -311,6 +314,81 @@ def _classify_fully_preserved_page(page_text: str, pageno: int) -> str | None:
     return None
 
 
+def _layout_cache_for(
+    model: OnnxModel | None, ignore_cache: bool
+) -> TranslationCache | None:
+    """A persistent layout-result cache, or None when caching is off.
+
+    Re-translating a document (another engine, another language) re-renders
+    identical pixmaps, so a second run can skip inference entirely. The key
+    carries the model identity, so a swapped model never reads stale boxes.
+    """
+    if model is None or ignore_cache:
+        return None
+    try:
+        fingerprint = os.stat(model.model_path)
+        identity = f"{model.model_path}:{fingerprint.st_mtime_ns}:{fingerprint.st_size}"
+    except OSError:
+        return None
+    return TranslationCache(
+        "layout",
+        {"model": identity, "stride": model.stride},
+    )
+
+
+def _encode_page_layout(page_layout) -> str:
+    rows = []
+    for box in page_layout.boxes:
+        xyxy = [float(value) for value in np.asarray(box.xyxy).ravel()[:4]]
+        rows.append(xyxy + [float(box.conf), float(box.cls)])
+    return json.dumps({"names": page_layout.names, "rows": rows})
+
+
+def _decode_page_layout(payload: str):
+    """Rebuild a cached layout result, or None when the cache entry is bad."""
+    try:
+        data = json.loads(payload)
+        names = data["names"]
+        if isinstance(names, dict):
+            names = {
+                int(key) if key.lstrip("-").isdigit() else key: value
+                for key, value in names.items()
+            }
+        rows = np.array(
+            [[float(value) for value in row] for row in data["rows"]],
+            dtype=np.float64,
+        )
+        if rows.size == 0:
+            rows = rows.reshape(0, 6)
+        if rows.ndim != 2 or rows.shape[1] != 6:
+            return None
+        return YoloResult(boxes=rows, names=names)
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def _predict_page_layout(model, cache, pix, image, imgsz, ignore_cache):
+    """Run layout inference, reusing a cached result for identical pages."""
+    if cache is None:
+        return model.predict(image, imgsz=imgsz)[0]
+    key = f"{imgsz}:{hashlib.blake2b(pix.samples, digest_size=16).hexdigest()}"
+    try:
+        cached = cache.get(key)
+    except Exception:
+        cached = None
+    if cached is not None:
+        decoded = _decode_page_layout(cached)
+        if decoded is not None:
+            return decoded
+    page_layout = model.predict(image, imgsz=imgsz)[0]
+    if not ignore_cache:
+        try:
+            cache.set(key, _encode_page_layout(page_layout))
+        except Exception:
+            logger.debug("Could not cache page layout", exc_info=False)
+    return page_layout
+
+
 def translate_patch(
     inf: BinaryIO,
     pages: Optional[list[int]] = None,
@@ -367,6 +445,7 @@ def translate_patch(
     assert device is not None
     obj_patch = {}
     interpreter = PDFPageInterpreterEx(rsrcmgr, device, obj_patch)
+    layout_cache = _layout_cache_for(model, ignore_cache)
     if pages:
         total_pages = len(pages)
     else:
@@ -408,9 +487,14 @@ def translate_patch(
                 )[:, :, ::-1]
                 # DocLayNet reference size: larger inputs cost pixels squared
                 # while boxes rescale to page coordinates either way.
-                page_layout = model.predict(
-                    image, imgsz=min(1024, int(pix.height / 32) * 32)
-                )[0]
+                page_layout = _predict_page_layout(
+                    model,
+                    layout_cache,
+                    pix,
+                    image,
+                    min(1024, int(pix.height / 32) * 32),
+                    ignore_cache,
+                )
                 box = np.ones((pix.height, pix.width), dtype=np.int32)
                 h, w = box.shape
                 vcls = ["abandon", "figure", "table", "isolate_formula", "formula_caption"]

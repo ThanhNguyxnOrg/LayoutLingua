@@ -326,3 +326,34 @@ class DeepLXTranslatorTests(unittest.TestCase):
             )
         finally:
             del os.environ["DEEPLX_ENDPOINT"]
+
+
+class LayoutCacheTests(unittest.TestCase):
+    def _layout(self):
+        boxes = [
+            SimpleNamespace(
+                xyxy=np.array([10.0, 20.0, 30.0, 40.0]),
+                conf=np.float32(0.9),
+                cls=np.float32(1.0),
+            ),
+            SimpleNamespace(
+                xyxy=np.array([50.0, 60.0, 70.0, 80.0]),
+                conf=np.float32(0.5),
+                cls=np.float32(0.0),
+            ),
+        ]
+        return SimpleNamespace(boxes=boxes, names={0: "abandon", 1: "text"})
+
+    def test_layout_round_trip_preserves_boxes(self):
+        from pdf2zh.high_level import _decode_page_layout, _encode_page_layout
+        decoded = _decode_page_layout(_encode_page_layout(self._layout()))
+        self.assertEqual(decoded.names, {0: "abandon", 1: "text"})
+        self.assertEqual(len(decoded.boxes), 2)
+        self.assertAlmostEqual(decoded.boxes[0].xyxy[0], 10.0)
+        self.assertAlmostEqual(decoded.boxes[1].conf, 0.5)
+
+    def test_corrupt_layout_cache_falls_back(self):
+        from pdf2zh.high_level import _decode_page_layout
+        self.assertIsNone(_decode_page_layout("not-json"))
+        self.assertIsNone(_decode_page_layout('{"names": {}, "rows": [[1, 2]]}'))
+        self.assertIsNone(_decode_page_layout('{"names": {}}'))
