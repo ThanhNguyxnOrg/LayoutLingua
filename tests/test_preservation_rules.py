@@ -19,6 +19,7 @@ from pdf2zh.rules import (
     add_cjk_latin_spacing,
     can_break_cjk_line,
     classify_preserved_page,
+    split_text_columns,
     cluster_table_words,
     formula_regions,
     is_bullet_character,
@@ -215,6 +216,34 @@ class PreservationRuleTests(unittest.TestCase):
         self.assertEqual(add_cjk_latin_spacing("中文，ABC"), "中文，ABC")
         self.assertEqual(
             add_cjk_latin_spacing("a <b0></b0> b"), "a <b0></b0> b"
+        )
+
+    def _column_words(self):
+        """Three borderless columns like a math-symbol reference page."""
+        words = []
+        for row in range(10):
+            y0, y1 = 100 + row * 14, 110 + row * 14
+            words.append((50.0, y0, 70.0, y1, "=", row))
+            words.append((130.0, y0, 200.0, y1, "description", row))
+            words.append((260.0, y0, 330.0, y1, "a=b", row))
+        return words
+
+    def test_borderless_columns_split_into_slices(self):
+        columns = split_text_columns(self._column_words(), (40.0, 90.0, 340.0, 250.0))
+        self.assertEqual(len(columns), 3)
+        self.assertLessEqual(columns[0][2], columns[1][0])
+        self.assertLessEqual(columns[1][2], columns[2][0])
+        self.assertGreater(columns[0][0], 39.0)
+        self.assertLess(columns[2][2], 341.0)
+
+    def test_single_column_prose_is_not_split(self):
+        words = [
+            (50.0, 100.0, 120.0, 110.0, "This", 0),
+            (123.0, 100.0, 200.0, 110.0, "is", 0),
+            (203.0, 100.0, 300.0, 110.0, "prose", 0),
+        ]
+        self.assertEqual(
+            split_text_columns(words, (40.0, 90.0, 340.0, 250.0)), []
         )
 
     def test_every_target_can_be_typeset_without_lines_touching(self):

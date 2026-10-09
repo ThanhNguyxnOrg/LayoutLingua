@@ -40,6 +40,7 @@ from pdf2zh.rules import (
     matching_table_cells,
     page_has_image,
     should_translate_table_cell,
+    split_text_columns,
 )
 
 @dataclass(frozen=True)
@@ -618,6 +619,35 @@ def translate_patch(
                         np.clip(int(h - fy0 + 1), 0, h - 1),
                     )
                     box[by0:by1, bx0:bx1] = 0
+
+                # Split borderless multi-column text (a symbol reference with
+                # no ruling lines): one region grouping every column reflows
+                # over itself. Each column slice gets its own class with a
+                # narrow width budget, so paragraphs stay in their column.
+                if page_words:
+                    x_scale = pix.width / page_rect.width if page_rect.width else 1.0
+                    for region_id, region_rect in list(page_class_bounds.items()):
+                        slices = split_text_columns(
+                            [word for word in page_words if len(word) >= 4],
+                            region_rect,
+                        )
+                        if len(slices) < 2:
+                            continue
+                        for (col_x0, _cy0, col_x1, _cy1) in slices:
+                            px0 = int(np.clip(col_x0 * x_scale, 0, w - 1))
+                            px1 = int(np.clip(col_x1 * x_scale, 0, w - 1))
+                            if px1 <= px0:
+                                continue
+                            column_mask = box[:, px0:px1] == region_id
+                            if not column_mask.any():
+                                continue
+                            column_id = next_class
+                            next_class += 1
+                            box[:, px0:px1][column_mask] = column_id
+                            page_class_bounds[column_id] = region_rect
+                            page_bounds[column_id] = (
+                                col_x0, region_rect[1], col_x1, region_rect[3]
+                            )
 
             layout[page.pageno] = box
             if pageno in scanned_pages:

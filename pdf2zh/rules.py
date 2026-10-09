@@ -76,6 +76,81 @@ def add_cjk_latin_spacing(text: str) -> str:
     """
     text = _CJK_BEFORE_LATIN.sub(r"\1 \2", text)
     return _CJK_AFTER_LATIN.sub(r"\1 \2", text)
+
+
+COLUMN_GAP_MIN = 12.0
+COLUMN_BUCKET = 5.0
+
+
+def split_text_columns(
+    words: Sequence[Sequence[Any]], region: Sequence[float]
+) -> list[tuple[float, float, float, float]]:
+    """Split a borderless text region into column slices.
+
+    A symbol reference page carries several description columns with no
+    ruling lines, so the layout model returns one text region and PyMuPDF
+    finds no table grid. Grouping that region as one paragraph joins every
+    column into a single run that reflows over itself. A column boundary is
+    an x-position where many rows share a wide gap: at least
+    ``COLUMN_GAP_MIN`` wide, seen in ``max(3, a quarter of the rows)`` rows.
+    Returns an empty list when no such boundary exists, and the caller keeps
+    the region whole. Each slice keeps the region's full height.
+    """
+    rx0, ry0, rx1, ry1 = (float(value) for value in region[:4])
+    inside = [
+        word
+        for word in words
+        if rx0 <= (float(word[0]) + float(word[2])) / 2 <= rx1
+        and not (float(word[3]) <= ry0 or float(word[1]) >= ry1)
+    ]
+    if len(inside) < 4:
+        return []
+    rows: list[list[Sequence[Any]]] = []
+    for word in sorted(inside, key=lambda w: (float(w[1]) + float(w[3])) / 2):
+        center_y = (float(word[1]) + float(word[3])) / 2
+        placed = False
+        for row in rows:
+            tops = [float(item[1]) for item in row]
+            bottoms = [float(item[3]) for item in row]
+            if min(tops) - 3.0 <= center_y <= max(bottoms) + 3.0:
+                row.append(word)
+                placed = True
+                break
+        if not placed:
+            rows.append([word])
+    votes: dict[float, list[float]] = {}
+    for row in rows:
+        ordered = sorted(row, key=lambda w: float(w[0]))
+        for left, right in zip(ordered, ordered[1:]):
+            gap = float(right[0]) - float(left[2])
+            if gap >= COLUMN_GAP_MIN:
+                bucket = int(((float(left[2]) + float(right[0])) / 2) // COLUMN_BUCKET) * COLUMN_BUCKET
+                count, total = votes.get(bucket, (0, 0.0))
+                votes[bucket] = [
+                    count + 1,
+                    total + (float(left[2]) + float(right[0])) / 2,
+                ]
+    needed = max(3, -(-len(rows) // 4))
+    boundaries = sorted(
+        total / count for count, total in votes.values() if count >= needed
+    )
+    if not boundaries:
+        return []
+    edges = [rx0] + boundaries + [rx1]
+    slices = [
+        (edges[i], ry0, edges[i + 1], ry1) for i in range(len(edges) - 1)
+    ]
+    for index in range(len(slices)):
+        count = sum(
+            1
+            for word in inside
+            if slices[index][0]
+            <= (float(word[0]) + float(word[2])) / 2
+            <= slices[index][2]
+        )
+        if count < 3:
+            return []
+    return slices
 PROSE_WORD_PATTERN = re.compile(
     r"[a-z]{3,}|"
     r"[a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]*[\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9][a-z\u00E0-\u00FD\u0101-\u024F\u1EA0-\u1EF9]+|"
