@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from pdf2zh.cache import clean_test_db, init_test_db
-from pdf2zh.translator import (
+from layoutlingua.cache import clean_test_db, init_test_db
+from layoutlingua.translator import (
     FormulaPlaceholderError,
     GoogleTranslator,
     HandoffTranslator,

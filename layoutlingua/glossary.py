@@ -13,7 +13,7 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,22 @@ class GlossaryManager:
                     if isinstance(item, dict) and "term" in item and "translation" in item:
                         self.add_term(item["term"], item["translation"], item.get("case_sensitive", False))
                         count += 1
+        elif path.suffix.lower() == ".jsonl":
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                        if "term" in record and "translation" in record:
+                            self.add_term(record["term"], record["translation"], record.get("case_sensitive", False))
+                            count += 1
+                        elif "src" in record and "dst" in record:
+                            self.add_term(record["src"], record["dst"])
+                            count += 1
+                    except Exception:
+                        pass
         elif path.suffix.lower() in (".csv", ".tsv"):
             delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
             with open(path, "r", encoding="utf-8") as f:

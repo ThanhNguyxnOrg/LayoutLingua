@@ -10,13 +10,13 @@
 ## Pipeline
 
 1. `scripts/translate_pdf.py` validates a text-based PDF and stages output.
-2. `pdf2zh/high_level.py` loads fonts/model, predicts layout, matches tables,
+2. `layoutlingua/high_level.py` loads fonts/model, predicts layout, matches tables,
    detects preserved structures, patches pages, and serializes the mono PDF.
-3. `pdf2zh/converter.py` groups glyphs into paragraphs, carries formulas and
+3. `layoutlingua/converter.py` groups glyphs into paragraphs, carries formulas and
    styles through translation markers, reflows text, and emits PDF operators.
-4. `pdf2zh/translator.py` validates placeholders/style markers and caches only
+4. `layoutlingua/translator.py` validates placeholders/style markers and caches only
    safe translations.
-5. `pdf2zh/pdfinterp.py` retains source graphics while replacing selected text.
+5. `layoutlingua/pdfinterp.py` retains source graphics while replacing selected text.
 
 Each run returns a `TranslationReport`: the segments left in the source
 language, why each was left, the image-only pages, and how much text was

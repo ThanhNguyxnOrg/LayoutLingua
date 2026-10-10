@@ -1,4 +1,4 @@
-"""Functions that can be used for the most common use-cases for pdf2zh.six"""
+"""Functions that can be used for the most common use-cases for layoutlingua."""
 
 import asyncio
 import hashlib
@@ -15,7 +15,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from string import Template
-from typing import Any, BinaryIO, Dict, List, Optional
+from typing import Any, BinaryIO
 
 import numpy as np
 import pikepdf
@@ -28,20 +28,23 @@ from pdfminer.pdfpage import PDFPage
 from pdfminer.pdfparser import PDFParser
 from pymupdf import Document, Font
 
-from pdf2zh.cache import TranslationCache
-from pdf2zh.converter import TranslateConverter
-from pdf2zh.doclayout import OnnxModel, YoloResult
-from pdf2zh.pdfinterp import PDFPageInterpreterEx
-from pdf2zh.rules import (
+from layoutlingua.cache import TranslationCache
+from layoutlingua.converter import TranslateConverter, preferred_translation
+from layoutlingua.doclayout import OnnxModel, YoloResult
+from layoutlingua.pdfinterp import PDFPageInterpreterEx
+from layoutlingua.reading_order import LayoutBox, infer_reading_order_indices
+from layoutlingua.rules import (
     classify_preserved_page,
     cluster_table_words,
     formula_regions,
     is_scanned_page,
     matching_table_cells,
+    normalize_legacy_vietnamese,
     page_has_image,
     should_translate_table_cell,
     split_text_columns,
 )
+
 
 @dataclass(frozen=True)
 class TranslationReport:
@@ -181,7 +184,7 @@ def pymupdf_can_round_trip(path: Path) -> bool:
     return True
 
 
-def check_files(files: List[str]) -> List[str]:
+def check_files(files: list[str]) -> list[str]:
     files = [
         f for f in files if not f.startswith("http://")
     ]  # exclude online files, http
@@ -202,106 +205,6 @@ def _classify_fully_preserved_page(page_text: str, pageno: int) -> str | None:
     """
     if not page_text.strip():
         return "BLANK"
-    lines = [l.strip() for l in page_text.split('\n') if l.strip()]
-    toc_score = 0
-    standalone_nums = 0
-    spaced_page_nums = 0
-    emspace_page_nums = 0
-    for line in lines:
-        # dot leaders: ". . . . ." or "......"
-        if re.search(r'\.{5,}', line) or re.search(r'(\.\s){4,}', line):
-            toc_score += 3
-        # unicode dot leaders / replacement chars used as dot leaders
-        # e.g. "\x08�����" or "───" or other fill chars before page number
-        elif re.search(r'[\x08\ufffd\u2500-\u257f]{3,}', line):
-            toc_score += 3
-        # line ending with page number after fill chars
-        elif re.search(r'[\x08\ufffd\u2500-\u257f]+\s*\d{1,4}\s*$', line):
-            toc_score += 2
-        # text followed by 5+ spaces then a page number (space-padded TOC)
-        elif re.search(r'\S\s{5,}\d{1,4}\s*$', line):
-            spaced_page_nums += 1
-        # standalone page number on its own line (1-4 digits only)
-        elif re.match(r'^\d{1,4}$', line):
-            standalone_nums += 1
-        # em-space / en-space separator before page number or roman numeral
-        if re.search(r'[\u2002\u2003]+\s*\d{1,4}\s*$', line):
-            emspace_page_nums += 1
-        elif re.search(r'[\u2002\u2003]+\s*[ivxlcdm]+\s*$', line, re.IGNORECASE):
-            emspace_page_nums += 1
-    # Check if any line says "Contents" or "Table of Contents"
-    has_contents_header = any(
-        re.match(r'^(table\s+of\s+)?contents?$', l, re.IGNORECASE)
-        for l in lines[:5]
-    )
-    if has_contents_header:
-        toc_score += 5
-    # Space-padded page numbers (text + spaces + number): strong TOC signal
-    if spaced_page_nums >= 5:
-        toc_score += spaced_page_nums
-    # Em-space / en-space separated page numbers: common in e-books
-    if emspace_page_nums >= 5:
-        toc_score += emspace_page_nums
-    # Many standalone numbers = TOC sub-entries, but only if there are other TOC signals
-    if standalone_nums >= 8 and toc_score > 0:
-        toc_score += standalone_nums
-    # High ratio of standalone numbers to total lines indicates TOC-like structure
-    if len(lines) >= 15 and standalone_nums >= 10 and (standalone_nums / len(lines)) > 0.3:
-        toc_score += standalone_nums
-    # Lines ending with "text number" (single-space TOC style): if >80% match, it's TOC
-    if len(lines) >= 15:
-        lines_ending_num = sum(1 for l in lines if re.search(r'\S\s+\d{1,4}\s*$', l))
-        if lines_ending_num / len(lines) > 0.8:
-            toc_score += lines_ending_num
-    if toc_score >= 8:
-        logger.info(f"Page {pageno + 1} detected as TOC (score={toc_score}), preserving original layout")
-        return "TOC"
-
-    # Detect INDEX pages: many lines ending with page numbers, comma+number patterns
-    idx_comma_num = sum(1 for l in lines if re.search(r',\s*\d{1,4}', l))
-    is_index_header = bool(lines and re.match(r'^index$', lines[0], re.IGNORECASE))
-    # Index pages typically have >50% lines ending with "term, number"
-    if len(lines) >= 20 and (idx_comma_num / len(lines)) > 0.4:
-        logger.info(f"Page {pageno + 1} detected as INDEX (comma_num={idx_comma_num}/{len(lines)}), preserving original layout")
-        return "INDEX"
-    elif is_index_header:
-        logger.info(f"Page {pageno + 1} detected as INDEX (header), preserving original layout")
-        return "INDEX"
-
-    # Detect NOMENCLATURE / symbol list pages: short symbol lines alternating with definitions
-    has_nomenclature_header = any(
-        re.match(r'^(nomenclature|list\s+of\s+symbols|symbols?\s+and\s+abbreviations?|glossary|notation)s?$', l, re.IGNORECASE)
-        for l in lines[:5]
-    )
-    if has_nomenclature_header and len(lines) >= 10:
-        # Count symbol-definition pairs: short line (≤15 chars) followed by longer description
-        symbol_def_pairs = sum(
-            1 for i in range(len(lines) - 1)
-            if len(lines[i]) <= 15 and len(lines[i + 1]) > 5 and not lines[i].isdigit()
-        )
-        if symbol_def_pairs / len(lines) > 0.3:
-            logger.info(f"Page {pageno + 1} detected as NOMENCLATURE (pairs={symbol_def_pairs}/{len(lines)}), preserving original layout")
-            return "NOMENCLATURE"
-
-    # Detect REFERENCE / bibliography pages: numbered entries with years, ISBN/DOI
-    has_ref_header = any(
-        re.match(r'^[\xad]?(references?|bibliography|suggested\s+reading|further\s+reading|works?\s+cited)$', l, re.IGNORECASE)
-        for l in lines[:10]
-    )
-    numbered_refs = sum(1 for l in lines if re.match(r'^\d{1,3}\.\s', l))
-    # Author-year style: "Surname, I. (2014)." or "[1] Author..."
-    author_year_refs = sum(1 for l in lines if re.match(r'^[A-Z][a-z]+,?\s.*\(\d{4}\)', l))
-    bracketed_refs = sum(1 for l in lines if re.match(r'^\[\d{1,3}\]', l))
-    year_paren = sum(1 for l in lines if re.search(r'\(\d{4}\)', l))
-    isbn_doi = sum(1 for l in lines if re.search(r'ISBN|ISSN|doi\.org|https?://', l, re.IGNORECASE))
-    all_refs = numbered_refs + author_year_refs + bracketed_refs
-    ref_signals = all_refs + year_paren + isbn_doi
-    if has_ref_header and ref_signals >= 5:
-        logger.info(f"Page {pageno + 1} detected as REFERENCES (header, refs={all_refs}, years={year_paren}, isbn_doi={isbn_doi}), preserving original layout")
-        return "REFERENCES"
-    elif len(lines) >= 10 and all_refs >= 5 and (year_paren + isbn_doi) >= 3:
-        logger.info(f"Page {pageno + 1} detected as REFERENCES (refs={all_refs}, years={year_paren}, isbn_doi={isbn_doi}), preserving original layout")
-        return "REFERENCES"
 
     preservation = classify_preserved_page(page_text)
     if preservation is not None:
@@ -313,6 +216,46 @@ def _classify_fully_preserved_page(page_text: str, pageno: int) -> str | None:
         )
         return preservation.kind
     return None
+
+
+def translate_document_outlines(
+    doc: Document,
+    translator: Any,
+) -> None:
+    """Translate hierarchical PDF bookmarks / outlines in-place."""
+    try:
+        toc = doc.get_toc()
+        if not toc:
+            return
+        unique_titles = {}
+        for item in toc:
+            if len(item) >= 2 and item[1]:
+                t = str(item[1]).strip()
+                if t and t not in unique_titles:
+                    unique_titles[t] = t
+
+        lang_out = getattr(translator, "lang_out", "en")
+        translated_map = {}
+        for raw_title in unique_titles:
+            norm_title = normalize_legacy_vietnamese(raw_title)
+            preferred = preferred_translation(norm_title, lang_out)
+            if preferred is not None:
+                translated_map[raw_title] = preferred
+            else:
+                try:
+                    translated_map[raw_title] = translator.translate(norm_title)
+                except Exception:
+                    translated_map[raw_title] = norm_title
+
+        translated_toc = []
+        for item in toc:
+            lvl, title, pageno = item[0], str(item[1]), item[2]
+            trans_title = translated_map.get(title.strip(), title)
+            translated_toc.append([lvl, trans_title, pageno] + list(item[3:]))
+        doc.set_toc(translated_toc)
+    except Exception as error:
+        logger.debug("Failed to translate document outlines: %s", error)
+
 
 
 def _layout_cache_for(
@@ -392,7 +335,7 @@ def _predict_page_layout(model, cache, pix, image, imgsz, ignore_cache):
 
 def translate_patch(
     inf: BinaryIO,
-    pages: Optional[list[int]] = None,
+    pages: list[int] | None = None,
     vfont: str = "",
     vchar: str = "",
     thread: int = 0,
@@ -405,12 +348,13 @@ def translate_patch(
     callback: object = None,
     cancellation_event: asyncio.Event = None,
     model: OnnxModel = None,
-    envs: Dict = None,
+    envs: dict = None,
     prompt: Template = None,
     ignore_cache: bool = False,
-    style_font_names: Dict | None = None,
-    style_fonts: Dict | None = None,
+    style_font_names: dict | None = None,
+    style_fonts: dict | None = None,
     synthetic_styles: set[int] | None = None,
+    glossary: Any = None,
     **kwarg: Any,
 ) -> None:
     rsrcmgr = PDFResourceManager()
@@ -422,6 +366,7 @@ def translate_patch(
     class_bounds = {}
     scanned_pages = set()
     pages_with_images = set()
+    thread = max(1, int(thread or 1))
     device = TranslateConverter(
         rsrcmgr,
         vfont,
@@ -441,6 +386,7 @@ def translate_patch(
         style_fonts,
         synthetic_styles,
         class_bounds,
+        glossary=glossary,
     )
 
     assert device is not None
@@ -476,7 +422,7 @@ def translate_patch(
             # protected, and textless pages translate nothing either way.
             page_text = doc_zh[page.pageno].get_text("text")
             preserved_kind = _classify_fully_preserved_page(page_text, pageno)
-            if preserved_kind is not None:
+            if preserved_kind is not None and preserved_kind != "TOC":
                 box = np.zeros(
                     (math.ceil(page_rect.height), math.ceil(page_rect.width)),
                     dtype=np.int32,
@@ -498,6 +444,8 @@ def translate_patch(
                 )
                 box = np.ones((pix.height, pix.width), dtype=np.int32)
                 h, w = box.shape
+                x_scale = pix.width / page_rect.width if page_rect.width else 1.0
+                y_scale = pix.height / page_rect.height if page_rect.height else 1.0
                 vcls = ["abandon", "figure", "table", "isolate_formula", "formula_caption"]
                 model_table_bounds = []
                 # Process non-vcls boxes in ascending confidence order so that
@@ -507,27 +455,50 @@ def translate_patch(
                     if page_layout.names[int(d.cls)] not in vcls
                 ]
                 page_class_bounds = class_bounds.setdefault(page.pageno, {})
+                page_pymupdf_bounds = {}
                 for i, d in reversed(non_vcls_boxes):
                     x0, y0, x1, y1 = d.xyxy.squeeze()
-                    page_class_bounds[i + 2] = (
-                        float(x0),
-                        float(page_rect.height) - float(y1),
-                        float(x1),
-                        float(page_rect.height) - float(y0),
+                    region_id = i + 2
+                    pt_x0 = float(x0) / x_scale
+                    pt_y0 = float(y0) / y_scale
+                    pt_x1 = float(x1) / x_scale
+                    pt_y1 = float(y1) / y_scale
+                    page_class_bounds[region_id] = (
+                        pt_x0,
+                        float(page_rect.height) - pt_y1,
+                        pt_x1,
+                        float(page_rect.height) - pt_y0,
                     )
+                    page_pymupdf_bounds[region_id] = (pt_x0, pt_y0, pt_x1, pt_y1)
                     x0, y0, x1, y1 = (
                         np.clip(int(x0 - 1), 0, w - 1),
                         np.clip(int(h - y1 - 1), 0, h - 1),
                         np.clip(int(x1 + 1), 0, w - 1),
                         np.clip(int(h - y0 + 1), 0, h - 1),
                     )
-                    box[y0:y1, x0:x1] = i + 2
+                    box[y0:y1, x0:x1] = region_id
                 for i, d in enumerate(page_layout.boxes):
                     name = page_layout.names[int(d.cls)]
                     if name in vcls:
                         raw_x0, raw_y0, raw_x1, raw_y1 = (
                             float(value) for value in d.xyxy.squeeze()
                         )
+                        if name == "abandon":
+                            d_conf = float(getattr(d, "conf", 0.0))
+                            is_suppressed = False
+                            for _, nv_box in non_vcls_boxes:
+                                nv_xyxy = [float(v) for v in nv_box.xyxy.squeeze()]
+                                nv_cls_name = page_layout.names[int(nv_box.cls)]
+                                if (nv_cls_name == "title" or d_conf <= float(getattr(nv_box, "conf", 0.0))) and not (
+                                    raw_x1 <= nv_xyxy[0]
+                                    or raw_x0 >= nv_xyxy[2]
+                                    or raw_y1 <= nv_xyxy[1]
+                                    or raw_y0 >= nv_xyxy[3]
+                                ):
+                                    is_suppressed = True
+                                    break
+                            if is_suppressed:
+                                continue
                         if name == "table":
                             model_table_bounds.append(
                                 (raw_x0, raw_y0, raw_x1, raw_y1)
@@ -625,29 +596,54 @@ def translate_patch(
                 # over itself. Each column slice gets its own class with a
                 # narrow width budget, so paragraphs stay in their column.
                 if page_words:
-                    x_scale = pix.width / page_rect.width if page_rect.width else 1.0
-                    for region_id, region_rect in list(page_class_bounds.items()):
+                    for region_id, pt_rect in list(page_pymupdf_bounds.items()):
                         slices = split_text_columns(
                             [word for word in page_words if len(word) >= 4],
-                            region_rect,
+                            pt_rect,
                         )
                         if len(slices) < 2:
                             continue
-                        for (col_x0, _cy0, col_x1, _cy1) in slices:
+                        for (col_x0, col_y0, col_x1, col_y1) in slices:
                             px0 = int(np.clip(col_x0 * x_scale, 0, w - 1))
                             px1 = int(np.clip(col_x1 * x_scale, 0, w - 1))
-                            if px1 <= px0:
+                            py0 = int(np.clip(h - col_y1 * y_scale - 1, 0, h - 1))
+                            py1 = int(np.clip(h - col_y0 * y_scale + 1, 0, h - 1))
+                            if px1 <= px0 or py1 <= py0:
                                 continue
-                            column_mask = box[:, px0:px1] == region_id
+                            sub_box = box[py0:py1, px0:px1]
+                            column_mask = sub_box == region_id
                             if not column_mask.any():
                                 continue
                             column_id = next_class
                             next_class += 1
-                            box[:, px0:px1][column_mask] = column_id
-                            page_class_bounds[column_id] = region_rect
-                            page_bounds[column_id] = (
-                                col_x0, region_rect[1], col_x1, region_rect[3]
+                            sub_box[column_mask] = column_id
+                            col_bound = (
+                                col_x0,
+                                float(page_rect.height) - col_y1,
+                                col_x1,
+                                float(page_rect.height) - col_y0,
                             )
+                            page_class_bounds[column_id] = col_bound
+                            page_bounds[column_id] = col_bound
+
+                if page_class_bounds:
+                    ro_boxes = [
+                        LayoutBox(
+                            id=str(cid),
+                            x0=bound[0],
+                            y0=bound[1],
+                            x1=bound[2],
+                            y1=bound[3],
+                            cls=cid,
+                        )
+                        for cid, bound in page_class_bounds.items()
+                    ]
+                    ro_indices = infer_reading_order_indices(
+                        ro_boxes, float(page_rect.width), float(page_rect.height)
+                    )
+                    device.page_reading_order[page.pageno] = [
+                        ro_boxes[idx].cls for idx in ro_indices
+                    ]
 
             layout[page.pageno] = box
             if pageno in scanned_pages:
@@ -660,6 +656,7 @@ def translate_patch(
             doc_zh[page.pageno].set_contents(page.page_xref)
             interpreter.process_page(page)
 
+    translate_document_outlines(doc_zh, device.translator)
     device.close()
     return obj_patch, TranslationReport(
         failures=device.translation_failures,
@@ -672,7 +669,7 @@ def translate_patch(
 
 def translate_stream(
     stream: bytes,
-    pages: Optional[list[int]] = None,
+    pages: list[int] | None = None,
     lang_in: str = "",
     lang_out: str = "",
     service: str = "",
@@ -682,13 +679,15 @@ def translate_stream(
     callback: object = None,
     cancellation_event: asyncio.Event = None,
     model: OnnxModel = None,
-    envs: Dict = None,
+    envs: dict = None,
     prompt: Template = None,
     skip_subset_fonts: bool = False,
     create_dual: bool = True,
     ignore_cache: bool = False,
+    glossary: Any = None,
     **kwarg: Any,
 ):
+    thread = max(1, int(thread or 1))
     source_size = len(stream)
     font_path = download_remote_fonts(lang_out.lower())
     style_paths = output_style_font_paths(lang_out.lower(), font_path)
@@ -760,6 +759,17 @@ def translate_stream(
         doc_en.insert_file(doc_zh)
         for id in range(page_count):
             doc_en.move_page(page_count + id, id * 2 + 1)
+        try:
+            zh_toc = doc_zh.get_toc()
+            if zh_toc:
+                dual_toc = []
+                for item in zh_toc:
+                    lvl, title, page = item[0], item[1], item[2]
+                    dual_page = (page - 1) * 2 + 2 if page > 0 else page
+                    dual_toc.append([lvl, title, dual_page] + list(item[3:]))
+                doc_en.set_toc(dual_toc)
+        except Exception as error:
+            logger.debug("Failed to apply dual document outlines: %s", error)
 
     # Off for every document; see should_subset_fonts. It was also the
     # expensive half of finalizing a textbook, so dropping it costs nothing but
@@ -775,6 +785,9 @@ def translate_stream(
         if create_dual
         else None
     )
+    doc_zh.close()
+    if create_dual:
+        doc_en.close()
     return (
         mono,
         dual,
@@ -834,7 +847,7 @@ def convert_to_pdfa(input_path, output_path):
 def translate(
     files: list[str],
     output: str = "",
-    pages: Optional[list[int]] = None,
+    pages: list[int] | None = None,
     lang_in: str = "",
     lang_out: str = "",
     service: str = "",
@@ -845,10 +858,12 @@ def translate(
     compatible: bool = False,
     cancellation_event: asyncio.Event = None,
     model: OnnxModel = None,
-    envs: Dict = None,
+    envs: dict = None,
     prompt: Template = None,
     skip_subset_fonts: bool = False,
     ignore_cache: bool = False,
+    create_dual: bool = False,
+    glossary: Any = None,
     **kwarg: Any,
 ):
     if not files:
@@ -908,8 +923,23 @@ def translate(
         try:
             s_mono, _s_dual, report = translate_stream(
                 s_raw,
-                create_dual=False,
-                **locals(),
+                create_dual=create_dual,
+                pages=pages,
+                lang_in=lang_in,
+                lang_out=lang_out,
+                service=service,
+                thread=thread,
+                vfont=vfont,
+                vchar=vchar,
+                callback=callback,
+                cancellation_event=cancellation_event,
+                model=model,
+                envs=envs,
+                prompt=prompt,
+                skip_subset_fonts=skip_subset_fonts,
+                ignore_cache=ignore_cache,
+                glossary=glossary,
+                **kwarg,
             )
             if report.failures:
                 logger.warning(
@@ -923,9 +953,12 @@ def translate(
                     ),
                 )
             file_mono = Path(output) / f"{filename}-mono.pdf"
-            doc_mono = open(file_mono, "wb")
-            doc_mono.write(s_mono)
-            doc_mono.close()
+            with open(file_mono, "wb") as doc_mono:
+                doc_mono.write(s_mono)
+            if create_dual and _s_dual:
+                file_dual = Path(output) / f"{filename}-dual.pdf"
+                with open(file_dual, "wb") as doc_dual:
+                    doc_dual.write(_s_dual)
             result_files.append((str(file_mono), report))
         except Exception as error:
             raise PDFValueError(f"Failed to translate {source_path}") from error

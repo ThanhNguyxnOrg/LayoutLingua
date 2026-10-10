@@ -27,10 +27,10 @@ datas += collect_data_files("babeldoc")
 
 hiddenimports = [
     "peewee",
-    "pdf2zh.doclayout",
-    "pdf2zh.high_level",
-    "pdf2zh.converter",
-    "pdf2zh.translator",
+    "layoutlingua.doclayout",
+    "layoutlingua.high_level",
+    "layoutlingua.converter",
+    "layoutlingua.translator",
     "pikepdf",
     "pikepdf._core",
 ]

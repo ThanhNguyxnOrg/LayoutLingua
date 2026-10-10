@@ -1,15 +1,12 @@
 """Unit tests for the Semantic Document IR module."""
 
 import unittest
-from pdf2zh.ir import (
-    CellIR,
+from layoutlingua.ir import (
     DocumentIR,
-    FormulaIR,
     PageIR,
     ParagraphIR,
     RunIR,
     SemanticRole,
-    TableIR,
 )
 
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import concurrent.futures
 import logging
 import math
@@ -5,12 +7,13 @@ import os
 import re
 import unicodedata
 from collections import Counter
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from enum import Enum, IntEnum
+from pathlib import Path
 from string import Template
-from typing import Dict
+from typing import Any
 
 import numpy as np
 from pdfminer.converter import PDFConverter
@@ -19,11 +22,19 @@ from pdfminer.pdffont import PDFCIDFont, PDFUnicodeNotDefined
 from pdfminer.pdfinterp import PDFGraphicState, PDFResourceManager
 from pdfminer.utils import apply_matrix_pt, mult_matrix
 from pymupdf import Font
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_combine, wait_exponential_jitter
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_combine,
+    wait_exponential_jitter,
+)
 from tenacity.wait import wait_base
 
-from pdf2zh.batch import BATCH_DELIMITER, TranslationBatcher
-from pdf2zh.rules import (
+from layoutlingua.batch import BATCH_DELIMITER, TranslationBatcher
+from layoutlingua.glossary import GlossaryManager
+from layoutlingua.normalizers import normalize_text
+from layoutlingua.rules import (
     CJK_WRAP_LANGUAGES,
     PROSE_WORD_PATTERN,
     _is_cjk_char,
@@ -34,7 +45,7 @@ from pdf2zh.rules import (
     line_height_for_language,
     min_line_height_for_language,
 )
-from pdf2zh.translator import (
+from layoutlingua.translator import (
     ENGINES,
     BaseTranslator,
     CircuitOpenError,
@@ -144,7 +155,7 @@ FLAG_ITALIC = 1 << 6
 FLAG_FORCE_BOLD = 1 << 18
 
 
-def text_style_from_descriptor(descriptor: Dict | None) -> TextStyle | None:
+def text_style_from_descriptor(descriptor: dict | None) -> TextStyle | None:
     """Read emphasis from the font descriptor, or None if it does not say.
 
     The embedded font declares what it is, so this beats guessing from a name
@@ -453,16 +464,97 @@ def size_should_follow_body(
     return character_size > paragraph_size or visible_length <= 1
 
 
+FIXED_HEADINGS_CANONICAL: dict[str, dict[str, str]] = {
+    "toc": {
+        "en": "Contents",
+        "vi": "Mục lục",
+        "fr": "Sommaire",
+        "de": "Inhaltsverzeichnis",
+        "es": "Índice",
+        "ru": "Содержание",
+        "zh": "目录",
+        "ja": "目次",
+    },
+    "index": {
+        "en": "Index",
+        "vi": "Chỉ mục",
+        "fr": "Index",
+        "de": "Index",
+        "es": "Índice",
+        "ru": "Указатель",
+        "zh": "索引",
+        "ja": "索引",
+    },
+    "references": {
+        "en": "References",
+        "vi": "Tài liệu tham khảo",
+        "fr": "Références",
+        "de": "Literaturverzeichnis",
+        "es": "Referencias",
+        "ru": "Список литературы",
+        "zh": "参考文献",
+        "ja": "参考文献",
+    },
+    "designation": {
+        "en": "Designation",
+        "vi": "Tên gọi",
+        "de": "Bezeichnung",
+        "ru": "Обозначение",
+        "zh": "名称",
+        "ja": "名称",
+    },
+    "abbreviation": {
+        "en": "Abbreviation",
+        "vi": "Viết tắt",
+        "fr": "Abréviation",
+        "de": "Abkürzung",
+        "ru": "Сокращение",
+        "zh": "缩写",
+        "ja": "略語",
+    },
+    "unit": {
+        "en": "Unit",
+        "vi": "Đơn vị",
+        "fr": "Unité",
+        "de": "Einheit",
+        "ru": "Единица измерения",
+        "zh": "单位",
+        "ja": "単位",
+    },
+}
+
+HEADING_PATTERNS: dict[str, tuple[str, ...]] = {
+    "toc": ("mục lục", "mục lục.", "contents", "table of contents", "sommaire", "inhaltsverzeichnis", "inhalt"),
+    "index": ("chỉ mục", "chỉ mục.", "index", "sachregister", "índice alfabético", "указатель", "索引", "색인"),
+    "references": ("tài liệu tham khảo", "references", "bibliography", "références", "literaturverzeichnis", "参考文献"),
+    "designation": ("tên gọi", "designation", "bezeichnung", "обозначение"),
+    "abbreviation": ("viết tắt", "abbreviation", "abréviation", "abkürzung", "сокращение", "缩写"),
+    "unit": ("đơn vị", "unit", "unité", "einheit", "единица измерения", "单位"),
+}
+
+
+def replace_math_connectors(text: str, target_lang: str) -> str:
+    lang = target_lang.lower()
+    if lang in ("en", "eng"):
+        text = re.sub(r"\bvới mọi\b", "for all", text, flags=re.IGNORECASE)
+        text = re.sub(r"\btồn tại\b", "there exists", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bkhi và chỉ khi\b", "if and only if", text, flags=re.IGNORECASE)
+    return text
+
+
 def preferred_translation(text: str, language: str) -> str | None:
-    """Return stable Vietnamese terminology for the three rotated table headers."""
-    if language.lower() != "vi":
-        return None
+    """Return stable terminology for fixed headings."""
     visible = strip_style_tags(text).strip()
-    replacement = {
-        "Designation": "Tên gọi",
-        "Abbreviation": "Viết tắt",
-        "Unit": "Đơn vị",
-    }.get(visible)
+    norm = visible.lower()
+    canonical_key = None
+    for key, patterns in HEADING_PATTERNS.items():
+        if norm in patterns:
+            canonical_key = key
+            break
+    if canonical_key is None:
+        return None
+    lang = language.lower()
+    replacement = FIXED_HEADINGS_CANONICAL.get(canonical_key, {}).get(lang)
     if replacement is None:
         return None
     leading = re.match(r"^\s*", text).group(0)
@@ -556,7 +648,7 @@ class PDFConverterEx(PDFConverter):
     @property
     def graphic_instruction(self) -> str:
         """The colour in force, as operators to replay before drawing text."""
-        from pdf2zh.pdfinterp import COLOUR_SLOT_ORDER
+        from layoutlingua.pdfinterp import COLOUR_SLOT_ORDER
 
         return " ".join(
             self.graphic_operators[slot]
@@ -656,6 +748,7 @@ class Paragraph:
         # glyphs must not count, or it hides how much text a paragraph holds.
         self.visible_length = 0
         self.anchor: tuple[float, float] = (x, y)
+        self.has_column_gap: bool = False
 
     @property
     def graphic_instruction(self) -> str:
@@ -733,24 +826,44 @@ class TranslateConverter(PDFConverterEx):
         service: str = "",
         noto_name: str = "",
         noto: Font = None,
-        envs: Dict = None,
+        envs: dict = None,
         prompt: Template = None,
         ignore_cache: bool = False,
-        layout_bounds: Dict | None = None,
-        style_font_names: Dict | None = None,
-        style_fonts: Dict | None = None,
+        layout_bounds: dict | None = None,
+        style_font_names: dict | None = None,
+        style_fonts: dict | None = None,
         synthetic_styles: set[int] | None = None,
-        class_bounds: Dict | None = None,
+        class_bounds: dict | None = None,
+        glossary: object = None,
     ) -> None:
         super().__init__(rsrcmgr)
         self.vfont = vfont
         self.vchar = vchar
-        self.thread = thread
+        self.thread = max(1, int(thread or 1))
         self.layout = layout
         # high_level fills this mapping after the converter is constructed.
         # Preserve an empty mapping by identity instead of replacing it.
         self.layout_bounds = layout_bounds if layout_bounds is not None else {}
         self.class_bounds = class_bounds if class_bounds is not None else {}
+        self.page_reading_order: dict[int, list[int]] = {}
+        if isinstance(glossary, GlossaryManager):
+            self.glossary_manager: GlossaryManager | None = glossary
+        elif isinstance(glossary, dict):
+            self.glossary_manager = GlossaryManager(glossary)
+        elif isinstance(glossary, (str, Path)):
+            self.glossary_manager = GlossaryManager()
+            self.glossary_manager.load_from_file(glossary)
+        else:
+            glossary_file = (envs or {}).get("glossary") or os.environ.get("LAYOUTLINGUA_GLOSSARY")
+            if glossary_file and Path(glossary_file).is_file():
+                try:
+                    self.glossary_manager = GlossaryManager()
+                    self.glossary_manager.load_from_file(glossary_file)
+                except Exception as e:
+                    log.warning("Could not load glossary from %s: %s", glossary_file, e)
+                    self.glossary_manager = None
+            else:
+                self.glossary_manager = None
         self.noto_name = noto_name
         self.noto = noto
         self.style_font_names = style_font_names or {0: noto_name}
@@ -951,7 +1064,74 @@ class TranslateConverter(PDFConverterEx):
             )
 
         ############################################################
-        for child in ltpage:
+        page_ro = getattr(self, "page_reading_order", {}).get(ltpage.pageid, [])
+        if page_ro:
+            class_rank_map = {cid: idx for idx, cid in enumerate(page_ro)}
+            cur_layout = self.layout.get(ltpage.pageid)
+            lh, lw = cur_layout.shape if cur_layout is not None else (0, 0)
+            p_class_bounds = self.class_bounds.get(ltpage.pageid, {})
+
+            def _get_child_rank(c: Any) -> int:
+                if not hasattr(c, "x0") or cur_layout is None:
+                    return 9999
+                cx = np.clip(int(c.x0), 0, lw - 1)
+                cy = np.clip(int(c.y0), 0, lh - 1)
+                c_cls = cur_layout[cy, cx]
+                if c_cls in class_rank_map:
+                    return class_rank_map[c_cls]
+                for r_id, r_bound in p_class_bounds.items():
+                    if r_bound[0] <= c.x0 <= r_bound[2] and r_bound[1] <= c.y0 <= r_bound[3]:
+                        if r_id in class_rank_map:
+                            return class_rank_map[r_id]
+                return 9999
+
+            raw_children = list(enumerate(ltpage))
+            rank_buckets: dict[int, list[tuple[int, Any]]] = {}
+            non_spatial: list[tuple[int, Any]] = []
+            for stream_idx, child in raw_children:
+                if isinstance(child, (LTChar, LTLine)):
+                    r = _get_child_rank(child)
+                    rank_buckets.setdefault(r, []).append((stream_idx, child))
+                else:
+                    non_spatial.append((stream_idx, child))
+
+            ordered_children: list[Any] = []
+            for r in sorted(rank_buckets.keys()):
+                items = rank_buckets[r]
+                items_by_y = sorted(items, key=lambda pair: -pair[1].y0)
+                lines: list[list[tuple[int, Any]]] = []
+                for pair in items_by_y:
+                    ch = pair[1]
+                    ch_y0 = min(ch.pts[0][1], ch.pts[1][1]) if isinstance(ch, LTLine) else ch.y0
+                    ch_y1 = max(ch.pts[0][1], ch.pts[1][1]) if isinstance(ch, LTLine) else ch.y1
+                    ch_mid = 0.5 * (ch_y0 + ch_y1)
+                    placed = False
+                    for line in lines:
+                        l_y0 = min(
+                            (min(c[1].pts[0][1], c[1].pts[1][1]) if isinstance(c[1], LTLine) else c[1].y0)
+                            for c in line
+                        )
+                        l_y1 = max(
+                            (max(c[1].pts[0][1], c[1].pts[1][1]) if isinstance(c[1], LTLine) else c[1].y1)
+                            for c in line
+                        )
+                        l_mid = 0.5 * (l_y0 + l_y1)
+                        if abs(ch_mid - l_mid) <= 8.5 or (ch_y0 <= l_y1 and ch_y1 >= l_y0):
+                            line.append(pair)
+                            placed = True
+                            break
+                    if not placed:
+                        lines.append([pair])
+                for line in lines:
+                    line.sort(key=lambda pair: (pair[1].x0 if hasattr(pair[1], "x0") else pair[1].pts[0][0], pair[0]))
+                    for pair in line:
+                        ordered_children.append(pair[1])
+            if non_spatial:
+                ordered_children.extend(ch for _, ch in non_spatial)
+        else:
+            ordered_children = list(ltpage)
+
+        for child in ordered_children:
             if isinstance(child, LTChar):
                 if is_outside_page(child, self.page_clip):
                     continue
@@ -972,10 +1152,27 @@ class TranslateConverter(PDFConverterEx):
                     and orientation == IDENTITY_ORIENTATION
                     and child.size < pstk[-1].size * 0.79
                 )
+                is_fraction_denominator = (
+                    bool(vlstk)
+                    and any(
+                        abs(child.x0 - min(l.pts[0][0], l.pts[1][0])) < max(child.size, 12.0)
+                        and abs(child.y0 - l.pts[0][1]) < max(child.size, 12.0) * 1.5
+                        for l in vlstk
+                    )
+                )
+                is_math_variable = (
+                    bool(vstk)
+                    and len(child.get_text()) == 1
+                    and child.get_text().isalpha()
+                    and ("Italic" in child.fontname or "italic" in child.fontname)
+                    and abs(child.x0 - xt.x1) < max(child.size, 10.0) * 0.8
+                )
                 must_preserve = (
                     cls == 0
                     or vflag(child.fontname, child.get_text())
                     or orientation is None
+                    or is_fraction_denominator
+                    or is_math_variable
                 )
                 if smaller_than_body or must_preserve:
                     cur_v = True
@@ -1010,6 +1207,8 @@ class TranslateConverter(PDFConverterEx):
                                 and child.x0 > max([vch.x0 for vch in vstk])
                             ):
                                 vfix = vstk[0].y0 - child.y0
+                                if child.x0 - max([vch.x0 for vch in vstk]) > max(20.0, pstk[-1].size * 1.8):
+                                    pstk[-1].has_column_gap = True
                             if not pstk[-1].text_length:
                                 xt_cls = -1
                             append_formula(len(sstk) - 1, len(var))
@@ -1022,14 +1221,21 @@ class TranslateConverter(PDFConverterEx):
                         vstk_size_only = True
                 if not vstk:
                     if cls == xt_cls:
-                        # Force paragraph break for list items: when text wraps back
-                        # to left AND there's a significant vertical gap (> 1.5x font size),
-                        # it's likely a new list item, not a continuation
-                        if (child.x1 < xt.x0
-                            and abs(child.y0 - xt.y0) > pstk[-1].size * 1.5):
+                        # Tabular Row Isolation: when text wraps back to the left,
+                        # check if this is an itemized row or table row rather than prose
+                        is_table_or_list_row = (
+                            pstk[-1].has_column_gap
+                            and abs(child.y0 - xt.y0) >= pstk[-1].size * 0.75
+                        )
+                        if child.x1 < xt.x0 and (
+                            abs(child.y0 - xt.y0) > pstk[-1].size * 1.5
+                            or is_table_or_list_row
+                        ):
                             close_style(len(sstk) - 1)
                             new_paragraph(child, cls)
                         elif child.x0 > xt.x1 + 1:
+                            if child.x0 - xt.x1 > max(20.0, pstk[-1].size * 1.8):
+                                pstk[-1].has_column_gap = True
                             if pstk[-1].orientation == IDENTITY_ORIENTATION:
                                 append_styled(
                                     len(sstk) - 1,
@@ -1037,8 +1243,14 @@ class TranslateConverter(PDFConverterEx):
                                     text_style_of(child),
                                 )
                         elif child.x1 < xt.x0:
-                            if pstk[-1].text_length > 1 and line_ends_paragraph(
-                                xt.x1, page_class_bounds.get(int(cls))
+                            current_text = sstk[-1] if sstk else ""
+                            is_index_or_toc_entry = bool(
+                                re.search(r"[\xb7\u2022\.\-–\s]+\d+\s*$", current_text)
+                            )
+                            if pstk[-1].text_length > 1 and (
+                                pstk[-1].has_column_gap
+                                or is_index_or_toc_entry
+                                or line_ends_paragraph(xt.x1, page_class_bounds.get(int(cls)))
                             ):
                                 close_style(len(sstk) - 1)
                                 new_paragraph(child, cls)
@@ -1170,14 +1382,35 @@ class TranslateConverter(PDFConverterEx):
             return self.translator.translate(s)
 
         def translate_segment(s: str) -> str:
+            s = normalize_text(s)
+            s = replace_math_connectors(s, self.translator.lang_out)
             preferred = preferred_translation(s, self.translator.lang_out)
             if preferred is not None:
                 return preferred
             glossary_hit = apply_glossary(s)
             if glossary_hit is not None:
                 return glossary_hit
+            if self.glossary_manager and s.strip():
+                exact_key = s.strip()
+                if exact_key in self.glossary_manager.entries:
+                    return self.glossary_manager.entries[exact_key].translation
+                if exact_key.lower() in self.glossary_manager.entries:
+                    return self.glossary_manager.entries[exact_key.lower()].translation
             encoded = encode_formula_placeholders(s)
-            translated = request_translation(encoded)
+            token_map: dict[str, str] = {}
+            to_translate = encoded
+            if self.glossary_manager and self.glossary_manager.entries:
+                to_translate, token_map = self.glossary_manager.pre_mask_terms(encoded)
+            # Ensure semantic whitespace boundaries around formula token pairs to preserve
+            # surrounding words and condition connectors across all languages
+            to_translate = re.sub(
+                r"(\S)(<b\d+></b\d+>)",
+                r"\1 \2",
+                re.sub(r"(<b\d+></b\d+>)(\S)", r"\1 \2", to_translate),
+            )
+            translated = request_translation(to_translate)
+            if token_map:
+                translated = self.glossary_manager.post_restore_terms(translated, token_map)
             restored = restore_formula_placeholders(s, translated)
             if self.translator.lang_out.lower() in CJK_WRAP_LANGUAGES:
                 restored = add_cjk_latin_spacing(restored)
@@ -1209,6 +1442,12 @@ class TranslateConverter(PDFConverterEx):
                     self.record_translation_failure(text, _failure_reason(e))
                 raise
 
+        for _idx in range(len(sstk)):
+            sstk[_idx] = normalize_text(sstk[_idx])
+            sstk[_idx] = replace_math_connectors(
+                sstk[_idx], self.translator.lang_out
+            )
+
         # Counted here rather than inside worker: worker runs on the pool, and
         # "+= 1" from several threads drops updates.
         translatable = sum(
@@ -1238,6 +1477,14 @@ class TranslateConverter(PDFConverterEx):
             if glossary_hit is not None:
                 news[index] = glossary_hit
                 continue
+            if self.glossary_manager and segment.strip():
+                exact_key = segment.strip()
+                if exact_key in self.glossary_manager.entries:
+                    news[index] = self.glossary_manager.entries[exact_key].translation
+                    continue
+                if exact_key.lower() in self.glossary_manager.entries:
+                    news[index] = self.glossary_manager.entries[exact_key.lower()].translation
+                    continue
             if _is_batchable_segment(segment, batcher.max_batch_chars) and can_batch:
                 batch_positions.append(index)
                 batch_texts.append(segment)
@@ -1597,7 +1844,15 @@ class TranslateConverter(PDFConverterEx):
                     tmp_ptr += 1
             if total_avail > 0 and total_new_width > total_avail * 1.05:
                 ratio = total_avail / total_new_width
-                if not brk and ratio < 0.5 and new != sstk[id]:
+                if not brk:
+                    c_bound = self.class_bounds.get(ltpage.pageid, {}).get(int(pstk[id].cls))
+                    if c_bound and c_bound[2] > x1:
+                        extended_avail = paragraph_width_budget(x, x0, c_bound[2], 1)
+                        if extended_avail > total_avail:
+                            total_avail = extended_avail
+                            ratio = total_avail / total_new_width
+                ratio = min(1.0, ratio)
+                if not brk and ratio < 0.35 and new != sstk[id]:
                     # Only a translation can fall back; source text has
                     # nowhere to fall back to, and reporting it as an
                     # untranslated segment twice would overstate the loss.
@@ -1606,7 +1861,7 @@ class TranslateConverter(PDFConverterEx):
                     )
                     new = sstk[id]
                 else:
-                    size = pstk[id].size * max(ratio, 0.5)
+                    size = pstk[id].size * min(1.0, max(ratio, 0.35))
 
             # Pre-compute word-boundary line breaks to avoid mid-word splits
             if brk:

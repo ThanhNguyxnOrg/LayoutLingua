@@ -12,7 +12,7 @@ Before acting:
 1. Read `../../../SKILL.md` completely and follow its workflow and boundaries.
 2. Read `../../../agent-knowledge/index.md`, then its routed PDF engine,
    regression, and validation files relevant to the request.
-3. Resolve commands from the repository root containing `pdf2zh/` and
+3. Resolve commands from the repository root containing `layoutlingua/` and
    `scripts/translate_pdf.py`, not from this adapter directory.
 
 On macOS use `.venv/bin/python` and `bash build-macos.sh`; on Windows use

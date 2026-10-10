@@ -1,7 +1,7 @@
 """Unit tests for the Cross-Page Paragraph Stitcher."""
 
 import unittest
-from pdf2zh.stitcher import (
+from layoutlingua.stitcher import (
     begins_with_continuation,
     ends_with_sentence_break,
     is_cross_page_continuation,

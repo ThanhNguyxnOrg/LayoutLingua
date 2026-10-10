@@ -11,17 +11,17 @@ from types import SimpleNamespace
 import numpy as np
 import requests
 
-import pdf2zh.cache as cache_module
-import pdf2zh.converter as converter_module
-import pdf2zh.translator as translator_module
-from pdf2zh.batch import BATCH_DELIMITER, TranslationBatcher
-from pdf2zh.cache import TranslationCache, clean_test_db, init_test_db
-from pdf2zh.converter import (
+import layoutlingua.cache as cache_module
+import layoutlingua.converter as converter_module
+import layoutlingua.translator as translator_module
+from layoutlingua.batch import BATCH_DELIMITER, TranslationBatcher
+from layoutlingua.cache import TranslationCache, clean_test_db, init_test_db
+from layoutlingua.converter import (
     _is_batchable_segment,
     _is_transient_translation_error,
     apply_glossary,
 )
-from pdf2zh.translator import (
+from layoutlingua.translator import (
     CircuitOpenError,
     DeepLXTranslator,
     FormulaPlaceholderError,
@@ -115,22 +115,22 @@ class PerfGuardsTests(unittest.TestCase):
 
 class RetryWaitsTests(unittest.TestCase):
     def test_retry_after_delta_seconds(self):
-        from pdf2zh.converter import _retry_after_seconds
+        from layoutlingua.converter import _retry_after_seconds
         exc = SimpleNamespace(response=SimpleNamespace(headers={"Retry-After": "120"}, status_code=429))
         self.assertEqual(_retry_after_seconds(exc), 60.0)
 
     def test_retry_after_garbage_falls_back(self):
-        from pdf2zh.converter import _retry_after_seconds
+        from layoutlingua.converter import _retry_after_seconds
         exc = SimpleNamespace(response=SimpleNamespace(headers={"Retry-After": "banana"}, status_code=429))
         self.assertIsNone(_retry_after_seconds(exc))
 
     def test_retry_after_missing_is_none(self):
-        from pdf2zh.converter import _retry_after_seconds
+        from layoutlingua.converter import _retry_after_seconds
         self.assertIsNone(_retry_after_seconds(ValueError("nope")))
 
     def test_retry_after_http_date_future_and_past(self):
         from email.utils import formatdate
-        from pdf2zh.converter import _retry_after_seconds
+        from layoutlingua.converter import _retry_after_seconds
         future = formatdate(time.time() + 30, usegmt=True)
         past = formatdate(time.time() - 30, usegmt=True)
         dated = lambda raw: SimpleNamespace(
@@ -150,7 +150,7 @@ class RetryWaitsTests(unittest.TestCase):
         )
 
     def test_retry_after_wait_never_raises(self):
-        from pdf2zh.converter import _RetryAfterWait
+        from layoutlingua.converter import _RetryAfterWait
 
         class BadHeaders:
             def get(self, _key):
@@ -166,7 +166,7 @@ class RetryWaitsTests(unittest.TestCase):
         self.assertEqual(_RetryAfterWait()(state), 0.0)
 
     def test_breaker_wins_over_wait(self):
-        from pdf2zh.translator import CircuitOpenError
+        from layoutlingua.translator import CircuitOpenError
         self.assertFalse(_is_transient_translation_error(CircuitOpenError("blocked")))
 
 
@@ -273,7 +273,7 @@ class ExternalGlossaryTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        from pdf2zh.translator import load_segment_table
+        from layoutlingua.translator import load_segment_table
         table = load_segment_table(str(table_path))
         self.assertEqual(table, {"ok segment": "đoạn ổn"})
 
@@ -316,7 +316,7 @@ class DeepLXTranslatorTests(unittest.TestCase):
             translator.do_translate("x" * 1501)
 
     def test_429_raises_transient_http_error(self):
-        from pdf2zh.converter import _is_transient_translation_error
+        from layoutlingua.converter import _is_transient_translation_error
         translator = self._translator()
         translator.session.post = self._stub(status=429, payload={"code": 429})
         with self.assertRaises(requests.HTTPError) as context:
@@ -365,7 +365,7 @@ class LayoutCacheTests(unittest.TestCase):
         return SimpleNamespace(boxes=boxes, names={0: "abandon", 1: "text"})
 
     def test_layout_round_trip_preserves_boxes(self):
-        from pdf2zh.high_level import _decode_page_layout, _encode_page_layout
+        from layoutlingua.high_level import _decode_page_layout, _encode_page_layout
         decoded = _decode_page_layout(_encode_page_layout(self._layout()))
         self.assertEqual(decoded.names, {0: "abandon", 1: "text"})
         self.assertEqual(len(decoded.boxes), 2)
@@ -373,14 +373,14 @@ class LayoutCacheTests(unittest.TestCase):
         self.assertAlmostEqual(decoded.boxes[1].conf, 0.5)
 
     def test_corrupt_layout_cache_falls_back(self):
-        from pdf2zh.high_level import _decode_page_layout
+        from layoutlingua.high_level import _decode_page_layout
         self.assertIsNone(_decode_page_layout("not-json"))
         self.assertIsNone(_decode_page_layout('{"names": {}, "rows": [[1, 2]]}'))
         self.assertIsNone(_decode_page_layout('{"names": {}}'))
 
     def test_failure_reason_is_actionable(self):
-        from pdf2zh.converter import _failure_reason
-        from pdf2zh.translator import CircuitOpenError
+        from layoutlingua.converter import _failure_reason
+        from layoutlingua.translator import CircuitOpenError
         self.assertEqual(_failure_reason(CircuitOpenError("blocked")), "RateLimited")
         self.assertEqual(
             _failure_reason(_status_error(429)),

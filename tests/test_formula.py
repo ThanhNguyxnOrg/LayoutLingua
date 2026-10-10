@@ -1,7 +1,7 @@
 """Unit tests for the Enhanced Formula Protection and Recovery module."""
 
 import unittest
-from pdf2zh.formula import (
+from layoutlingua.formula import (
     extract_placeholder_ids,
     normalize_mt_placeholders,
     validate_formula_integrity,

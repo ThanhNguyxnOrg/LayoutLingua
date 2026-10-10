@@ -13,7 +13,7 @@ Run from the repository root with the platform virtual environment:
 ```text
 python -m unittest discover -s tests -v
 python -m pip check
-python -m ruff check pdf2zh scripts app tests --select E9,F63,F7,F82
+python -m ruff check layoutlingua scripts app tests --select E9,F63,F7,F82
 ```
 
 `git diff --check` must be clean. Run `app/gui.py --smoke-test`; after packaging,

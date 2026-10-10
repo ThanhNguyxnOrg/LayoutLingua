@@ -3,9 +3,8 @@
 import tempfile
 import unittest
 from pathlib import Path
-from pdf2zh.checkpoint import (
+from layoutlingua.checkpoint import (
     CheckpointManager,
-    DefectRecord,
     is_reference_section_heading,
 )
 

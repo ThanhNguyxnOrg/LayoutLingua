@@ -12,7 +12,7 @@
   `app/update.py` also carries the PowerShell helper that performs the swap.
 - `scripts/translate_pdf.py`: supported CLI and stable output staging.
 - `scripts/fetch_assets.py`: downloads the layout model and Unicode PDF font.
-- `pdf2zh/`: bundled extraction, translation, preservation, and PDF rendering.
+- `layoutlingua/`: bundled extraction, translation, preservation, and PDF rendering.
 - `tests/`: standard-library `unittest` regressions.
 - `references/`: product preservation contract.
 - `app.spec`, `build.ps1`: Windows packaging.
@@ -60,7 +60,7 @@ test PDFs or packaged artifacts.
 
 ## Fast Review Path (read-only, no heavy gate)
 
-Core = `pdf2zh/`, `scripts/translate_pdf.py`, preservation contract.
+Core = `layoutlingua/`, `scripts/translate_pdf.py`, preservation contract.
 Review = read-only diff inspection, never mutate, never run the full gate.
 
 - `git diff --stat` first, then hunks only; prefer three-dot `BASE...HEAD`.

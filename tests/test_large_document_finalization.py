@@ -7,7 +7,7 @@ from unittest import mock
 
 from pdfminer.pdfexceptions import PDFValueError
 
-from pdf2zh import high_level
+from layoutlingua import high_level
 
 
 class LargeDocumentFinalizationTests(unittest.TestCase):

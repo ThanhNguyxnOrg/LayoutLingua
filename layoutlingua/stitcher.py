@@ -8,9 +8,7 @@ Addresses pain points from BabelDOC, Docling #3422, and Marker #885.
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Tuple
 
 TERMINAL_PUNCTUATION = (".", "!", "?", "。", "！", "？", ":", "：", ";")
 

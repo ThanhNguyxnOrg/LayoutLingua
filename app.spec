@@ -29,11 +29,11 @@ datas += collect_data_files("babeldoc")
 
 hiddenimports = [
     "peewee",
-    "pdf2zh.doclayout",  # reached through importlib.import_module, not a static import
-    "pdf2zh.high_level",
-    "pdf2zh.converter",
-    "pdf2zh.translator",
-    # Reached only through pdf2zh.high_level; naming them keeps the compiled
+    "layoutlingua.doclayout",  # reached through importlib.import_module, not a static import
+    "layoutlingua.high_level",
+    "layoutlingua.converter",
+    "layoutlingua.translator",
+    # Reached only through layoutlingua.high_level; naming them keeps the compiled
     # extension and its vendored qpdf in the bundle even if that trail changes.
     "pikepdf",
     "pikepdf._core",

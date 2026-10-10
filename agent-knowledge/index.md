@@ -15,7 +15,7 @@ here and must be updated with the code that changes it.
 - The source PDF is immutable. Write translations to a separate output path.
 - Prefer a partial but structurally valid translation over damaged formulas,
   missing markers, broken tables, lost styles, or clipped text.
-- Use the bundled `pdf2zh/` core and supported CLI. Do not silently substitute
+- Use the bundled `layoutlingua/` core and supported CLI. Do not silently substitute
   the PyPI package or add OCR/complex-script support that the engine lacks.
 - Generated PDFs, models, optimized graphs, caches, build folders, virtual
   environments, and release archives stay out of commits.

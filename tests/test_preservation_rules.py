@@ -5,13 +5,13 @@ from types import SimpleNamespace
 
 from pdfminer.pdfinterp import PDFResourceManager
 
-from pdf2zh.converter import (
+from layoutlingua.converter import (
     TranslateConverter,
     is_translatable_segment,
     run_is_prose,
 )
-from pdf2zh.high_level import _classify_fully_preserved_page
-from pdf2zh.rules import (
+from layoutlingua.high_level import _classify_fully_preserved_page
+from layoutlingua.rules import (
     BULLET_CHARACTERS,
     CJK_WRAP_LANGUAGES,
     PROSE_WORD_PATTERN,

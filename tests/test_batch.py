@@ -1,7 +1,7 @@
 """Unit tests for the Translation Batching module."""
 
 import unittest
-from pdf2zh.batch import BATCH_DELIMITER, TranslationBatcher
+from layoutlingua.batch import BATCH_DELIMITER, TranslationBatcher
 
 
 class TestTranslationBatcher(unittest.TestCase):

@@ -9,7 +9,7 @@ Addresses pain points from Marker #885 and PDFMathTranslate multi-request issues
 from __future__ import annotations
 
 import logging
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional
 
 logger = logging.getLogger(__name__)
 

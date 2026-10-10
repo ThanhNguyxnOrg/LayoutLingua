@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pymupdf
 
-from pdf2zh.converter import (
+from layoutlingua.converter import (
     IDENTITY_ORIENTATION,
     OpType,
     TextStyle,
@@ -43,9 +43,9 @@ from pdf2zh.converter import (
     vertical_ink_extent,
     vertical_shift_to_bounds,
 )
-from pdf2zh.high_level import output_style_font_paths
-from pdf2zh.converter import PDFConverterEx
-from pdf2zh.pdfinterp import PDFPageInterpreterEx, extgstate_is_safe
+from layoutlingua.high_level import output_style_font_paths
+from layoutlingua.converter import PDFConverterEx
+from layoutlingua.pdfinterp import PDFPageInterpreterEx, extgstate_is_safe
 from pdfminer.pdfinterp import PDFGraphicState, PDFResourceManager
 from pdfminer.psparser import PSLiteral
 

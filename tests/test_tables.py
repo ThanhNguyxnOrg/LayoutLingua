@@ -1,9 +1,8 @@
 """Unit tests for the Structure-Aware Table Engine."""
 
 import unittest
-from pdf2zh.tables import (
+from layoutlingua.tables import (
     TableCell,
-    TableGrid,
     compute_table_grits_score,
     fit_cell_text,
     is_cell_numeric_or_identifier,

@@ -15,8 +15,8 @@ from typing import Any, ClassVar
 
 import requests
 
-from pdf2zh.batch import BATCH_DELIMITER
-from pdf2zh.cache import TranslationCache
+from layoutlingua.batch import BATCH_DELIMITER
+from layoutlingua.cache import TranslationCache
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +228,36 @@ class GoogleTranslator(BaseTranslator):
     # than this; it is the service's limit, not a preference.
     MAXIMUM_SEGMENT_CHARACTERS = 5000
 
+    def _parse_response(self, response: requests.Response) -> str | None:
+        """Parse translated text from either client RPC JSON or HTML scrapers."""
+        # 1. Try parsing Client RPC JSON (clients5 or googleapis gtx)
+        try:
+            data = response.json()
+            if isinstance(data, list) and len(data) > 0:
+                if isinstance(data[0], list) and len(data[0]) > 0:
+                    first = data[0][0]
+                    if isinstance(first, str):
+                        # clients5 returns [["translated text", "src_lang"]]
+                        if len(data[0]) == 2 and isinstance(data[0][1], str) and len(data[0][1]) <= 5:
+                            return remove_control_characters(html.unescape(first))
+                        # gtx returns [[part1, orig1], [part2, orig2], ...]
+                        return remove_control_characters(
+                            html.unescape("".join(p[0] for p in data[0] if p and isinstance(p[0], str)))
+                        )
+                elif isinstance(data[0], str):
+                    return remove_control_characters(html.unescape(data[0]))
+        except Exception:
+            pass
+
+        # 2. Try HTML scraping regex (translate.google.com/m and test stubs)
+        match = re.search(
+            r'(?s)class="(?:t0|result-container)">(.*?)<',
+            response.text,
+        )
+        if match is not None:
+            return remove_control_characters(html.unescape(match.group(1)))
+        return None
+
     def do_translate(self, text: str) -> str:
         if len(text) > self.MAXIMUM_SEGMENT_CHARACTERS:
             raise SegmentTooLongError(
@@ -236,28 +266,58 @@ class GoogleTranslator(BaseTranslator):
             )
         self._throttle()
         _circuit_allows_request()
-        response = self.session.get(
-            self.endpoint,
-            params={"tl": self.lang_out, "sl": self.lang_in, "q": text},
-            headers=self.headers,
-            timeout=30,
-        )
-        if response.status_code == 400:
-            raise RuntimeError("Google Translate rejected the text segment")
-        try:
-            response.raise_for_status()
-        except requests.HTTPError:
-            if response.status_code == 429:
-                _circuit_record_429()
-            raise
-        _circuit_record_success()
-        match = re.search(
-            r'(?s)class="(?:t0|result-container)">(.*?)<',
-            response.text,
-        )
-        if match is None:
-            raise RuntimeError("Google Translate response did not contain a translation result")
-        return remove_control_characters(html.unescape(match.group(1)))
+
+        # Primary: Google Chrome extension RPC (clients5.google.com) - high speed, no 429 captcha
+        # Secondary: Google Translate gtx single endpoint
+        # Tertiary: Legacy mobile web endpoint (and unit test stubs)
+        targets = [
+            (
+                "https://clients5.google.com/translate_a/t",
+                {"client": "dict-chrome-ex", "sl": self.lang_in, "tl": self.lang_out, "q": text},
+            ),
+            (
+                "https://translate.googleapis.com/translate_a/single",
+                {"client": "gtx", "sl": self.lang_in, "tl": self.lang_out, "dt": "t", "q": text},
+            ),
+            (
+                self.endpoint,
+                {"tl": self.lang_out, "sl": self.lang_in, "q": text},
+            ),
+        ]
+
+        last_error: Exception | None = None
+        for url, params in targets:
+            try:
+                response = self.session.get(
+                    url,
+                    params=params,
+                    headers=self.headers,
+                    timeout=20,
+                )
+                if response.status_code == 400:
+                    continue
+                if response.status_code == 429:
+                    last_error = requests.HTTPError("429 Client Error", response=response)
+                    continue
+                response.raise_for_status()
+                parsed = self._parse_response(response)
+                if parsed is not None:
+                    _circuit_record_success()
+                    return parsed
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        if (
+            last_error is not None
+            and isinstance(last_error, requests.HTTPError)
+            and getattr(last_error.response, "status_code", 0) == 429
+        ):
+            _circuit_record_429()
+            raise last_error
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("Google Translate response did not contain a translation result")
 
 
 class DeepLXTranslator(BaseTranslator):
@@ -402,7 +462,7 @@ def validate_formula_placeholders(source: str, translated: str) -> None:
 
 def restore_formula_placeholders(source: str, translated: str) -> str:
     """Validate translator output and restore its tags to converter markers."""
-    from pdf2zh.formula import normalize_mt_placeholders
+    from layoutlingua.formula import normalize_mt_placeholders
 
     translated = normalize_mt_placeholders(translated)
     encoded_source = encode_formula_placeholders(source)

@@ -4,7 +4,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from pdf2zh.glossary import GlossaryManager
+
+from layoutlingua.glossary import GlossaryManager
 
 
 class TestGlossaryManager(unittest.TestCase):
@@ -57,13 +58,43 @@ class TestGlossaryManager(unittest.TestCase):
             self.assertEqual(count_csv, 2)
             self.assertIn("gradient", mgr.entries)
 
-    def test_acronym_extraction(self):
-        text = "We evaluate CNN, LSTM, and BLEU-4 scores on GPU clusters."
-        acronyms = GlossaryManager.extract_document_acronyms(text)
-        self.assertIn("CNN", acronyms)
-        self.assertIn("LSTM", acronyms)
-        self.assertIn("BLEU-4", acronyms)
-        self.assertIn("GPU", acronyms)
+    def test_load_from_jsonl(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            jsonl_file = Path(tmpdir) / "glossary.jsonl"
+            with open(jsonl_file, "w", encoding="utf-8") as f:
+                f.write('{"term": "attention", "translation": "sự chú ý"}\n')
+                f.write('{"src": "neural network", "dst": "mạng nơ-ron"}\n')
+
+            mgr = GlossaryManager()
+            count = mgr.load_from_file(jsonl_file)
+            self.assertEqual(count, 2)
+            self.assertIn("attention", mgr.entries)
+            self.assertIn("neural network", mgr.entries)
+
+    def test_converter_glossary_initialization(self):
+        from layoutlingua.converter import TranslateConverter
+        from layoutlingua.pdfinterp import PDFResourceManager
+
+        converter = TranslateConverter(
+            PDFResourceManager(),
+            service="google",
+            thread=0,
+            glossary={"neural network": "mạng nơ-ron"},
+        )
+        self.assertEqual(converter.thread, 1)
+        self.assertIsNotNone(converter.glossary_manager)
+        self.assertIn("neural network", converter.glossary_manager.entries)
+
+    def test_thread_zero_guard(self):
+        from layoutlingua.converter import TranslateConverter
+        from layoutlingua.pdfinterp import PDFResourceManager
+
+        converter = TranslateConverter(
+            PDFResourceManager(),
+            service="google",
+            thread=0,
+        )
+        self.assertEqual(converter.thread, 1)
 
 
 if __name__ == "__main__":

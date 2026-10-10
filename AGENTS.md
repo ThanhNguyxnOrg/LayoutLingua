@@ -11,7 +11,7 @@ those details into this file; update the shared knowledge when behavior changes.
 
 - Preserve source PDFs and unrelated user changes. Generated PDFs, models,
   caches, virtual environments, `build/`, and `dist/` are not source artifacts.
-- Keep preservation-sensitive changes in `pdf2zh/` small and backed by a
+- Keep preservation-sensitive changes in `layoutlingua/` small and backed by a
   regression test that demonstrates the failing geometry, marker, or glyph.
 - Use Python 3.12 and the repository virtual environment. Run the full
   `unittest` suite, `pip check`, hard-error Ruff checks, and proportionate PDF

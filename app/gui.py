@@ -54,6 +54,8 @@ from scripts.translate_pdf import (  # noqa: E402
     translate_pdf,
 )
 
+DEFAULT_GUI_TARGET_LANGUAGE = "en"
+
 FONT_DIRECTORY = APP_ROOT / "app" / "fonts"
 ASSET_DIRECTORY = APP_ROOT / "app" / "assets"
 UI_FONT = "Be Vietnam Pro"
@@ -638,7 +640,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         self.language = ScrollableDropdown(
             controls,
             values=names,
-            default_value=LANGUAGE_NAMES[DEFAULT_TARGET_LANGUAGE],
+            default_value=LANGUAGE_NAMES[DEFAULT_GUI_TARGET_LANGUAGE],
             on_change=self._on_language_changed,
             width=220,
             height=34,
@@ -1449,7 +1451,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         changelog_scroll.grid_columnconfigure(0, weight=1)
         self._populate_changelog_ui(changelog_scroll)
 
-        # Tab 2: Credits & Research
+        # Tab 2: Credits
         credits_frame = ctk.CTkFrame(content_container, fg_color="transparent")
         credits_frame.grid_columnconfigure(0, weight=1)
         tabs["credits"] = credits_frame
@@ -1458,32 +1460,82 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         credits_scroll.pack(fill="both", expand=True)
         credits_scroll.grid_columnconfigure(0, weight=1)
 
-        credit_items = [
-            ("BabelDOC (ACL 2026)", "Advanced multi-space adaptive constraint solver, dynamic diacritic headroom compensation, and visual Bleed preservation bounds."),
-            ("Docling (IBM Research)", "Unified multimodal document representation, structure-aware reading order extraction, and granular layout bounding."),
-            ("Surya & Marker (Vik Paruchuri)", "Column gutter gap slicing and topological reading order DAG inference."),
-            ("TATR & PubTables-1M", "Structure-aware table cell decomposition and cell-level coordinate isolation."),
-            ("PDFMathTranslate", "100% native vector math operator preservation without image re-rasterization."),
-            ("PyMuPDF & pdfminer.six", "Underlying high-fidelity PDF stream interpreter, graphics state matrix, and font glyph mapping."),
-        ]
+        ctk.CTkLabel(
+            credits_scroll, text="Tác giả & Phát triển dự án",
+            font=ctk.CTkFont(self.ui_font, size=14, weight="bold"),
+            text_color=("gray15", "#F8FAFC"), anchor="w",
+        ).pack(fill="x", pady=(0, 4))
 
         ctk.CTkLabel(
-            credits_scroll, text="Scientific Foundation & Open-Source Acknowledgements",
-            font=ctk.CTkFont(self.ui_font, size=13, weight="bold"),
-            text_color=("gray15", "#F8FAFC"), anchor="w",
+            credits_scroll,
+            text="LayoutLingua được thiết kế, xây dựng và duy trì bởi Thành Nguyễn.",
+            font=ctk.CTkFont(self.ui_font, size=11), text_color=MUTED, justify="left", wraplength=580, anchor="w",
         ).pack(fill="x", pady=(0, PAD))
 
-        for title, desc in credit_items:
-            card = ctk.CTkFrame(credits_scroll, corner_radius=6, fg_color=HOVER, border_width=1, border_color=BORDER_IDLE)
-            card.pack(fill="x", pady=4)
-            ctk.CTkLabel(
-                card, text=title, font=ctk.CTkFont(self.ui_font, size=12, weight="bold"),
-                text_color=ACCENT, anchor="w",
-            ).pack(fill="x", padx=PAD, pady=(PAD, 2))
-            ctk.CTkLabel(
-                card, text=desc, font=ctk.CTkFont(self.ui_font, size=11),
-                text_color=MUTED, anchor="w", justify="left", wraplength=580,
-            ).pack(fill="x", padx=PAD, pady=(0, PAD))
+        # Main Author Card
+        author_card = ctk.CTkFrame(credits_scroll, corner_radius=8, fg_color=HOVER, border_width=1, border_color=BORDER_IDLE)
+        author_card.pack(fill="x", pady=4)
+
+        ctk.CTkLabel(
+            author_card, text="Thành Nguyễn (RealThanhNguyxn)",
+            font=ctk.CTkFont(self.ui_font, size=13, weight="bold"),
+            text_color=ACCENT, anchor="w",
+        ).pack(fill="x", padx=PAD, pady=(PAD, 2))
+
+        ctk.CTkLabel(
+            author_card, text="Creator & Lead Architect • ThanhNguyxnOrg",
+            font=ctk.CTkFont(self.ui_font, size=11, weight="bold"),
+            text_color=("gray20", "#CBD5E1"), anchor="w",
+        ).pack(fill="x", padx=PAD, pady=(0, 6))
+
+        ctk.CTkLabel(
+            author_card,
+            text=(
+                "Tác giả, thiết kế kiến trúc và phát triển chính hệ thống LayoutLingua.\n"
+                "• Thiết kế engine bảo toàn bố cục không gian (Spatial Reading Order DAG) & multi-column extraction.\n"
+                "• Bảo toàn 100% công thức toán học vector gốc, bảng biểu phức tạp và typography.\n"
+                "• Tối ưu hóa bộ nhớ, streaming PDF pipeline và hoàn thiện ứng dụng trên Windows, macOS, Linux, Android."
+            ),
+            font=ctk.CTkFont(self.ui_font, size=11),
+            text_color=MUTED, anchor="w", justify="left", wraplength=580,
+        ).pack(fill="x", padx=PAD, pady=(0, PAD))
+
+        author_actions = ctk.CTkFrame(author_card, fg_color="transparent")
+        author_actions.pack(fill="x", padx=PAD, pady=(0, PAD))
+
+        ctk.CTkButton(
+            author_actions, text="🌐 GitHub Profile ↗", width=140, height=30,
+            command=lambda: webbrowser.open_new_tab("https://github.com/ThanhNguyxnOrg"),
+            font=ctk.CTkFont(self.ui_font, size=11, weight="bold"),
+        ).pack(side="left", padx=(0, PAD // 2))
+
+        ctk.CTkButton(
+            author_actions, text="⭐ LayoutLingua Repo ↗", width=155, height=30,
+            fg_color="transparent", border_width=1, border_color=ACCENT,
+            text_color=ACCENT, hover_color=HOVER,
+            command=lambda: webbrowser.open_new_tab(f"https://github.com/{REPOSITORY}"),
+            font=ctk.CTkFont(self.ui_font, size=11),
+        ).pack(side="left")
+
+        # Project Info Card
+        project_card = ctk.CTkFrame(credits_scroll, corner_radius=8, fg_color=HOVER, border_width=1, border_color=BORDER_IDLE)
+        project_card.pack(fill="x", pady=6)
+
+        ctk.CTkLabel(
+            project_card, text="Bản quyền & Phát hành",
+            font=ctk.CTkFont(self.ui_font, size=12, weight="bold"),
+            text_color=ACCENT, anchor="w",
+        ).pack(fill="x", padx=PAD, pady=(PAD, 2))
+
+        ctk.CTkLabel(
+            project_card,
+            text=(
+                "LayoutLingua là dự án phần mềm mã nguồn mở tự do được phát hành dưới giấy phép AGPL-3.0 License.\n"
+                "Mọi đóng góp, báo cáo lỗi và đóng góp tính năng đều được hoan nghênh tại kho lưu trữ GitHub chính thức."
+            ),
+            font=ctk.CTkFont(self.ui_font, size=11),
+            text_color=MUTED, anchor="w", justify="left", wraplength=580,
+        ).pack(fill="x", padx=PAD, pady=(0, PAD))
 
         # Tab 3: Report Issue
         report_frame = ctk.CTkFrame(content_container, fg_color="transparent")
@@ -1550,7 +1602,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
                 detected_os = "Windows 11"
 
             # 2. Detect selected target language
-            target_lang = "vi"
+            target_lang = DEFAULT_GUI_TARGET_LANGUAGE
             try:
                 selected_display = self.language.get()
                 for code, display in LANGUAGE_NAMES.items():
@@ -1606,7 +1658,7 @@ class App(ctk.CTk, TkinterDnD.DnDWrapper):
         diag_status.pack(anchor="w", pady=(2, 0))
 
         # Build Tab buttons in tab_frame
-        for name, label in (("changelog", "📋 Changelog"), ("credits", "🎖️ Credits & Research"), ("report", "🐞 Report Issue")):
+        for name, label in (("changelog", "📋 Changelog"), ("credits", "🎖️ Credits"), ("report", "🐞 Report Issue")):
             btn = ctk.CTkButton(
                 tab_frame, text=label, width=130, height=28, corner_radius=6,
                 fg_color="transparent", border_width=1, border_color=BORDER_IDLE,
@@ -1733,7 +1785,7 @@ def verify_engine() -> None:
     document. These imports are the rest of the native stack: PDF read/write,
     the repair path, and the onnxruntime session behind layout detection.
     """
-    import pdf2zh.high_level  # noqa: F401 - pulls pikepdf, pymupdf and qpdf
+    import layoutlingua.high_level  # noqa: F401 - pulls pikepdf, pymupdf and qpdf
     import pikepdf._core  # noqa: F401 - the extension that failed on its own
     import pymupdf  # noqa: F401
 

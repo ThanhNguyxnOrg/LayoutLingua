@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import tempfile
 from collections import Counter
-import unittest
+import os
 from pathlib import Path
+import tempfile
+import unittest
 from unittest import mock
 
-from pdf2zh.high_level import TranslationReport
+from layoutlingua.high_level import TranslationReport
 from scripts import translate_pdf
 
 
@@ -110,21 +111,21 @@ class TranslatePdfTests(unittest.TestCase):
     def test_requires_the_bundled_core_instead_of_the_pypi_wheel(self):
         translate_pdf._require_core()
 
-        import pdf2zh
+        import layoutlingua
 
         self.assertTrue(
-            Path(pdf2zh.__file__).resolve().is_relative_to(translate_pdf.BUNDLED_CORE)
+            Path(layoutlingua.__file__).resolve().is_relative_to(translate_pdf.BUNDLED_CORE)
         )
 
     def test_engine_contract_forwards_language_engine_and_handoff_files(self):
         fake_model = object()
         with (
             mock.patch(
-                "pdf2zh.doclayout.OnnxModel.load_available",
+                "layoutlingua.doclayout.OnnxModel.load_available",
                 return_value=fake_model,
             ),
             mock.patch(
-                "pdf2zh.high_level.translate",
+                "layoutlingua.high_level.translate",
                 return_value=[("translated.pdf", "")],
             ) as core_translate,
         ):
@@ -254,7 +255,7 @@ class TranslatePdfTests(unittest.TestCase):
                     translate_pdf._target_language(rejected)
 
     def test_google_translator_maps_language_codes_correctly(self):
-        from pdf2zh.translator import GoogleTranslator
+        from layoutlingua.translator import GoogleTranslator
 
         translator_zh = GoogleTranslator("en", "zh")
         self.assertEqual(translator_zh.lang_out, "zh-CN")
@@ -302,6 +303,31 @@ class TranslatePdfTests(unittest.TestCase):
         bare = translate_pdf._parser().parse_args([str(self.source)])
         with self.assertRaisesRegex(translate_pdf.TranslationError, "--output-dir is required"):
             translate_pdf._validate_arguments(bare)
+
+    def test_glossary_argument_resolution(self):
+        glossary_file = self.root / "glossary.json"
+        glossary_file.write_text('{"term": "test"}', encoding="utf-8")
+        envs = translate_pdf._segment_envs(None, None, glossary_file)
+        self.assertIn("glossary", envs)
+        self.assertEqual(envs["glossary"], str(glossary_file.resolve()))
+        self.assertEqual(os.environ.get("LAYOUTLINGUA_GLOSSARY"), str(glossary_file.resolve()))
+
+    @mock.patch.object(translate_pdf, "_require_core")
+    @mock.patch.object(translate_pdf, "_run_engine")
+    def test_dual_flag_generates_dual_output(self, run, _core):
+        def dual_side_effect(source, temp_output, *args, **kwargs):
+            (temp_output / f"{source.stem}-mono.pdf").write_bytes(b"%PDF-1.7\nmono")
+            (temp_output / f"{source.stem}-dual.pdf").write_bytes(b"%PDF-1.7\ndual")
+            return TranslationReport(translatable_segments=5)
+
+        run.side_effect = dual_side_effect
+        result = translate_pdf.translate_pdf(self.source, self.output, dual=True)
+
+        self.assertIsNotNone(result.path)
+        self.assertIsNotNone(result.dual_path)
+        self.assertEqual(result.dual_path, self.output / "guide-vi-dual.pdf")
+        self.assertEqual(result.dual_path.read_bytes(), b"%PDF-1.7\ndual")
+        self.assertTrue(run.call_args[1].get("create_dual", False))
 
 
 if __name__ == "__main__":

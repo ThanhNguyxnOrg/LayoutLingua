@@ -33,22 +33,22 @@ flowchart TD
 
 ### 🧩 Core Pipeline Stages:
 
-1. 📐 **Geometry & Layout Extraction (`pdf2zh/layout.py`):**
+1. 📐 **Geometry & Layout Extraction (`layoutlingua/doclayout.py` & `layoutlingua/reading_order.py`):**
    - Extracts bounding boxes for characters, lines, and blocks.
    - Merges fragmented text spans into natural paragraph units while preserving columns and reading orders.
    - Detects and preserves non-text graphical elements (charts, tables, diagrams).
 
-2. 🛡️ **Semantic Formula & Notation Protection (`pdf2zh/rules.py` & `pdf2zh/converter.py`):**
+2. 🛡️ **Semantic Formula & Notation Protection (`layoutlingua/rules.py` & `layoutlingua/converter.py`):**
    - **Formulas & Math:** Isolates inline equations ($E=mc^2$) and multi-line LaTeX blocks using grammar-preserving token placeholders (`{{LL_F_xxx}}`).
    - **Calculus & Physics:** Protects differential operators ($\partial, \nabla$), multi-integrals ($\iint, \iiint, \oint$), and vectors.
    - **Chemistry:** Protects chemical reactions, reversible arrows ($\rightleftharpoons, \leftrightarrow$), state symbols, and stoichiometry numbers.
    - **Code & Citations:** Protects inline code tokens, variable names, URLs, bibliography tags (`[1]`, `[Smith et al.]`).
 
-3. ⚡ **Translation Dispatcher (`pdf2zh/translator.py`):**
+3. ⚡ **Translation Dispatcher (`layoutlingua/translator.py`):**
    - Dispatches batches of prose text asynchronously to selected translation engines (Google Free, DeepL API, Ollama Local LLMs, OpenAI, Azure, Zhipu, etc.).
    - Includes **Agent Handoff Mode**, dumping translatable chunks to JSONL for direct processing by AI coding agents (Claude, Codex, Gemini).
 
-4. 🔤 **Multi-lingual Font Matching & Typesetting (`pdf2zh/high_level.py`):**
+4. 🔤 **Multi-lingual Font Matching & Typesetting (`layoutlingua/high_level.py`):**
    - **Latin / European / Vietnamese:** Rendered using high-legibility Unicode fonts with full diacritic metric support.
    - **CJK (Chinese, Japanese, Korean):** Automatically routed to `SourceHanSerif` or system CJK serif/sans fonts.
    - Font scaling and line-height adjustments ensure translated text fits inside original bounding boxes without text overflows.

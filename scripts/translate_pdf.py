@@ -14,13 +14,13 @@ import threading
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
-    from pdf2zh.high_level import TranslationReport
+    from layoutlingua.high_level import TranslationReport
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
-BUNDLED_CORE = (SKILL_ROOT / "pdf2zh").resolve()
+BUNDLED_CORE = (SKILL_ROOT / "layoutlingua").resolve()
 if str(SKILL_ROOT) not in sys.path:
     sys.path.insert(0, str(SKILL_ROOT))
 
@@ -59,6 +59,7 @@ class Translation(NamedTuple):
     untranslated: int = 0
     reasons: Mapping[str, int] = MappingProxyType({})
     image_only_pages: tuple[int, ...] = ()
+    dual_path: Path | None = None
 
 
 # record_translation_failure passes up either an exception class name or one of
@@ -201,6 +202,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run visual regression & preservation verification after translation",
     )
+    parser.add_argument(
+        "--dual",
+        action="store_true",
+        help="Generate dual-language PDF with alternating pages alongside mono translation",
+    )
     return parser
 
 
@@ -216,28 +222,28 @@ def _validate_arguments(args: argparse.Namespace) -> None:
 
 def _require_core() -> None:
     try:
-        import pdf2zh
-        importlib.import_module("pdf2zh.doclayout")
+        import layoutlingua
+        importlib.import_module("layoutlingua.doclayout")
         # high_level pulls in the native stack - pikepdf/qpdf, PyMuPDF, onnx.
         # Without it a broken install slipped past this check and surfaced as a
         # raw ImportError from the engine, once per file in the queue, instead
         # of one actionable message before any work started.
-        importlib.import_module("pdf2zh.high_level")
+        importlib.import_module("layoutlingua.high_level")
     except ImportError as error:
         requirements = SKILL_ROOT / "requirements.txt"
         install = f'"{sys.executable}" -m pip install -r "{requirements}"'
         raise TranslationError(f"PDF core dependencies are missing. Run: {install}") from error
-    if pdf2zh.__version__ != CORE_VERSION:
+    if layoutlingua.__version__ != CORE_VERSION:
         raise TranslationError(
-            f"Expected bundled PDF core {CORE_VERSION}, found {pdf2zh.__version__}"
+            f"Expected bundled PDF core {CORE_VERSION}, found {layoutlingua.__version__}"
         )
-    if getattr(pdf2zh, "__ruleset__", None) != RULESET:
+    if getattr(layoutlingua, "__ruleset__", None) != RULESET:
         raise TranslationError("Bundled PDF core does not expose the required preservation ruleset")
     # A packaged build has no pip environment for a PyPI wheel to shadow the core,
     # and its module paths point inside the extraction directory rather than here.
     if getattr(sys, "frozen", False):
         return
-    module_path = Path(pdf2zh.__file__).resolve()
+    module_path = Path(layoutlingua.__file__).resolve()
     if not module_path.is_relative_to(BUNDLED_CORE):
         raise TranslationError(f"Refusing external PDF core: {module_path}")
 
@@ -284,8 +290,12 @@ def _pages_to_indices(pages: str | None) -> list[int] | None:
     return indices
 
 
-def _segment_envs(segments: Path | None, emit_segments: Path | None) -> dict[str, str]:
-    """Resolve the handoff file paths that the translator reads through `envs`."""
+def _segment_envs(
+    segments: Path | None,
+    emit_segments: Path | None,
+    glossary: Path | None = None,
+) -> dict[str, str]:
+    """Resolve the handoff and glossary file paths that the translator reads through `envs`."""
     envs: dict[str, str] = {}
     if segments is not None:
         source = segments.expanduser().resolve()
@@ -296,6 +306,13 @@ def _segment_envs(segments: Path | None, emit_segments: Path | None) -> dict[str
         emitted = emit_segments.expanduser().resolve()
         emitted.parent.mkdir(parents=True, exist_ok=True)
         envs["segments_out"] = str(emitted)
+    if glossary is not None:
+        glossary_path = glossary.expanduser().resolve()
+        if not glossary_path.is_file():
+            raise TranslationError(f"Glossary file does not exist: {glossary_path}")
+        envs["glossary"] = str(glossary_path)
+        envs["LAYOUTLINGUA_GLOSSARY"] = str(glossary_path)
+        os.environ["LAYOUTLINGUA_GLOSSARY"] = str(glossary_path)
     return envs
 
 
@@ -315,7 +332,7 @@ def _layout_model(bundled_path: str | None) -> object:
     """
     with _LAYOUT_MODEL_LOCK:
         if bundled_path not in _LAYOUT_MODEL:
-            from pdf2zh.doclayout import OnnxModel
+            from layoutlingua.doclayout import OnnxModel
 
             _LAYOUT_MODEL[bundled_path] = (
                 OnnxModel(bundled_path) if bundled_path else OnnxModel.load_available()
@@ -357,9 +374,10 @@ def _run_engine(
     engine: str,
     envs: dict[str, str],
     on_progress: Callable[[int, int], None] | None = None,
-) -> "TranslationReport":
+    **extra_kwargs: Any,
+) -> TranslationReport:
     """Run the core and return what it could not translate, and why."""
-    from pdf2zh.high_level import translate
+    from layoutlingua.high_level import translate
 
     # A packaged build ships the layout model so the first run needs no network.
     model = _layout_model(os.environ.get("PDF_TRANSLATE_MODEL"))
@@ -369,6 +387,10 @@ def _run_engine(
     if on_progress is not None:
         def callback(progress: object) -> None:
             on_progress(getattr(progress, "n", 0), getattr(progress, "total", 0) or 0)
+
+    translate_kwargs: dict[str, Any] = {}
+    if extra_kwargs.get("create_dual"):
+        translate_kwargs["create_dual"] = True
 
     result = translate(
         files=[str(source)],
@@ -382,6 +404,7 @@ def _run_engine(
         envs=envs,
         callback=callback,
         ignore_cache=ignore_cache,
+        **translate_kwargs,
     )
     if len(result) != 1:
         raise TranslationError("PDF core did not report one translated result")
@@ -401,12 +424,14 @@ def translate_pdf(
     engine: str = "google",
     segments: Path | None = None,
     emit_segments: Path | None = None,
+    glossary: Path | None = None,
+    dual: bool = False,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> Translation:
     """Translate one PDF, reporting any segments the engine could not translate."""
     _require_core()
     source = _validate_input(input_pdf)
-    envs = _segment_envs(segments, emit_segments)
+    envs = _segment_envs(segments, emit_segments, glossary)
 
     destination: Path | None = None
     destination_dir: Path | None = None
@@ -423,6 +448,7 @@ def translate_pdf(
     with tempfile.TemporaryDirectory(prefix="pdf-translate-", dir=destination_dir) as temp:
         temp_output = Path(temp)
         try:
+            engine_kwargs = {"create_dual": True} if dual else {}
             report = _run_engine(
                 source,
                 temp_output,
@@ -434,6 +460,7 @@ def translate_pdf(
                 engine,
                 envs,
                 on_progress,
+                **engine_kwargs,
             )
         except TranslationError:
             raise
@@ -455,7 +482,7 @@ def translate_pdf(
         untranslated = len(report.failures)
         image_only = tuple(sorted(report.image_only_pages))
         if destination is None:
-            return Translation(None, untranslated, report.reasons, image_only)
+            return Translation(None, untranslated, report.reasons, image_only, None)
 
         generated = temp_output / f"{source.stem}-mono.pdf"
         if not generated.is_file():
@@ -472,7 +499,19 @@ def translate_pdf(
         finally:
             staged.unlink(missing_ok=True)
 
-    return Translation(destination, untranslated, report.reasons, image_only)
+        dual_destination: Path | None = None
+        if dual and destination_dir is not None:
+            dual_candidates = sorted(temp_output.glob("*-dual.pdf"))
+            if dual_candidates:
+                dual_destination = destination_dir / f"{source.stem}-{target_language}-dual.pdf"
+                staged_dual = destination_dir / f".{dual_destination.name}.tmp"
+                try:
+                    shutil.copyfile(dual_candidates[0], staged_dual)
+                    staged_dual.replace(dual_destination)
+                finally:
+                    staged_dual.unlink(missing_ok=True)
+
+    return Translation(destination, untranslated, report.reasons, image_only, dual_destination)
 
 
 def _use_utf8_output() -> None:
@@ -503,12 +542,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             engine=args.engine,
             segments=args.segments,
             emit_segments=args.emit_segments,
+            glossary=args.glossary,
+            dual=args.dual,
         )
     except TranslationError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
     if result.path is not None:
         print(f"Translated PDF: {result.path}")
+    if result.dual_path is not None:
+        print(f"Dual-language PDF: {result.dual_path}")
     if result.image_only_pages:
         numbers = ", ".join(str(page + 1) for page in result.image_only_pages)
         print(

@@ -1,10 +1,9 @@
 """Unit tests for the Adaptive Typesetting and Multi-Space Constraint Solver."""
 
 import unittest
-from pdf2zh.typesetting import (
+from layoutlingua.typesetting import (
     TypesettingConstraints,
     solve_adaptive_typesetting,
-    word_wrap_text,
 )
 
 

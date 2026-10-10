@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 # Pattern matching cells containing purely numbers, units, identifiers, or short symbols
 NUMERIC_OR_IDENTIFIER_PATTERN = re.compile(
