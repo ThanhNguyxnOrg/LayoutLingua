@@ -5,17 +5,36 @@ from layoutlingua.core.ir import DocumentIR, GlyphSpan, LayoutRegion, PageGeomet
 from layoutlingua.core.parser import PDFParseError, parse_pdf
 from layoutlingua.ipc import JsonRpcServer
 from layoutlingua.translation.mock import MockTranslationProvider
+from layoutlingua.typesetting import (
+    BlockFittingDetail,
+    BlockFittingStatus,
+    FittingReport,
+    FontManager,
+    FontValidationError,
+    TypesetEngine,
+    TypesetOptions,
+    TypesetResult,
+)
 
 __all__ = [
     "__version__",
+    "BlockFittingDetail",
+    "BlockFittingStatus",
     "DocumentIR",
+    "FittingReport",
+    "FontManager",
+    "FontValidationError",
     "GlyphSpan",
+    "JsonRpcServer",
     "LayoutRegion",
+    "MockTranslationProvider",
+    "PDFParseError",
     "PageGeometry",
     "PageIR",
     "TextBlock",
-    "PDFParseError",
+    "TypesetEngine",
+    "TypesetOptions",
+    "TypesetResult",
     "parse_pdf",
-    "JsonRpcServer",
-    "MockTranslationProvider",
 ]
+
