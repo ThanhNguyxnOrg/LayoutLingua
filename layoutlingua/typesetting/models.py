@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
+
+import pymupdf
 
 
 class BlockFittingStatus(str, Enum):
@@ -16,6 +19,7 @@ class BlockFittingStatus(str, Enum):
     SKIPPED_FORMULA = "skipped_formula"
     SKIPPED_UNCHANGED = "skipped_unchanged"
     SKIPPED_UNSUPPORTED = "skipped_unsupported"
+    TRANSACTION_FALLBACK = "transaction_fallback"
 
 
 class OverflowCause(str, Enum):
@@ -40,7 +44,7 @@ class CollisionDetail:
 
 @dataclass(slots=True)
 class BlockFittingDetail:
-    """Detailed telemetry record for an individual layout block."""
+    """Detailed telemetry record for an individual layout block or cell."""
 
     block_id: str
     page_number: int
@@ -56,6 +60,11 @@ class BlockFittingDetail:
     overflow_cause: OverflowCause = OverflowCause.NONE
     collision_detail: CollisionDetail | None = None
     reason: str = ""
+    # Multi-tier telemetry extensions:
+    unit_kind: str = "BLOCK"  # "BLOCK", "CELL", or "TABLE"
+    table_id: str | None = None
+    row_idx: int | None = None
+    col_idx: int | None = None
 
 
 @dataclass(slots=True)
@@ -68,10 +77,30 @@ class PageFittingSummary:
     overflow_blocks: int = 0
     collision_blocks: int = 0
     skipped_blocks: int = 0
+    transaction_fallback_blocks: int = 0
+    # Tier 2 (Cells):
+    total_cells: int = 0
+    replaced_cells: int = 0
+    overflow_cells: int = 0
+    collision_cells: int = 0
+    skipped_cells: int = 0
+    transaction_fallback_cells: int = 0
     avg_shrink_ratio: float = 1.0
     worst_shrink_ratio: float = 1.0
     has_severe_shrink_warning: bool = False
     line_count_delta: int = 0
+
+
+@dataclass(slots=True)
+class PageTransactionResult:
+    """Explicit contract between single-page transaction staging and multi-page document assembly."""
+
+    page_number: int  # 1-indexed (used for telemetry, reporting, PageIR)
+    source_page_index: int  # 0-indexed (used for PyMuPDF indexing, source_doc[p], insert_pdf)
+    staging_doc: pymupdf.Document  # Single-page document (kept open until committed by document assembler)
+    is_fallback: bool
+    details: list[BlockFittingDetail]
+    summary: PageFittingSummary
 
 
 @dataclass(slots=True)
@@ -83,6 +112,18 @@ class FittingReport:
     overflow_blocks: int = 0
     collision_blocks: int = 0
     skipped_blocks: int = 0
+    transaction_fallback_blocks: int = 0
+    # Tier 2 (Cells):
+    total_cells: int = 0
+    replaced_cells: int = 0
+    overflow_cells: int = 0
+    collision_cells: int = 0
+    skipped_cells: int = 0
+    transaction_fallback_cells: int = 0
+    # Tier 3 (Tables):
+    total_tables: int = 0
+    corroborated_tables: int = 0
+    rejected_tables: int = 0
     avg_shrink_ratio: float = 1.0
     worst_shrink_ratio: float = 1.0
     severe_shrink_blocks_count: int = 0

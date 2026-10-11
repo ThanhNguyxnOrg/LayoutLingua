@@ -112,6 +112,7 @@ class PageIR:
     geometry: PageGeometry
     blocks: list[TextBlock] = field(default_factory=list)
     regions: list[LayoutRegion] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.page_number < 1:
@@ -209,6 +210,7 @@ class DocumentIR:
                     geometry=geometry,
                     blocks=blocks,
                     regions=regions,
+                    metadata=dict(p.get("metadata", {})),
                 )
             )
 
