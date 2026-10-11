@@ -404,6 +404,28 @@ class TestJsonRpcServer(unittest.TestCase):
         err_content = err_stream.getvalue()
         self.assertIn("[LayoutLingua IPC]", err_content)
 
+    def test_rpc_persistent_multi_request_session(self) -> None:
+        """Verify that multiple consecutive JSON-RPC requests on the same stream maintain process state."""
+        requests = [
+            {"jsonrpc": "2.0", "id": i, "method": "ping"} if i % 2 == 0
+            else {"jsonrpc": "2.0", "id": i, "method": "get_schema_version"}
+            for i in range(1, 11)
+        ]
+        in_stream = io.StringIO("\n".join(json.dumps(r) for r in requests) + "\n")
+        out_stream = io.StringIO()
+        err_stream = io.StringIO()
+
+        self.server.serve_stdio(in_stream=in_stream, out_stream=out_stream, err_stream=err_stream)
+
+        responses = [json.loads(line) for line in out_stream.getvalue().strip().splitlines()]
+        self.assertEqual(len(responses), 10)
+        for i, res in enumerate(responses, start=1):
+            self.assertEqual(res["id"], i)
+            if i % 2 == 0:
+                self.assertTrue(res["result"]["pong"])
+            else:
+                self.assertEqual(res["result"]["ir_version"], "1.0")
+
 
 class TestCLI(unittest.TestCase):
     """Test CLI execution, arguments, and exit codes."""
