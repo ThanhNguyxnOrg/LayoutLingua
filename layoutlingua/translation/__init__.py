@@ -1,10 +1,17 @@
 """Translation package for LayoutLingua with deep resilience, caching, and provider interfaces."""
 
+from layoutlingua.translation.argos import (
+    ArgosModelInfo,
+    ArgosModelManager,
+    ArgosTranslationProvider,
+    TranslationRoute,
+)
 from layoutlingua.translation.errors import (
     AuthenticationError,
     JobCancelledError,
     JobConflictError,
     JobNotFoundError,
+    ModelUnavailableError,
     PrivacyConsentRequiredError,
     ProviderUnavailableError,
     QuotaExceededError,
@@ -12,6 +19,7 @@ from layoutlingua.translation.errors import (
     TokenIntegrityError,
     TranslationError,
 )
+from layoutlingua.translation.gemini import GeminiTranslationProvider
 from layoutlingua.translation.mock import MockTranslationProvider
 from layoutlingua.translation.models import (
     BatchTranslationRequest,
@@ -22,12 +30,8 @@ from layoutlingua.translation.models import (
     TranslationJob,
     TranslationJobResult,
 )
-from layoutlingua.translation.argos import (
-    ArgosModelInfo,
-    ArgosModelManager,
-    ArgosTranslationProvider,
-    TranslationRoute,
-)
+from layoutlingua.translation.openai_compat import OpenAITranslationProvider
+from layoutlingua.translation.profiles import ModelProfile, ModelProfileCatalog
 from layoutlingua.translation.provider import BaseTranslationProvider
 from layoutlingua.translation.service import TranslationService
 
@@ -39,11 +43,16 @@ __all__ = [
     "BaseTranslationProvider",
     "BatchTranslationRequest",
     "BatchTranslationResult",
+    "GeminiTranslationProvider",
     "JobCancelledError",
     "JobConflictError",
     "JobNotFoundError",
     "JobStatus",
     "MockTranslationProvider",
+    "ModelProfile",
+    "ModelProfileCatalog",
+    "ModelUnavailableError",
+    "OpenAITranslationProvider",
     "PrivacyConsentRequiredError",
     "ProviderCapabilities",
     "ProviderUnavailableError",
@@ -54,5 +63,6 @@ __all__ = [
     "TranslationError",
     "TranslationJob",
     "TranslationJobResult",
+    "TranslationRoute",
     "TranslationService",
 ]

@@ -13,6 +13,7 @@ from typing import Callable, TypeVar
 from layoutlingua.translation.errors import (
     AuthenticationError,
     JobCancelledError,
+    ModelUnavailableError,
     PrivacyConsentRequiredError,
     ProviderUnavailableError,
     QuotaExceededError,
@@ -105,7 +106,12 @@ class ResilientExecutor:
 
             try:
                 return func()
-            except (AuthenticationError, QuotaExceededError, PrivacyConsentRequiredError):
+            except (
+                AuthenticationError,
+                QuotaExceededError,
+                PrivacyConsentRequiredError,
+                ModelUnavailableError,
+            ):
                 # Non-transient errors: fail-fast immediately!
                 raise
             except RateLimitError as e:

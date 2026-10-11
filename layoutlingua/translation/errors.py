@@ -76,5 +76,18 @@ class InvalidTranslationResponseError(TranslationError):
     """Raised when a provider returns an unparseable, incomplete, or corrupted payload."""
 
 
+class ModelUnavailableError(TranslationError):
+    """Raised when a requested model ID is not found, deprecated, or shutdown by the provider (e.g. HTTP 404).
+    
+    Must fail fast and NOT retry.
+    """
+
+    def __init__(self, model_id: str, provider_id: str, message: str | None = None) -> None:
+        msg = message or f"Model '{model_id}' is unavailable, deprecated, or not found on provider '{provider_id}'."
+        super().__init__(msg)
+        self.model_id = model_id
+        self.provider_id = provider_id
+
+
 class TokenIntegrityError(TranslationError):
     """Raised when formula placeholder tokens are modified, lost, or duplicated in translation."""
