@@ -6,6 +6,8 @@ from layoutlingua.typesetting.models import (
     BlockFittingDetail,
     BlockFittingStatus,
     FittingReport,
+    OverflowCause,
+    PageFittingSummary,
     TypesetOptions,
     TypesetResult,
 )
@@ -16,6 +18,8 @@ __all__ = [
     "FittingReport",
     "FontManager",
     "FontValidationError",
+    "OverflowCause",
+    "PageFittingSummary",
     "TypesetEngine",
     "TypesetOptions",
     "TypesetResult",

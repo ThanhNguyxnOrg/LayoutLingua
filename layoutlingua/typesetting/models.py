@@ -1,4 +1,4 @@
-"""Data models and options for typesetting, adaptive font fitting, and telemetry reporting."""
+"""Data models, configuration options, and multi-tier telemetry for typesetting and fitting."""
 
 from __future__ import annotations
 
@@ -16,6 +16,15 @@ class BlockFittingStatus(str, Enum):
     SKIPPED_UNCHANGED = "skipped_unchanged"
 
 
+class OverflowCause(str, Enum):
+    """Classified root cause when a translated block fails to fit within bounds."""
+
+    NONE = "none"
+    OVERFLOW_HEIGHT = "overflow_height"
+    OVERFLOW_WIDTH_AT_MIN_SIZE = "overflow_width_at_min_size"
+    OVERFLOW_UNDETERMINED = "overflow_undetermined"
+
+
 @dataclass(slots=True)
 class BlockFittingDetail:
     """Detailed telemetry record for an individual layout block."""
@@ -27,18 +36,42 @@ class BlockFittingDetail:
     translated_text: str
     original_font_size: float
     final_font_size: float
-    bbox: tuple[float, float, float, float]
+    shrink_ratio: float = 1.0
+    line_height_em: float = 1.20
+    line_count: int = 1
+    bbox: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    overflow_cause: OverflowCause = OverflowCause.NONE
     reason: str = ""
 
 
 @dataclass(slots=True)
+class PageFittingSummary:
+    """Aggregated typesetting metrics for a single document page."""
+
+    page_number: int
+    total_blocks: int = 0
+    replaced_blocks: int = 0
+    overflow_blocks: int = 0
+    skipped_blocks: int = 0
+    avg_shrink_ratio: float = 1.0
+    worst_shrink_ratio: float = 1.0
+    has_severe_shrink_warning: bool = False
+    line_count_delta: int = 0
+
+
+@dataclass(slots=True)
 class FittingReport:
-    """Aggregate telemetry report of the typesetting process."""
+    """Document-wide and page-stratified aggregate telemetry report."""
 
     total_blocks: int = 0
     replaced_blocks: int = 0
     overflow_blocks: int = 0
     skipped_blocks: int = 0
+    avg_shrink_ratio: float = 1.0
+    worst_shrink_ratio: float = 1.0
+    severe_shrink_blocks_count: int = 0
+    line_count_delta: int = 0
+    pages: list[PageFittingSummary] = field(default_factory=list)
     details: list[BlockFittingDetail] = field(default_factory=list)
 
     @property
@@ -52,20 +85,18 @@ class FittingReport:
 
 @dataclass(slots=True)
 class TypesetOptions:
-    """Configuration options for the TypesetEngine.
-    
-    Default bounds:
-    - min_font_scale: 0.70 (down to 70% of original font size)
-    - min_font_pt: 6.0 pt minimum readability floor
-    - fail_closed: True (preserve source text if translated text does not fit)
-    - preserve_background: True (use transparent redactions to retain vector art/images)
-    """
+    """Configuration options for the TypesetEngine and binary search fitting."""
 
     min_font_scale: float = 0.70
     min_font_pt: float = 6.0
     fail_closed: bool = True
     preserve_background: bool = True
     font_name: str = "DejaVuSans"
+    binary_search_epsilon: float = 0.2
+    max_search_iterations: int = 7
+    base_lineheight_ratio: float = 1.20
+    safety_padding_em: float = 0.03
+    severe_shrink_threshold: float = 0.75
     step_down_ratio: float = 0.95
 
 

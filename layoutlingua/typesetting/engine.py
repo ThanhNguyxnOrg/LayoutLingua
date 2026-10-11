@@ -1,7 +1,7 @@
 """Deep module typesetting engine for LayoutLingua.
 
 Preserves PDF background graphics, selective text clearance with fill=False,
-adaptive font fitting, and fail-closed overflow handling.
+precision binary search font fitting, dynamic line-height, and multi-tier telemetry.
 """
 
 from __future__ import annotations
@@ -15,6 +15,8 @@ from layoutlingua.typesetting.models import (
     BlockFittingDetail,
     BlockFittingStatus,
     FittingReport,
+    OverflowCause,
+    PageFittingSummary,
     TypesetOptions,
     TypesetResult,
 )
@@ -60,6 +62,8 @@ class TypesetEngine:
         doc = pymupdf.open(stream=original_pdf, filetype="pdf")
         report = FittingReport()
 
+        all_replaced_shrink_ratios: list[float] = []
+
         for page_ir in document_ir.pages:
             page_idx = page_ir.page_number - 1
             if page_idx >= len(doc):
@@ -68,14 +72,20 @@ class TypesetEngine:
             page = doc[page_idx]
             self.font_manager.register_on_page(page, font_name=self.options.font_name)
 
-            fitting_plan: list[tuple[TextBlock, str, float, tuple[float, float, float], float]] = []
+            page_summary = PageFittingSummary(page_number=page_ir.page_number)
+            page_replaced_ratios: list[float] = []
+
+            # Structure: (block, translated_text, orig_font_size, dominant_color, final_font_size, lineheight, line_count)
+            fitting_plan: list[tuple[TextBlock, str, float, tuple[float, float, float], float, float, int]] = []
 
             for block in page_ir.blocks:
                 report.total_blocks += 1
+                page_summary.total_blocks += 1
 
                 # 1. Formula preservation check
                 if block.block_type == "formula":
                     report.skipped_blocks += 1
+                    page_summary.skipped_blocks += 1
                     report.details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
@@ -85,6 +95,7 @@ class TypesetEngine:
                             translated_text="",
                             original_font_size=10.0,
                             final_font_size=10.0,
+                            shrink_ratio=1.0,
                             bbox=block.bbox,
                             reason="Formula block preserved intact without translation mutation.",
                         )
@@ -95,6 +106,7 @@ class TypesetEngine:
                 translated_text = self._resolve_translated_text(block, translated_segments)
                 if not translated_text or not translated_text.strip():
                     report.skipped_blocks += 1
+                    page_summary.skipped_blocks += 1
                     report.details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
@@ -104,6 +116,7 @@ class TypesetEngine:
                             translated_text="",
                             original_font_size=10.0,
                             final_font_size=10.0,
+                            shrink_ratio=1.0,
                             bbox=block.bbox,
                             reason="No translation provided or text is whitespace.",
                         )
@@ -112,6 +125,7 @@ class TypesetEngine:
 
                 if translated_text.strip() == block.text.strip():
                     report.skipped_blocks += 1
+                    page_summary.skipped_blocks += 1
                     report.details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
@@ -121,6 +135,7 @@ class TypesetEngine:
                             translated_text=translated_text,
                             original_font_size=10.0,
                             final_font_size=10.0,
+                            shrink_ratio=1.0,
                             bbox=block.bbox,
                             reason="Translated text is identical to source text.",
                         )
@@ -133,8 +148,8 @@ class TypesetEngine:
                     parse_color(block.spans[0].color) if block.spans else (0.0, 0.0, 0.0)
                 )
 
-                # 4. Dry-run fitting test with adaptive shrinkage
-                fits, final_font_size = self._fit_tester.test_fit(
+                # 4. Precision Binary Search fitting test with dynamic line-height
+                fits, final_font_size, overflow_cause, line_count, effective_lineheight = self._fit_tester.test_fit(
                     rect=block.bbox,
                     text=translated_text,
                     orig_font_size=orig_font_size,
@@ -142,10 +157,19 @@ class TypesetEngine:
                 )
 
                 if fits:
-                    fitting_plan.append((block, translated_text, orig_font_size, dominant_color, final_font_size))
+                    fitting_plan.append((
+                        block,
+                        translated_text,
+                        orig_font_size,
+                        dominant_color,
+                        final_font_size,
+                        effective_lineheight,
+                        line_count,
+                    ))
                 else:
                     # Overflow event: fail-closed preserves source text
                     report.overflow_blocks += 1
+                    page_summary.overflow_blocks += 1
                     report.details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
@@ -155,17 +179,21 @@ class TypesetEngine:
                             translated_text=translated_text,
                             original_font_size=orig_font_size,
                             final_font_size=orig_font_size,
+                            shrink_ratio=1.0,
+                            line_height_em=effective_lineheight,
+                            line_count=line_count,
                             bbox=block.bbox,
+                            overflow_cause=overflow_cause,
                             reason=(
-                                f"Translated text exceeded bounding box capacity even at "
-                                f"minimum scale ({self.options.min_font_scale:.0%}). Source retained."
+                                f"Translated text overflowed bounding box ({overflow_cause.value}) "
+                                f"at minimum scale ({self.options.min_font_scale:.0%}). Source retained."
                             ),
                         )
                     )
 
             # 5. Apply selective redaction ONLY to approved fitting candidates
             if fitting_plan:
-                for block, _, _, _, _ in fitting_plan:
+                for block, _, _, _, _, _, _ in fitting_plan:
                     rect = pymupdf.Rect(*block.bbox)
                     page.add_redact_annot(rect, fill=False, cross_out=False)
 
@@ -175,8 +203,8 @@ class TypesetEngine:
                     text=pymupdf.PDF_REDACT_TEXT_REMOVE,
                 )
 
-                # 6. Insert translated text into cleared bounds
-                for block, text, orig_size, color, final_size in fitting_plan:
+                # 6. Insert translated text using identical effective line-height
+                for block, text, orig_size, color, final_size, lineheight, line_count in fitting_plan:
                     rect = pymupdf.Rect(*block.bbox)
                     page.insert_textbox(
                         rect,
@@ -185,8 +213,18 @@ class TypesetEngine:
                         fontname=self.options.font_name,
                         fontfile=str(self.font_manager.font_path),
                         color=color,
+                        lineheight=lineheight,
                     )
+                    shrink_ratio = final_size / orig_size if orig_size > 0 else 1.0
+                    page_replaced_ratios.append(shrink_ratio)
+                    all_replaced_shrink_ratios.append(shrink_ratio)
+
                     report.replaced_blocks += 1
+                    page_summary.replaced_blocks += 1
+
+                    if shrink_ratio < self.options.severe_shrink_threshold:
+                        report.severe_shrink_blocks_count += 1
+
                     report.details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
@@ -196,10 +234,36 @@ class TypesetEngine:
                             translated_text=text,
                             original_font_size=orig_size,
                             final_font_size=final_size,
+                            shrink_ratio=shrink_ratio,
+                            line_height_em=lineheight,
+                            line_count=line_count,
                             bbox=block.bbox,
-                            reason="Fitted and typeset successfully.",
+                            overflow_cause=OverflowCause.NONE,
+                            reason="Fitted and typeset successfully via binary search.",
                         )
                     )
+
+            # Aggregate page summary metrics
+            if page_replaced_ratios:
+                page_summary.avg_shrink_ratio = sum(page_replaced_ratios) / len(page_replaced_ratios)
+                page_summary.worst_shrink_ratio = min(page_replaced_ratios)
+                page_summary.has_severe_shrink_warning = (
+                    page_summary.worst_shrink_ratio < self.options.severe_shrink_threshold
+                )
+            else:
+                page_summary.avg_shrink_ratio = 1.0
+                page_summary.worst_shrink_ratio = 1.0
+                page_summary.has_severe_shrink_warning = False
+
+            report.pages.append(page_summary)
+
+        # Aggregate document summary metrics
+        if all_replaced_shrink_ratios:
+            report.avg_shrink_ratio = sum(all_replaced_shrink_ratios) / len(all_replaced_shrink_ratios)
+            report.worst_shrink_ratio = min(all_replaced_shrink_ratios)
+        else:
+            report.avg_shrink_ratio = 1.0
+            report.worst_shrink_ratio = 1.0
 
         output_bytes = doc.tobytes(deflate=True, garbage=3)
         return TypesetResult(pdf_bytes=output_bytes, fitting_report=report)

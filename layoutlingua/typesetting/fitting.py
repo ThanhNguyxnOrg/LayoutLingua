@@ -1,15 +1,15 @@
-"""Adaptive font fitting and text bounding box measurement."""
+"""Adaptive font fitting using binary search, dynamic lineheight, and overflow classification."""
 
 from __future__ import annotations
 
 import pymupdf
 
 from layoutlingua.typesetting.fonts import FontManager
-from layoutlingua.typesetting.models import TypesetOptions
+from layoutlingua.typesetting.models import OverflowCause, TypesetOptions
 
 
 class TextFitTester:
-    """Evaluates whether text fits within a bounding box at varying font scales."""
+    """Evaluates whether text fits within a bounding box using precision binary search."""
 
     def __init__(self, font_manager: FontManager, font_name: str = "DejaVuSans") -> None:
         self.font_manager = font_manager
@@ -24,57 +24,124 @@ class TextFitTester:
         text: str,
         orig_font_size: float,
         options: TypesetOptions,
-    ) -> tuple[bool, float]:
-        """Determine if text fits within rect using bounded adaptive font shrinkage.
-        
+    ) -> tuple[bool, float, OverflowCause, int, float]:
+        """Determine if text fits within rect using bounded binary search.
+
         Returns:
-            (fits, final_font_size)
-            If fits is True, final_font_size is the fitted size >= min_size.
-            If fits is False, final_font_size is the original font size.
+            (fits, final_font_size, overflow_cause, line_count, effective_lineheight)
         """
         x0, y0, x1, y1 = rect
         width = x1 - x0
         height = y1 - y0
 
+        effective_lineheight = self.font_manager.calculate_effective_lineheight(
+            configured_ratio=options.base_lineheight_ratio,
+            safety_padding_em=options.safety_padding_em,
+        )
+
         if width <= 0 or height <= 0 or not text.strip():
-            return False, orig_font_size
+            return False, orig_font_size, OverflowCause.OVERFLOW_UNDETERMINED, 0, effective_lineheight
 
         min_font_size = max(options.min_font_pt, options.min_font_scale * orig_font_size)
-        step_factor = options.step_down_ratio
-
-        # Test at original size and stepped sizes
-        current_size = orig_font_size
         test_rect = pymupdf.Rect(x0, y0, x1, y1)
 
-        while current_size >= min_font_size - 1e-4:
-            # page.insert_textbox returns >= 0 if all text fit, < 0 if text overflowed
-            rc = self._page.insert_textbox(
-                test_rect,
-                text,
-                fontsize=current_size,
-                fontname=self.font_name,
-                fontfile=str(self.font_manager.font_path),
-            )
-            if rc >= 0:
-                return True, current_size
+        # 1. Test original size
+        rc_orig = self._page.insert_textbox(
+            test_rect,
+            text,
+            fontsize=orig_font_size,
+            fontname=self.font_name,
+            fontfile=str(self.font_manager.font_path),
+            lineheight=effective_lineheight,
+        )
+        if rc_orig >= 0:
+            lines = self._estimate_lines(height, rc_orig, orig_font_size, effective_lineheight)
+            return True, orig_font_size, OverflowCause.NONE, lines, effective_lineheight
 
-            next_size = current_size * step_factor
-            if next_size >= current_size - 0.1:
-                next_size = current_size - 0.5
-            current_size = next_size
-
-        # Test at exact floor
-        rc = self._page.insert_textbox(
+        # 2. Test minimum font size floor
+        rc_min = self._page.insert_textbox(
             test_rect,
             text,
             fontsize=min_font_size,
             fontname=self.font_name,
             fontfile=str(self.font_manager.font_path),
+            lineheight=effective_lineheight,
         )
-        if rc >= 0:
-            return True, min_font_size
+        if rc_min < 0:
+            # Overflow event at minimum scale: classify cause
+            cause = self._classify_overflow_cause(text, width, min_font_size)
+            return False, orig_font_size, cause, 0, effective_lineheight
 
-        return False, orig_font_size
+        # 3. Binary Search in [min_font_size, orig_font_size]
+        low = min_font_size
+        high = orig_font_size
+        best_size = min_font_size
+        best_rc = rc_min
+        iteration = 0
+
+        while (high - low) > options.binary_search_epsilon and iteration < options.max_search_iterations:
+            mid = (low + high) / 2.0
+            rc = self._page.insert_textbox(
+                test_rect,
+                text,
+                fontsize=mid,
+                fontname=self.font_name,
+                fontfile=str(self.font_manager.font_path),
+                lineheight=effective_lineheight,
+            )
+            if rc >= 0:
+                best_size = mid
+                best_rc = rc
+                low = mid  # text fits; attempt a larger size for better legibility
+            else:
+                high = mid  # text overflowed; must reduce size
+            iteration += 1
+
+        # 4. Verification pass on scratch page
+        confirm_rc = self._page.insert_textbox(
+            test_rect,
+            text,
+            fontsize=best_size,
+            fontname=self.font_name,
+            fontfile=str(self.font_manager.font_path),
+            lineheight=effective_lineheight,
+        )
+        if confirm_rc >= 0:
+            lines = self._estimate_lines(height, confirm_rc, best_size, effective_lineheight)
+            return True, best_size, OverflowCause.NONE, lines, effective_lineheight
+
+        # Fallback to confirmed min_font_size
+        lines = self._estimate_lines(height, rc_min, min_font_size, effective_lineheight)
+        return True, min_font_size, OverflowCause.NONE, lines, effective_lineheight
+
+    def _estimate_lines(
+        self,
+        box_height: float,
+        rc: float,
+        font_size: float,
+        lineheight: float,
+    ) -> int:
+        """Estimate line count from bounding box height and leftover vertical space."""
+        used_height = max(0.0, box_height - rc)
+        line_height_pt = max(1.0, font_size * lineheight)
+        return max(1, round(used_height / line_height_pt))
+
+    def _classify_overflow_cause(
+        self,
+        text: str,
+        box_width: float,
+        min_font_size: float,
+    ) -> OverflowCause:
+        """Classify why text failed to fit within bounds at minimum font floor."""
+        try:
+            tokens = text.split()
+            for token in tokens:
+                token_width = self.font_manager.measure_text_length(token, fontsize=min_font_size)
+                if token_width > box_width:
+                    return OverflowCause.OVERFLOW_WIDTH_AT_MIN_SIZE
+            return OverflowCause.OVERFLOW_HEIGHT
+        except Exception:
+            return OverflowCause.OVERFLOW_UNDETERMINED
 
 
 def parse_color(color_val: int | str | None) -> tuple[float, float, float]:
