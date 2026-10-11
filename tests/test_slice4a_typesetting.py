@@ -349,6 +349,152 @@ class TestSlice4ATypesetting(unittest.TestCase):
         finally:
             service.close()
 
+    # -------------------------------------------------------------------------
+    # 5. Regression Tests: Precision, Fallback Integrity & Diacritic Bounds
+    # -------------------------------------------------------------------------
+
+    def test_redaction_does_not_corrupt_adjacent_formula_text_or_vector_drawing(self) -> None:
+        """Verify selective redaction does not erase tightly adjacent formulas, text, or vector rules."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=500, height=300)
+
+        # 1. Text block to be replaced (y: 40 to 80)
+        page.insert_textbox(pymupdf.Rect(50, 40, 450, 80), "Header Title to Replace", fontsize=14)
+
+        # 2. Vector dividing line right below it (y: 88, only 8 pt away!)
+        page.draw_line(pymupdf.Point(50, 88), pymupdf.Point(450, 88), color=(0.85, 0.1, 0.1), width=2.0)
+
+        # 3. Formula block directly below vector line (y: 95 to 130)
+        page.insert_textbox(pymupdf.Rect(50, 95, 250, 130), "\\nabla \\times E = -\\partial B/\\partial t", fontsize=11)
+
+        # 4. Adjacent text note horizontally right of formula (x: 260 to 450)
+        page.insert_textbox(pymupdf.Rect(260, 95, 450, 130), "Maxwell Faraday Equation", fontsize=11)
+
+        pdf_bytes = doc.tobytes()
+        pdf_file = self.temp_path / "adjacent_fixture.pdf"
+        pdf_file.write_bytes(pdf_bytes)
+
+        doc_ir = parse_pdf(pdf_file)
+        header_block = doc_ir.pages[0].blocks[0]
+        translations = {header_block.block_id: "Tiêu đề Header Đã Dịch"}
+
+        engine = TypesetEngine()
+        result = engine.typeset(
+            original_pdf=pdf_bytes,
+            document_ir=doc_ir,
+            translated_segments=translations,
+        )
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        out_page = out_doc[0]
+        out_text = out_page.get_text()
+
+        # Invariant 1: Header is translated
+        self.assertIn("Tiêu đề Header Đã Dịch", out_text)
+        self.assertNotIn("Header Title to Replace", out_text)
+
+        # Invariant 2: Adjacent formula and annotation are 100% intact
+        self.assertIn("\\nabla \\times E", out_text)
+        self.assertIn("Maxwell Faraday Equation", out_text)
+
+        # Invariant 3: Vector red line is visually preserved (sample pixel at 100, 88)
+        pix = out_page.get_pixmap()
+        line_pixel = pix.pixel(100, 88)
+        # Red line: r channel must be prominent, blue/green low
+        self.assertGreater(line_pixel[0], 180, "Red vector line must not be wiped out by redaction.")
+        self.assertLess(line_pixel[1], 80, "Green channel should remain low for red line.")
+
+    def test_overflow_fallback_integrity_no_duplicate_or_lost_text(self) -> None:
+        """Verify that overflow fallback retains exactly one copy of source text and never duplicates."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=500, height=300)
+
+        # Block 1 (fits):
+        page.insert_textbox(pymupdf.Rect(50, 40, 450, 80), "Short Intro Sentence", fontsize=12)
+        # Block 2 (will overflow):
+        page.insert_textbox(pymupdf.Rect(50, 100, 450, 130), "Important Conclusion Statement", fontsize=12)
+
+        pdf_bytes = doc.tobytes()
+        pdf_file = self.temp_path / "overflow_integrity.pdf"
+        pdf_file.write_bytes(pdf_bytes)
+
+        doc_ir = parse_pdf(pdf_file)
+        b1 = doc_ir.pages[0].blocks[0]
+        b2 = doc_ir.pages[0].blocks[1]
+
+        translations = {
+            b1.block_id: "Câu mở đầu ngắn gọn",
+            b2.block_id: "Một đoạn văn bản dịch cực kỳ dài bị cố tình lặp lại nhiều lần " * 15,
+        }
+
+        engine = TypesetEngine(options=TypesetOptions(fail_closed=True))
+        result = engine.typeset(
+            original_pdf=pdf_bytes,
+            document_ir=doc_ir,
+            translated_segments=translations,
+        )
+
+        self.assertEqual(result.fitting_report.replaced_blocks, 1)
+        self.assertEqual(result.fitting_report.overflow_blocks, 1)
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        out_text = out_doc[0].get_text()
+
+        # Block 1 successfully replaced
+        self.assertIn("Câu mở đầu ngắn gọn", out_text)
+        self.assertNotIn("Short Intro Sentence", out_text)
+
+        # Block 2 retained source text exactly once
+        self.assertEqual(out_text.count("Important Conclusion Statement"), 1)
+        # Overflow text must NOT appear on page
+        self.assertNotIn("Một đoạn văn bản dịch cực kỳ dài", out_text)
+
+    def test_complex_vietnamese_stacked_diacritics_visual_containment(self) -> None:
+        """Verify that complex Vietnamese stacked diacritics (nghiễm, trưởng, ngưỡng, nguyễn) render within bounds."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=500, height=300)
+        orig_en = "Academic research study by author Nguyen Van Truong admiring the rigorous discipline."
+        target_rect = pymupdf.Rect(50, 50, 450, 150)
+        page.insert_textbox(target_rect, orig_en, fontsize=12)
+
+        pdf_bytes = doc.tobytes()
+        pdf_file = self.temp_path / "diacritics_fixture.pdf"
+        pdf_file.write_bytes(pdf_bytes)
+
+        doc_ir = parse_pdf(pdf_file)
+        block = doc_ir.pages[0].blocks[0]
+
+        complex_vn_text = "Nghiên cứu của tác giả Nguyễn Văn Trưởng ngưỡng mộ sự nghiêm ngặt nghiễm nhiên."
+        translations = {block.block_id: complex_vn_text}
+
+        engine = TypesetEngine()
+        result = engine.typeset(
+            original_pdf=pdf_bytes,
+            document_ir=doc_ir,
+            translated_segments=translations,
+        )
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        out_page = out_doc[0]
+
+        # Verify Unicode text extraction
+        extracted = out_page.get_text()
+        self.assertIn("Nguyễn Văn Trưởng", extracted)
+        self.assertIn("ngưỡng mộ", extracted)
+        self.assertIn("nghiễm nhiên", extracted)
+
+        # Verify geometric bounding containment of rendered spans
+        raw = out_page.get_text("rawdict")
+        for b in raw["blocks"]:
+            if b.get("type") == 0:
+                for line in b.get("lines", []):
+                    line_bbox = line["bbox"]
+                    # Top of line must not breach above target_rect top
+                    self.assertGreaterEqual(line_bbox[1], target_rect.y0 - 2.0)
+                    # Bottom of line must not breach target_rect bottom
+                    self.assertLessEqual(line_bbox[3], target_rect.y1 + 2.0)
+
 
 if __name__ == "__main__":
     unittest.main()
+
