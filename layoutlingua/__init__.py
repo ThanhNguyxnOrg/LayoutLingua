@@ -1,18 +1,21 @@
-import logging
+"""LayoutLingua: High-precision document translation engine preserving layout geometry."""
 
-log = logging.getLogger(__name__)
+from layoutlingua._version import __version__
+from layoutlingua.core.ir import DocumentIR, GlyphSpan, LayoutRegion, PageGeometry, PageIR, TextBlock
+from layoutlingua.core.parser import PDFParseError, parse_pdf
+from layoutlingua.ipc import JsonRpcServer
+from layoutlingua.translation.mock import MockTranslationProvider
 
-__version__ = "1.9.11"
-__ruleset__ = "code4life-preservation-v1"
-__author__ = "ThanhNguyxnOrg"
-__maintainer__ = "ThanhNguyxnOrg"
-__maintainer_url__ = "https://github.com/ThanhNguyxnOrg/LayoutLingua"
-__all__ = ["translate", "translate_stream"]
-
-
-def __getattr__(name):
-    if name in {"translate", "translate_stream"}:
-        from layoutlingua.high_level import translate, translate_stream
-
-        return {"translate": translate, "translate_stream": translate_stream}[name]
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+__all__ = [
+    "__version__",
+    "DocumentIR",
+    "GlyphSpan",
+    "LayoutRegion",
+    "PageGeometry",
+    "PageIR",
+    "TextBlock",
+    "PDFParseError",
+    "parse_pdf",
+    "JsonRpcServer",
+    "MockTranslationProvider",
+]
