@@ -49,6 +49,10 @@ class TestSlice3ATranslationResilience(unittest.TestCase):
         self.db_path = Path(self.temp_dir.name) / "test_layoutlingua.sqlite"
         self._services: list[TranslationService] = []
         self._storages: list[StorageEngine] = []
+        self.sleeper_calls: list[float] = []
+
+    def _fake_sleeper(self, duration: float) -> None:
+        self.sleeper_calls.append(duration)
 
     def tearDown(self) -> None:
         for s in self._services:
@@ -69,6 +73,7 @@ class TestSlice3ATranslationResilience(unittest.TestCase):
 
     def _make_service(self, provider, **kwargs) -> TranslationService:
         kwargs.setdefault("db_path", self.db_path)
+        kwargs.setdefault("sleeper", self._fake_sleeper)
         service = TranslationService(provider=provider, **kwargs)
         self._services.append(service)
         return service

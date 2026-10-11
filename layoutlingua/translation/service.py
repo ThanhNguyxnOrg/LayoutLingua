@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -57,16 +58,19 @@ class TranslationService:
         no_cache: bool = False,
         max_retries: int = 3,
         base_backoff: float = 0.5,
+        sleeper: Callable[[float], None] = time.sleep,
     ) -> None:
         self.provider = provider
         self.no_cache = no_cache
         self._storage = StorageEngine(db_path=db_path)
         self._rate_limiter = TokenBucketRateLimiter(
-            requests_per_minute=provider.capabilities.requests_per_minute
+            requests_per_minute=provider.capabilities.requests_per_minute,
+            sleeper=sleeper,
         )
         self._executor = ResilientExecutor(
             max_retries=max_retries,
             base_backoff=base_backoff,
+            sleeper=sleeper,
         )
         self._isolator = FormulaIsolator()
         self._cancelled_jobs: set[str] = set()
@@ -105,13 +109,13 @@ class TranslationService:
         # 2. Check for immediate cancellation
         if job.job_id in self._cancelled_jobs:
             self._storage.update_job_status(job.job_id, JobStatus.CANCELLED)
-            return self._build_result(job.job_id, cache_hits=0, provider_calls=0)
+            return self._build_result(job.job_id, cache_hits=0, provider_calls=0, original_segments=job.segments)
 
         if status == JobStatus.COMPLETED and completed_count == total_count:
             # Job was already completely translated in a prior run
             if on_progress:
                 on_progress(total_count, total_count)
-            return self._build_result(job.job_id, cache_hits=completed_count, provider_calls=0)
+            return self._build_result(job.job_id, cache_hits=completed_count, provider_calls=0, original_segments=job.segments)
 
         # 3. Privacy consent guard (checked BEFORE any text leaves machine)
         caps = self.provider.capabilities
@@ -189,7 +193,7 @@ class TranslationService:
                 on_progress(len(cached_results_to_commit), len(job.segments))
 
         if not unresolved_segments:
-            return self._build_result(job.job_id, cache_hits=cache_hits, provider_calls=0)
+            return self._build_result(job.job_id, cache_hits=cache_hits, provider_calls=0, original_segments=job.segments)
 
         # 5. Pack unresolved segments into provider-sized batches
         batches = self._pack_batches(unresolved_segments, caps.max_batch_segments, caps.max_batch_chars)
@@ -296,7 +300,7 @@ class TranslationService:
                 info = self._storage.get_job_info(job.job_id)
                 on_progress(info["completed_segments"], info["total_segments"])
 
-        return self._build_result(job.job_id, cache_hits=cache_hits, provider_calls=provider_calls)
+        return self._build_result(job.job_id, cache_hits=cache_hits, provider_calls=provider_calls, original_segments=job.segments)
 
     def resume_job(
         self,
@@ -361,10 +365,12 @@ class TranslationService:
         job_id: str,
         cache_hits: int,
         provider_calls: int,
+        original_segments: tuple[TextSegment, ...] | list[TextSegment] | None = None,
     ) -> TranslationJobResult:
         """Construct the immutable TranslationJobResult from storage state."""
         info = self._storage.get_job_info(job_id)
         all_segments = self._storage.get_all_segments(job_id)
+        segment_map = {s.segment_id: s for s in original_segments} if original_segments else {}
 
         translated: dict[str, str] = {}
         failed: dict[str, str] = {}
@@ -374,13 +380,16 @@ class TranslationService:
             if r["status"] == SegmentStatus.COMPLETED.value:
                 # Restore formula tokens if present in masked text
                 masked_translated = r["translated_text"] or ""
-                # Find matching original segment tokens to restore
-                dummy_seg = TextSegment(
-                    segment_id=seg_id,
-                    raw_text=r["source_text"],
-                    masked_text=masked_translated,
-                )
-                translated[seg_id] = self._isolator.restore_translation(dummy_seg, masked_translated)
+                seg = segment_map.get(seg_id)
+                if seg:
+                    translated[seg_id] = self._isolator.restore_translation(seg, masked_translated)
+                else:
+                    dummy_seg = TextSegment(
+                        segment_id=seg_id,
+                        raw_text=r["source_text"],
+                        masked_text=masked_translated,
+                    )
+                    translated[seg_id] = self._isolator.restore_translation(dummy_seg, masked_translated)
             elif r["status"] == SegmentStatus.FAILED.value:
                 failed[seg_id] = r["error_message"] or "Unknown segment translation error"
 

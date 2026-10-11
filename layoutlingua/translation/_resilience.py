@@ -26,11 +26,16 @@ T = TypeVar("T")
 class TokenBucketRateLimiter:
     """Thread-safe rate limiter implementing the token bucket algorithm."""
 
-    def __init__(self, requests_per_minute: float = 60.0) -> None:
+    def __init__(
+        self,
+        requests_per_minute: float = 60.0,
+        sleeper: Callable[[float], None] = time.sleep,
+    ) -> None:
         self.capacity = max(1.0, requests_per_minute / 60.0)
         self.fill_rate = max(0.01, requests_per_minute / 60.0)  # tokens per second
         self.tokens = self.capacity
         self.last_update = time.monotonic()
+        self.sleeper = sleeper
 
     def acquire(
         self,
@@ -53,7 +58,7 @@ class TokenBucketRateLimiter:
 
             needed = tokens - self.tokens
             sleep_duration = min(0.5, needed / self.fill_rate)
-            time.sleep(sleep_duration)
+            self.sleeper(sleep_duration)
 
 
 class ResilientExecutor:
@@ -65,11 +70,13 @@ class ResilientExecutor:
         base_backoff: float = 0.5,
         max_backoff: float = 10.0,
         jitter_ratio: float = 0.25,
+        sleeper: Callable[[float], None] = time.sleep,
     ) -> None:
         self.max_retries = max_retries
         self.base_backoff = base_backoff
         self.max_backoff = max_backoff
         self.jitter_ratio = jitter_ratio
+        self.sleeper = sleeper
 
     def execute(
         self,
@@ -138,5 +145,5 @@ class ResilientExecutor:
             if is_cancelled and is_cancelled():
                 raise JobCancelledError("Job was cancelled during backoff sleep.")
             sleep_now = min(slice_size, remaining)
-            time.sleep(sleep_now)
+            self.sleeper(sleep_now)
             remaining -= sleep_now

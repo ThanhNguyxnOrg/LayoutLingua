@@ -22,10 +22,19 @@ from layoutlingua.translation.models import (
     TranslationJob,
     TranslationJobResult,
 )
+from layoutlingua.translation.argos import (
+    ArgosModelInfo,
+    ArgosModelManager,
+    ArgosTranslationProvider,
+    TranslationRoute,
+)
 from layoutlingua.translation.provider import BaseTranslationProvider
 from layoutlingua.translation.service import TranslationService
 
 __all__ = [
+    "ArgosModelInfo",
+    "ArgosModelManager",
+    "ArgosTranslationProvider",
     "AuthenticationError",
     "BaseTranslationProvider",
     "BatchTranslationRequest",
