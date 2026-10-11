@@ -11,9 +11,11 @@ class BlockFittingStatus(str, Enum):
 
     SUCCESS = "success"
     OVERFLOW_FALLBACK = "overflow_fallback"
+    COLLISION_FALLBACK = "collision_fallback"
     SKIPPED_EMPTY = "skipped_empty"
     SKIPPED_FORMULA = "skipped_formula"
     SKIPPED_UNCHANGED = "skipped_unchanged"
+    SKIPPED_UNSUPPORTED = "skipped_unsupported"
 
 
 class OverflowCause(str, Enum):
@@ -23,6 +25,17 @@ class OverflowCause(str, Enum):
     OVERFLOW_HEIGHT = "overflow_height"
     OVERFLOW_WIDTH_AT_MIN_SIZE = "overflow_width_at_min_size"
     OVERFLOW_UNDETERMINED = "overflow_undetermined"
+
+
+@dataclass(frozen=True)
+class CollisionDetail:
+    """Structured telemetry data describing a geometric collision event."""
+
+    collision_type: str  # "FORMULA", "ADJACENT_TEXT", "IMAGE", "VECTOR_ART", "UNKNOWN"
+    protected_object_id: str | None
+    bbox: tuple[float, float, float, float]
+    confidence: float | None = None
+    description: str = ""
 
 
 @dataclass(slots=True)
@@ -41,6 +54,7 @@ class BlockFittingDetail:
     line_count: int = 1
     bbox: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     overflow_cause: OverflowCause = OverflowCause.NONE
+    collision_detail: CollisionDetail | None = None
     reason: str = ""
 
 
@@ -52,6 +66,7 @@ class PageFittingSummary:
     total_blocks: int = 0
     replaced_blocks: int = 0
     overflow_blocks: int = 0
+    collision_blocks: int = 0
     skipped_blocks: int = 0
     avg_shrink_ratio: float = 1.0
     worst_shrink_ratio: float = 1.0
@@ -66,6 +81,7 @@ class FittingReport:
     total_blocks: int = 0
     replaced_blocks: int = 0
     overflow_blocks: int = 0
+    collision_blocks: int = 0
     skipped_blocks: int = 0
     avg_shrink_ratio: float = 1.0
     worst_shrink_ratio: float = 1.0
@@ -77,7 +93,7 @@ class FittingReport:
     @property
     def success_rate(self) -> float:
         """Percentage of candidate blocks successfully typeset."""
-        candidates = self.replaced_blocks + self.overflow_blocks
+        candidates = self.replaced_blocks + self.overflow_blocks + self.collision_blocks
         if candidates == 0:
             return 100.0
         return (self.replaced_blocks / candidates) * 100.0
@@ -98,6 +114,7 @@ class TypesetOptions:
     safety_padding_em: float = 0.03
     severe_shrink_threshold: float = 0.75
     step_down_ratio: float = 0.95
+    clearance_padding_pt: float = 0.5
 
 
 @dataclass(slots=True)

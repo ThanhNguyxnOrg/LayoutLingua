@@ -6,8 +6,14 @@ from layoutlingua.core.parser import PDFParseError, parse_pdf
 from layoutlingua.ipc import JsonRpcServer
 from layoutlingua.translation.mock import MockTranslationProvider
 from layoutlingua.typesetting import (
+    BlockClearanceDecision,
     BlockFittingDetail,
     BlockFittingStatus,
+    ClearancePlan,
+    ClearancePlanner,
+    CollisionDetail,
+    ExclusionZone,
+    ExclusionZoneType,
     FittingReport,
     FontManager,
     FontValidationError,
@@ -20,9 +26,15 @@ from layoutlingua.typesetting import (
 
 __all__ = [
     "__version__",
+    "BlockClearanceDecision",
     "BlockFittingDetail",
     "BlockFittingStatus",
+    "ClearancePlan",
+    "ClearancePlanner",
+    "CollisionDetail",
     "DocumentIR",
+    "ExclusionZone",
+    "ExclusionZoneType",
     "FittingReport",
     "FontManager",
     "FontValidationError",

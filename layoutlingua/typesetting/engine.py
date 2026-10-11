@@ -14,12 +14,14 @@ from layoutlingua.typesetting.fonts import FontManager
 from layoutlingua.typesetting.models import (
     BlockFittingDetail,
     BlockFittingStatus,
+    CollisionDetail,
     FittingReport,
     OverflowCause,
     PageFittingSummary,
     TypesetOptions,
     TypesetResult,
 )
+from layoutlingua.typesetting.protection import ClearancePlanner
 
 
 class TypesetEngine:
@@ -39,6 +41,7 @@ class TypesetEngine:
             font_manager=self.font_manager,
             font_name=self.options.font_name,
         )
+        self._clearance_planner = ClearancePlanner(padding_pt=self.options.clearance_padding_pt)
 
     def typeset(
         self,
@@ -75,14 +78,34 @@ class TypesetEngine:
             page_summary = PageFittingSummary(page_number=page_ir.page_number)
             page_replaced_ratios: list[float] = []
 
-            # Structure: (block, translated_text, orig_font_size, dominant_color, final_font_size, lineheight, line_count)
-            fitting_plan: list[tuple[TextBlock, str, float, tuple[float, float, float], float, float, int]] = []
+            # 1. Identify translation candidate blocks for this page
+            candidate_blocks: list[TextBlock] = []
+            block_translation_map: dict[str, str] = {}
+            for block in page_ir.blocks:
+                if block.block_type == "formula":
+                    continue
+                trans_text = self._resolve_translated_text(block, translated_segments)
+                if trans_text and trans_text.strip() and trans_text.strip() != block.text.strip():
+                    candidate_blocks.append(block)
+                    block_translation_map[block.block_id] = trans_text
+
+            # 2. Pre-compute read-only clearance plan on pristine page before any redactions
+            clearance_plan = self._clearance_planner.plan_page_clearance(
+                page_ir=page_ir,
+                page=page,
+                candidate_blocks=candidate_blocks,
+            )
+
+            # Structure: (block, tight_line_rects, translated_text, orig_font_size, dominant_color, final_font_size, lineheight, line_count)
+            fitting_plan: list[
+                tuple[TextBlock, list[tuple[float, float, float, float]], str, float, tuple[float, float, float], float, float, int]
+            ] = []
 
             for block in page_ir.blocks:
                 report.total_blocks += 1
                 page_summary.total_blocks += 1
 
-                # 1. Formula preservation check
+                # 3. Formula preservation check
                 if block.block_type == "formula":
                     report.skipped_blocks += 1
                     page_summary.skipped_blocks += 1
@@ -102,7 +125,7 @@ class TypesetEngine:
                     )
                     continue
 
-                # 2. Extract translation candidate
+                # 4. Extract translation candidate
                 translated_text = self._resolve_translated_text(block, translated_segments)
                 if not translated_text or not translated_text.strip():
                     report.skipped_blocks += 1
@@ -142,13 +165,38 @@ class TypesetEngine:
                     )
                     continue
 
-                # 3. Determine metrics and color
+                # 5. Clearance check: verify safety from pre-computed clearance plan
+                decision = clearance_plan.decisions.get(block.block_id)
+                if decision is not None and not decision.is_approved:
+                    report.collision_blocks += 1
+                    page_summary.collision_blocks += 1
+                    coll = decision.collision_detail
+                    coll_type = coll.collision_type if coll else "UNKNOWN"
+                    coll_desc = coll.description if coll else "Geometric collision detected."
+                    report.details.append(
+                        BlockFittingDetail(
+                            block_id=block.block_id,
+                            page_number=page_ir.page_number,
+                            status=BlockFittingStatus.COLLISION_FALLBACK,
+                            original_text=block.text,
+                            translated_text=translated_text,
+                            original_font_size=10.0,
+                            final_font_size=10.0,
+                            shrink_ratio=1.0,
+                            bbox=block.bbox,
+                            collision_detail=coll,
+                            reason=f"Collision detected ({coll_type}): {coll_desc}. Source retained.",
+                        )
+                    )
+                    continue
+
+                # 6. Determine metrics and color
                 orig_font_size = max((s.font_size for s in block.spans), default=10.0)
                 dominant_color = (
                     parse_color(block.spans[0].color) if block.spans else (0.0, 0.0, 0.0)
                 )
 
-                # 4. Precision Binary Search fitting test with dynamic line-height
+                # 7. Precision Binary Search fitting test with dynamic line-height
                 fits, final_font_size, overflow_cause, line_count, effective_lineheight = self._fit_tester.test_fit(
                     rect=block.bbox,
                     text=translated_text,
@@ -156,9 +204,16 @@ class TypesetEngine:
                     options=self.options,
                 )
 
+                tight_line_rects = (
+                    decision.tight_line_rects
+                    if decision
+                    else [(block.bbox[0], block.bbox[1], block.bbox[2], block.bbox[3])]
+                )
+
                 if fits:
                     fitting_plan.append((
                         block,
+                        tight_line_rects,
                         translated_text,
                         orig_font_size,
                         dominant_color,
@@ -191,11 +246,12 @@ class TypesetEngine:
                         )
                     )
 
-            # 5. Apply selective redaction ONLY to approved fitting candidates
+            # 8. Apply selective redaction ONLY to approved, fitting candidates using tight line rects
             if fitting_plan:
-                for block, _, _, _, _, _, _ in fitting_plan:
-                    rect = pymupdf.Rect(*block.bbox)
-                    page.add_redact_annot(rect, fill=False, cross_out=False)
+                for block, tight_line_rects, _, _, _, _, _, _ in fitting_plan:
+                    for line_rect in tight_line_rects:
+                        rect = pymupdf.Rect(*line_rect)
+                        page.add_redact_annot(rect, fill=False, cross_out=False)
 
                 page.apply_redactions(
                     images=pymupdf.PDF_REDACT_IMAGE_NONE,
@@ -203,8 +259,8 @@ class TypesetEngine:
                     text=pymupdf.PDF_REDACT_TEXT_REMOVE,
                 )
 
-                # 6. Insert translated text using identical effective line-height
-                for block, text, orig_size, color, final_size, lineheight, line_count in fitting_plan:
+                # 9. Insert translated text using identical effective line-height
+                for block, _, text, orig_size, color, final_size, lineheight, line_count in fitting_plan:
                     rect = pymupdf.Rect(*block.bbox)
                     page.insert_textbox(
                         rect,

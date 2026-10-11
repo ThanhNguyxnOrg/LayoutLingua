@@ -5,16 +5,32 @@ from layoutlingua.typesetting.fonts import FontManager, FontValidationError
 from layoutlingua.typesetting.models import (
     BlockFittingDetail,
     BlockFittingStatus,
+    CollisionDetail,
     FittingReport,
     OverflowCause,
     PageFittingSummary,
     TypesetOptions,
     TypesetResult,
 )
+from layoutlingua.typesetting.protection import (
+    BlockClearanceDecision,
+    ClearancePlan,
+    ClearancePlanner,
+    ExclusionZone,
+    ExclusionZoneType,
+    compute_tight_line_clearance_regions,
+    is_background_container,
+)
 
 __all__ = [
+    "BlockClearanceDecision",
     "BlockFittingDetail",
     "BlockFittingStatus",
+    "ClearancePlan",
+    "ClearancePlanner",
+    "CollisionDetail",
+    "ExclusionZone",
+    "ExclusionZoneType",
     "FittingReport",
     "FontManager",
     "FontValidationError",
@@ -23,4 +39,6 @@ __all__ = [
     "TypesetEngine",
     "TypesetOptions",
     "TypesetResult",
+    "compute_tight_line_clearance_regions",
+    "is_background_container",
 ]
