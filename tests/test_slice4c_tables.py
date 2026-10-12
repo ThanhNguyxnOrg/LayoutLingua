@@ -881,5 +881,197 @@ class TestSlice4CStrokeAwareInsets(unittest.TestCase):
         out_doc.close()
 
 
+class TestSlice4CPageTransaction(unittest.TestCase):
+    """Task 6: Page-level transactional staging, rollback, and indexing contract."""
+
+    def test_page_transaction_staging_success(self) -> None:
+        """Successful page staging returns PageTransactionResult(is_fallback=False) adhering to page_number == source_page_index + 1."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        page.insert_text(pymupdf.Point(50, 50), "Original Page 1")
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        b = TextBlock(
+            "b0", (50, 40, 150, 60),
+            spans=[GlyphSpan("s0", "Original Page 1", (50, 40, 150, 60), "DejaVuSans", 10.0, "#000000")],
+            block_type="text",
+        )
+        p.blocks.append(b)
+        doc_ir = DocumentIR("doc1", "test.pdf", 1, pages=[p])
+
+        engine = TypesetEngine()
+        result = engine.stage_page_transaction(
+            source_doc=doc,
+            page_ir=p,
+            document_ir=doc_ir,
+            translated_segments={"b0": "Trang 1 Đã Dịch"},
+        )
+
+        self.assertIsInstance(result, PageTransactionResult)
+        self.assertFalse(result.is_fallback)
+        self.assertEqual(result.page_number, 1)
+        self.assertEqual(result.source_page_index, 0)
+        self.assertEqual(result.page_number, result.source_page_index + 1)
+        self.assertEqual(len(result.staging_doc), 1)
+
+        staged_text = result.staging_doc[0].get_text()
+        self.assertIn("Trang 1 Đã Dịch", staged_text)
+        self.assertEqual(result.summary.replaced_blocks, 1)
+        self.assertEqual(result.summary.transaction_fallback_blocks, 0)
+        doc.close()
+
+    def test_page_transaction_indexing_contract_multipage(self) -> None:
+        """Invariant page_number == source_page_index + 1 holds strictly on higher page indices."""
+        doc = pymupdf.open()
+        doc.new_page(width=300, height=300)  # page 0
+        p2 = doc.new_page(width=300, height=300)  # page 1
+        p2.insert_text(pymupdf.Point(50, 50), "Original Page 2")
+
+        geom = PageGeometry(width=300, height=300)
+        p_ir = PageIR(page_number=2, geometry=geom)
+        b = TextBlock(
+            "b2", (50, 40, 150, 60),
+            spans=[GlyphSpan("s2", "Original Page 2", (50, 40, 150, 60), "DejaVuSans", 10.0, "#000000")],
+            block_type="text",
+        )
+        p_ir.blocks.append(b)
+        doc_ir = DocumentIR("doc1", "test.pdf", 2, pages=[PageIR(1, geom), p_ir])
+
+        engine = TypesetEngine()
+        result = engine.stage_page_transaction(
+            source_doc=doc,
+            page_ir=p_ir,
+            document_ir=doc_ir,
+            translated_segments={"b2": "Trang 2 Đã Dịch"},
+        )
+
+        self.assertEqual(result.page_number, 2)
+        self.assertEqual(result.source_page_index, 1)
+        self.assertEqual(result.page_number, result.source_page_index + 1)
+        self.assertFalse(result.is_fallback)
+        self.assertEqual(len(result.staging_doc), 1)
+        doc.close()
+
+    def test_page_transaction_rollback_on_exception(self) -> None:
+        """Unhandled error during staging discards scratch doc, returns pristine source page with is_fallback=True."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        page.insert_text(pymupdf.Point(50, 50), "Pristine Source Text")
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        b = TextBlock(
+            "b_crash", (50, 40, 150, 60),
+            spans=[GlyphSpan("s0", "Pristine Source Text", (50, 40, 150, 60), "DejaVuSans", 10.0, "#000000")],
+            block_type="text",
+        )
+        p.blocks.append(b)
+        doc_ir = DocumentIR("doc1", "test.pdf", 1, pages=[p])
+
+        engine = TypesetEngine()
+
+        # Invalidate fit tester to trigger exception during staging
+        original_test_fit = engine._fit_tester.test_fit
+        def crash_test_fit(*args, **kwargs):
+            raise RuntimeError("Simulated unhandled rendering crash")
+        engine._fit_tester.test_fit = crash_test_fit
+
+        try:
+            result = engine.stage_page_transaction(
+                source_doc=doc,
+                page_ir=p,
+                document_ir=doc_ir,
+                translated_segments={"b_crash": "Translation Should Not Appear"},
+            )
+        finally:
+            engine._fit_tester.test_fit = original_test_fit
+
+        self.assertTrue(result.is_fallback)
+        self.assertEqual(result.page_number, 1)
+        self.assertEqual(result.source_page_index, 0)
+        self.assertEqual(result.page_number, result.source_page_index + 1)
+        self.assertEqual(len(result.staging_doc), 1)
+
+        # Staging doc was rolled back to pristine source page
+        staged_text = result.staging_doc[0].get_text()
+        self.assertIn("Pristine Source Text", staged_text)
+        self.assertNotIn("Translation Should Not Appear", staged_text)
+        doc.close()
+
+    def test_page_transaction_fallback_telemetry_accuracy(self) -> None:
+        """Rollback accurately records transaction_fallback_blocks and zero false SUCCESS statuses."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        page.insert_text(pymupdf.Point(50, 50), "Pristine Source Text")
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        b = TextBlock(
+            "b_crash", (50, 40, 150, 60),
+            spans=[GlyphSpan("s0", "Pristine Source Text", (50, 40, 150, 60), "DejaVuSans", 10.0, "#000000")],
+            block_type="text",
+        )
+        p.blocks.append(b)
+        doc_ir = DocumentIR("doc1", "test.pdf", 1, pages=[p])
+
+        engine = TypesetEngine()
+        original_test_fit = engine._fit_tester.test_fit
+        def crash_test_fit(*args, **kwargs):
+            raise RuntimeError("Simulated crash")
+        engine._fit_tester.test_fit = crash_test_fit
+
+        try:
+            result = engine.stage_page_transaction(
+                source_doc=doc,
+                page_ir=p,
+                document_ir=doc_ir,
+                translated_segments={"b_crash": "New Text"},
+            )
+        finally:
+            engine._fit_tester.test_fit = original_test_fit
+
+        self.assertTrue(result.is_fallback)
+        self.assertEqual(result.summary.replaced_blocks, 0)
+        self.assertEqual(result.summary.transaction_fallback_blocks, 1)
+        for d in result.details:
+            self.assertNotEqual(d.status, BlockFittingStatus.SUCCESS)
+            self.assertEqual(d.status, BlockFittingStatus.TRANSACTION_FALLBACK)
+        doc.close()
+
+    def test_page_transaction_zero_source_mutation(self) -> None:
+        """Source document bytes are 100% identical before and after staging operations."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        page.insert_text(pymupdf.Point(50, 50), "Original Text Never Mutates")
+        before_bytes = doc.tobytes()
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        b = TextBlock(
+            "b0", (50, 40, 150, 60),
+            spans=[GlyphSpan("s0", "Original Text Never Mutates", (50, 40, 150, 60), "DejaVuSans", 10.0, "#000000")],
+            block_type="text",
+        )
+        p.blocks.append(b)
+        doc_ir = DocumentIR("doc1", "test.pdf", 1, pages=[p])
+
+        engine = TypesetEngine()
+        result = engine.stage_page_transaction(
+            source_doc=doc,
+            page_ir=p,
+            document_ir=doc_ir,
+            translated_segments={"b0": "Mutated Text"},
+        )
+        # Verify source doc text remains pristine
+        self.assertEqual(doc[0].get_text().strip(), "Original Text Never Mutates")
+        self.assertNotIn("Mutated Text", doc[0].get_text())
+        self.assertEqual(len(doc), 1)
+
+        # But staging doc contains mutated translated text
+        self.assertIn("Mutated Text", result.staging_doc[0].get_text())
+        doc.close()
+
+
 if __name__ == "__main__":
     unittest.main()

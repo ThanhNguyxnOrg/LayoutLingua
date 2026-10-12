@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pymupdf
 
-from layoutlingua.core.ir import DocumentIR, TextBlock
+from layoutlingua.core.ir import DocumentIR, PageIR, TextBlock
 from layoutlingua.typesetting.fitting import TextFitTester, parse_color
 from layoutlingua.typesetting.fonts import FontManager
 from layoutlingua.typesetting.models import (
@@ -18,6 +18,7 @@ from layoutlingua.typesetting.models import (
     FittingReport,
     OverflowCause,
     PageFittingSummary,
+    PageTransactionResult,
     TypesetOptions,
     TypesetResult,
 )
@@ -42,43 +43,101 @@ class TypesetEngine:
             font_name=self.options.font_name,
         )
         self._clearance_planner = ClearancePlanner(padding_pt=self.options.clearance_padding_pt)
-
-    def typeset(
+    def stage_page_transaction(
         self,
-        original_pdf: bytes,
+        source_doc: pymupdf.Document,
+        page_ir: PageIR,
         document_ir: DocumentIR,
         translated_segments: dict[str, str],
-    ) -> TypesetResult:
-        """Render translated segments into a new PDF preserving layout, formulas, and background art.
+        force_fallback: bool = False,
+    ) -> PageTransactionResult:
+        """Stage single-page typesetting inside an isolated scratch document.
 
-        Args:
-            original_pdf: Raw byte buffer of the input PDF document.
-            document_ir: Extracted Intermediate Representation containing geometric coordinates.
-            translated_segments: Map of segment_id / block_id to translated string content.
-
-        Returns:
-            TypesetResult containing the regenerated PDF bytes and fitting telemetry.
+        Guarantees:
+        - Invariant: page_number == source_page_index + 1
+        - Staging occurs strictly on an isolated scratch document copied from source_doc[source_page_index].
+        - If any unhandled exception or critical safety failure occurs, rolls back cleanly
+          to a pristine source page clone with is_fallback=True, preserving 100% of source bytes.
+        - Telemetry reflects fallback or success without false records.
         """
-        if not original_pdf:
-            raise ValueError("original_pdf buffer must not be empty.")
+        page_number = page_ir.page_number
+        source_page_index = page_number - 1
+        assert page_number == source_page_index + 1, f"Indexing contract violated: {page_number} != {source_page_index} + 1"
 
-        doc = pymupdf.open(stream=original_pdf, filetype="pdf")
-        report = FittingReport()
+        if source_page_index < 0 or source_page_index >= len(source_doc):
+            raise IndexError(f"source_page_index {source_page_index} out of range [0, {len(source_doc)})")
 
-        all_replaced_shrink_ratios: list[float] = []
+        def _build_fallback_result(reason: str = "Transaction rollback to pristine source page.") -> PageTransactionResult:
+            fallback_doc = pymupdf.open()
+            fallback_doc.insert_pdf(source_doc, from_page=source_page_index, to_page=source_page_index)
 
-        for page_ir in document_ir.pages:
-            page_idx = page_ir.page_number - 1
-            if page_idx >= len(doc):
-                continue
+            summary = PageFittingSummary(page_number=page_number)
+            details: list[BlockFittingDetail] = []
 
-            page = doc[page_idx]
-            self.font_manager.register_on_page(page, font_name=self.options.font_name)
+            for block in page_ir.blocks:
+                is_cell = (block.block_type == "table_cell")
+                summary.total_blocks += 1
+                if is_cell:
+                    summary.total_cells += 1
 
-            page_summary = PageFittingSummary(page_number=page_ir.page_number)
+                trans_text = self._resolve_translated_text(block, translated_segments)
+                was_candidate = bool(
+                    trans_text
+                    and trans_text.strip()
+                    and trans_text.strip() != block.text.strip()
+                    and block.block_type not in ("formula", "table_rejected")
+                )
+
+                if was_candidate:
+                    summary.transaction_fallback_blocks += 1
+                    if is_cell:
+                        summary.transaction_fallback_cells += 1
+                    status = BlockFittingStatus.TRANSACTION_FALLBACK
+                else:
+                    summary.skipped_blocks += 1
+                    if is_cell:
+                        summary.skipped_cells += 1
+                    status = BlockFittingStatus.SKIPPED_UNCHANGED
+
+                details.append(
+                    BlockFittingDetail(
+                        block_id=block.block_id,
+                        page_number=page_number,
+                        status=status,
+                        original_text=block.text,
+                        translated_text="",
+                        original_font_size=10.0,
+                        final_font_size=10.0,
+                        shrink_ratio=1.0,
+                        bbox=block.bbox,
+                        unit_kind="CELL" if is_cell else "BLOCK",
+                        reason=reason,
+                    )
+                )
+
+            return PageTransactionResult(
+                page_number=page_number,
+                source_page_index=source_page_index,
+                staging_doc=fallback_doc,
+                is_fallback=True,
+                details=details,
+                summary=summary,
+            )
+
+        if force_fallback:
+            return _build_fallback_result("Forced page transaction fallback.")
+
+        staging_doc = pymupdf.open()
+        try:
+            staging_doc.insert_pdf(source_doc, from_page=source_page_index, to_page=source_page_index)
+            scratch_page = staging_doc[0]
+            self.font_manager.register_on_page(scratch_page, font_name=self.options.font_name)
+
+            page_summary = PageFittingSummary(page_number=page_number)
             page_replaced_ratios: list[float] = []
+            page_details: list[BlockFittingDetail] = []
 
-            # 0. Collect preserved block IDs from document and page metadata (fail-closed)
+            # 0. Collect preserved block IDs
             preserved_ids = set()
             if hasattr(document_ir, "metadata") and isinstance(document_ir.metadata, dict):
                 p_ids = document_ir.metadata.get("preserved_block_ids", set())
@@ -89,7 +148,7 @@ class TypesetEngine:
                 if isinstance(p_ids, (set, list, tuple)):
                     preserved_ids.update(p_ids)
 
-            # 1. Identify translation candidate blocks for this page
+            # 1. Identify translation candidates
             candidate_blocks: list[TextBlock] = []
             block_translation_map: dict[str, str] = {}
             for block in page_ir.blocks:
@@ -100,14 +159,13 @@ class TypesetEngine:
                     candidate_blocks.append(block)
                     block_translation_map[block.block_id] = trans_text
 
-            # 2. Pre-compute read-only clearance plan on pristine page before any redactions
+            # 2. Pre-compute read-only clearance plan on pristine scratch page
             clearance_plan = self._clearance_planner.plan_page_clearance(
                 page_ir=page_ir,
-                page=page,
+                page=scratch_page,
                 candidate_blocks=candidate_blocks,
             )
 
-            # Structure: (block, tight_line_rects, translated_text, orig_font_size, dominant_color, final_font_size, lineheight, line_count, target_layout_box, is_cell, grid, cell_geom)
             fitting_plan: list[
                 tuple[
                     TextBlock,
@@ -126,22 +184,18 @@ class TypesetEngine:
             ] = []
 
             for block in page_ir.blocks:
-                report.total_blocks += 1
                 page_summary.total_blocks += 1
-
                 is_cell = (block.block_type == "table_cell")
                 if is_cell:
-                    report.total_cells += 1
                     page_summary.total_cells += 1
 
                 # 3. Formula preservation check
                 if block.block_type == "formula":
-                    report.skipped_blocks += 1
                     page_summary.skipped_blocks += 1
-                    report.details.append(
+                    page_details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
-                            page_number=page_ir.page_number,
+                            page_number=page_number,
                             status=BlockFittingStatus.SKIPPED_FORMULA,
                             original_text=block.text,
                             translated_text="",
@@ -154,17 +208,15 @@ class TypesetEngine:
                     )
                     continue
 
-                # 3b. Preserved / Rejected table block check (fail-closed)
+                # 3b. Preserved / Rejected table block check
                 if block.block_type == "table_rejected" or block.block_id in preserved_ids:
-                    report.skipped_blocks += 1
                     page_summary.skipped_blocks += 1
                     if is_cell:
-                        report.skipped_cells += 1
                         page_summary.skipped_cells += 1
-                    report.details.append(
+                    page_details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
-                            page_number=page_ir.page_number,
+                            page_number=page_number,
                             status=BlockFittingStatus.SKIPPED_UNSUPPORTED,
                             original_text=block.text,
                             translated_text="",
@@ -178,7 +230,7 @@ class TypesetEngine:
                     )
                     continue
 
-                # 3c. Table cell geometry and stroke-aware insets resolution (Task 5)
+                # 3c. Table cell geometry and stroke-aware insets resolution
                 grid = None
                 cell_geom = None
                 inner_bbox = None
@@ -193,15 +245,12 @@ class TypesetEngine:
                                     break
 
                     if cell_geom is None:
-                        # Missing cell geometry in table grid (fail-closed)
-                        report.skipped_blocks += 1
-                        report.skipped_cells += 1
                         page_summary.skipped_blocks += 1
                         page_summary.skipped_cells += 1
-                        report.details.append(
+                        page_details.append(
                             BlockFittingDetail(
                                 block_id=block.block_id,
-                                page_number=page_ir.page_number,
+                                page_number=page_number,
                                 status=BlockFittingStatus.SKIPPED_UNSUPPORTED,
                                 original_text=block.text,
                                 translated_text="",
@@ -217,15 +266,12 @@ class TypesetEngine:
 
                     inner_bbox = cell_geom.compute_inner_bbox()
                     if inner_bbox is None:
-                        # Narrow or shallow cell where padding exceeds dimensions (fail-closed)
-                        report.overflow_blocks += 1
-                        report.overflow_cells += 1
                         page_summary.overflow_blocks += 1
                         page_summary.overflow_cells += 1
-                        report.details.append(
+                        page_details.append(
                             BlockFittingDetail(
                                 block_id=block.block_id,
-                                page_number=page_ir.page_number,
+                                page_number=page_number,
                                 status=BlockFittingStatus.OVERFLOW_FALLBACK,
                                 original_text=block.text,
                                 translated_text="",
@@ -246,15 +292,13 @@ class TypesetEngine:
                 # 4. Extract translation candidate
                 translated_text = self._resolve_translated_text(block, translated_segments)
                 if not translated_text or not translated_text.strip():
-                    report.skipped_blocks += 1
                     page_summary.skipped_blocks += 1
                     if is_cell:
-                        report.skipped_cells += 1
                         page_summary.skipped_cells += 1
-                    report.details.append(
+                    page_details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
-                            page_number=page_ir.page_number,
+                            page_number=page_number,
                             status=BlockFittingStatus.SKIPPED_EMPTY,
                             original_text=block.text,
                             translated_text="",
@@ -272,15 +316,13 @@ class TypesetEngine:
                     continue
 
                 if translated_text.strip() == block.text.strip():
-                    report.skipped_blocks += 1
                     page_summary.skipped_blocks += 1
                     if is_cell:
-                        report.skipped_cells += 1
                         page_summary.skipped_cells += 1
-                    report.details.append(
+                    page_details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
-                            page_number=page_ir.page_number,
+                            page_number=page_number,
                             status=BlockFittingStatus.SKIPPED_UNCHANGED,
                             original_text=block.text,
                             translated_text=translated_text,
@@ -297,21 +339,19 @@ class TypesetEngine:
                     )
                     continue
 
-                # 5. Clearance check: verify safety from pre-computed clearance plan
+                # 5. Clearance check
                 decision = clearance_plan.decisions.get(block.block_id)
                 if decision is not None and not decision.is_approved:
-                    report.collision_blocks += 1
                     page_summary.collision_blocks += 1
                     if is_cell:
-                        report.collision_cells += 1
                         page_summary.collision_cells += 1
                     coll = decision.collision_detail
                     coll_type = coll.collision_type if coll else "UNKNOWN"
                     coll_desc = coll.description if coll else "Geometric collision detected."
-                    report.details.append(
+                    page_details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
-                            page_number=page_ir.page_number,
+                            page_number=page_number,
                             status=BlockFittingStatus.COLLISION_FALLBACK,
                             original_text=block.text,
                             translated_text=translated_text,
@@ -335,7 +375,7 @@ class TypesetEngine:
                     parse_color(block.spans[0].color) if block.spans else (0.0, 0.0, 0.0)
                 )
 
-                # 7. Precision Binary Search fitting test with dynamic line-height
+                # 7. Precision Binary Search fitting test
                 target_layout_box = inner_bbox if is_cell and inner_bbox else block.bbox
 
                 fits, final_font_size, overflow_cause, line_count, effective_lineheight = self._fit_tester.test_fit(
@@ -346,7 +386,6 @@ class TypesetEngine:
                 )
 
                 if is_cell and inner_bbox:
-                    # Clamp tight line redaction rects strictly within inner_bbox
                     raw_lines = decision.tight_line_rects if decision else [inner_bbox]
                     tight_line_rects = [
                         (
@@ -384,16 +423,13 @@ class TypesetEngine:
                         cell_geom,
                     ))
                 else:
-                    # Overflow event: fail-closed preserves source text
-                    report.overflow_blocks += 1
                     page_summary.overflow_blocks += 1
                     if is_cell:
-                        report.overflow_cells += 1
                         page_summary.overflow_cells += 1
-                    report.details.append(
+                    page_details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
-                            page_number=page_ir.page_number,
+                            page_number=page_number,
                             status=BlockFittingStatus.OVERFLOW_FALLBACK,
                             original_text=block.text,
                             translated_text=translated_text,
@@ -415,20 +451,20 @@ class TypesetEngine:
                         )
                     )
 
-            # 8. Apply selective redaction ONLY to approved, fitting candidates using tight line rects
+            # 8. Apply selective redaction ONLY on approved, fitting candidates
             if fitting_plan:
                 for block, tight_line_rects, _, _, _, _, _, _, _, _, _, _ in fitting_plan:
                     for line_rect in tight_line_rects:
                         rect = pymupdf.Rect(*line_rect)
-                        page.add_redact_annot(rect, fill=False, cross_out=False)
+                        scratch_page.add_redact_annot(rect, fill=False, cross_out=False)
 
-                page.apply_redactions(
+                scratch_page.apply_redactions(
                     images=pymupdf.PDF_REDACT_IMAGE_NONE,
                     graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
                     text=pymupdf.PDF_REDACT_TEXT_REMOVE,
                 )
 
-                # 9. Insert translated text using identical effective line-height
+                # 9. Insert translated text
                 for (
                     block,
                     _,
@@ -444,7 +480,7 @@ class TypesetEngine:
                     cell_geom,
                 ) in fitting_plan:
                     rect = pymupdf.Rect(*target_layout_box)
-                    page.insert_textbox(
+                    scratch_page.insert_textbox(
                         rect,
                         text,
                         fontsize=final_size,
@@ -455,21 +491,15 @@ class TypesetEngine:
                     )
                     shrink_ratio = final_size / orig_size if orig_size > 0 else 1.0
                     page_replaced_ratios.append(shrink_ratio)
-                    all_replaced_shrink_ratios.append(shrink_ratio)
 
-                    report.replaced_blocks += 1
                     page_summary.replaced_blocks += 1
                     if is_cell:
-                        report.replaced_cells += 1
                         page_summary.replaced_cells += 1
 
-                    if shrink_ratio < self.options.severe_shrink_threshold:
-                        report.severe_shrink_blocks_count += 1
-
-                    report.details.append(
+                    page_details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
-                            page_number=page_ir.page_number,
+                            page_number=page_number,
                             status=BlockFittingStatus.SUCCESS,
                             original_text=block.text,
                             translated_text=text,
@@ -492,7 +522,6 @@ class TypesetEngine:
                         )
                     )
 
-            # Aggregate page summary metrics
             if page_replaced_ratios:
                 page_summary.avg_shrink_ratio = sum(page_replaced_ratios) / len(page_replaced_ratios)
                 page_summary.worst_shrink_ratio = min(page_replaced_ratios)
@@ -504,9 +533,86 @@ class TypesetEngine:
                 page_summary.worst_shrink_ratio = 1.0
                 page_summary.has_severe_shrink_warning = False
 
-            report.pages.append(page_summary)
+            return PageTransactionResult(
+                page_number=page_number,
+                source_page_index=source_page_index,
+                staging_doc=staging_doc,
+                is_fallback=False,
+                details=page_details,
+                summary=page_summary,
+            )
+        except Exception:
+            try:
+                staging_doc.close()
+            except Exception:
+                pass
+            return _build_fallback_result("Unhandled exception during page staging.")
 
-        # Aggregate document summary metrics
+    def typeset(
+        self,
+        original_pdf: bytes,
+        document_ir: DocumentIR,
+        translated_segments: dict[str, str],
+    ) -> TypesetResult:
+        """Render translated segments into a new PDF using page-level transactional staging.
+
+        Args:
+            original_pdf: Raw byte buffer of the input PDF document.
+            document_ir: Extracted Intermediate Representation containing geometric coordinates.
+            translated_segments: Map of segment_id / block_id to translated string content.
+
+        Returns:
+            TypesetResult containing the regenerated PDF bytes and fitting telemetry.
+        """
+        if not original_pdf:
+            raise ValueError("original_pdf buffer must not be empty.")
+
+        source_doc = pymupdf.open(stream=original_pdf, filetype="pdf")
+        report = FittingReport()
+        all_replaced_shrink_ratios: list[float] = []
+        output_doc = pymupdf.open()
+
+        for page_ir in document_ir.pages:
+            source_page_index = page_ir.page_number - 1
+            if source_page_index < 0 or source_page_index >= len(source_doc):
+                continue
+
+            tx_result = self.stage_page_transaction(
+                source_doc=source_doc,
+                page_ir=page_ir,
+                document_ir=document_ir,
+                translated_segments=translated_segments,
+            )
+
+            # Insert committed single page into output document
+            output_doc.insert_pdf(tx_result.staging_doc)
+            tx_result.staging_doc.close()
+
+            # Aggregate telemetry into FittingReport
+            report.total_blocks += tx_result.summary.total_blocks
+            report.replaced_blocks += tx_result.summary.replaced_blocks
+            report.overflow_blocks += tx_result.summary.overflow_blocks
+            report.collision_blocks += tx_result.summary.collision_blocks
+            report.skipped_blocks += tx_result.summary.skipped_blocks
+            report.transaction_fallback_blocks += tx_result.summary.transaction_fallback_blocks
+
+            report.total_cells += tx_result.summary.total_cells
+            report.replaced_cells += tx_result.summary.replaced_cells
+            report.overflow_cells += tx_result.summary.overflow_cells
+            report.collision_cells += tx_result.summary.collision_cells
+            report.skipped_cells += tx_result.summary.skipped_cells
+            report.transaction_fallback_cells += tx_result.summary.transaction_fallback_cells
+
+            report.pages.append(tx_result.summary)
+            report.details.extend(tx_result.details)
+
+            for d in tx_result.details:
+                if d.status == BlockFittingStatus.SUCCESS:
+                    shrink_ratio = d.shrink_ratio
+                    all_replaced_shrink_ratios.append(shrink_ratio)
+                    if shrink_ratio < self.options.severe_shrink_threshold:
+                        report.severe_shrink_blocks_count += 1
+
         if all_replaced_shrink_ratios:
             report.avg_shrink_ratio = sum(all_replaced_shrink_ratios) / len(all_replaced_shrink_ratios)
             report.worst_shrink_ratio = min(all_replaced_shrink_ratios)
@@ -514,7 +620,9 @@ class TypesetEngine:
             report.avg_shrink_ratio = 1.0
             report.worst_shrink_ratio = 1.0
 
-        output_bytes = doc.tobytes(deflate=True, garbage=3)
+        output_bytes = output_doc.tobytes(deflate=True, garbage=3)
+        output_doc.close()
+        source_doc.close()
         return TypesetResult(pdf_bytes=output_bytes, fitting_report=report)
 
     def _resolve_translated_text(
