@@ -15,7 +15,7 @@ from __future__ import annotations
 import unittest
 import pymupdf
 
-from layoutlingua.core.ir import PageGeometry, PageIR
+from layoutlingua.core.ir import CharInfo, GlyphSpan, PageGeometry, PageIR, TextBlock
 from layoutlingua.core.table_models import BorderLine, CellGeometry, TableGrid
 from layoutlingua.typesetting.models import (
     BlockFittingDetail,
@@ -251,6 +251,199 @@ class TestTableGridValidator(unittest.TestCase):
         doc.close()
 
 
+class TestTableCellPartitioner(unittest.TestCase):
+    """Task 3: Pre-Translation Cell Partitioner & Glyph Provenance Invariant."""
+
+    def test_pre_translation_cell_partitioning_same_baseline(self) -> None:
+        """Text across columns on identical horizontal baseline is split into distinct cell TextBlocks with stable IDs."""
+        from layoutlingua.core.tables import TableCellPartitioner
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        chars = [
+            CharInfo("A", (60, 70, 70, 85), (60, 80)),
+            CharInfo(" ", (70, 70, 75, 85), (70, 80)),
+            CharInfo("B", (160, 70, 170, 85), (160, 80)),
+        ]
+        span = GlyphSpan(
+            "s0", "A B", (60, 70, 170, 85), "DejaVuSans", 10.0, "#000000", chars=chars
+        )
+        block = TextBlock("b0", (60, 70, 170, 85), spans=[span], block_type="text")
+        p.blocks.append(block)
+
+        c0 = CellGeometry(
+            "p1_t0_r0_c0", 0, 0, (50, 50, 150, 100),
+            {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0},
+        )
+        c1 = CellGeometry(
+            "p1_t0_r0_c1", 0, 1, (150, 50, 250, 100),
+            {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0},
+        )
+        grid = TableGrid(
+            "p1_t0", (50, 50, 250, 100), 1, 2, {c0.cell_id: c0, c1.cell_id: c1}
+        )
+
+        partitioner = TableCellPartitioner()
+        partitioner.partition_cells(p, [grid])
+
+        cell_blocks = [b for b in p.blocks if b.block_type == "table_cell"]
+        self.assertEqual(len(cell_blocks), 2)
+        self.assertEqual(cell_blocks[0].block_id, "p1_t0_r0_c0")
+        self.assertEqual(cell_blocks[0].bbox, (50, 50, 150, 100))
+        self.assertEqual(cell_blocks[0].text.strip(), "A")
+        self.assertEqual(cell_blocks[1].block_id, "p1_t0_r0_c1")
+        self.assertEqual(cell_blocks[1].bbox, (150, 50, 250, 100))
+        self.assertEqual(cell_blocks[1].text.strip(), "B")
+
+    def test_character_level_span_splitting_across_border(self) -> None:
+        """A single continuous span spanning across two cells is partitioned cleanly using CharInfo bboxes."""
+        from layoutlingua.core.tables import TableCellPartitioner
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        chars = [
+            CharInfo("C", (80, 70, 90, 85), (80, 80)),
+            CharInfo("D", (180, 70, 190, 85), (180, 80)),
+        ]
+        span = GlyphSpan(
+            "s0", "CD", (80, 70, 190, 85), "DejaVuSans", 10.0, "#000000", chars=chars
+        )
+        p.blocks.append(TextBlock("b0", (80, 70, 190, 85), spans=[span]))
+
+        c0 = CellGeometry(
+            "p1_t0_r0_c0", 0, 0, (50, 50, 150, 100),
+            {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0},
+        )
+        c1 = CellGeometry(
+            "p1_t0_r0_c1", 0, 1, (150, 50, 250, 100),
+            {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0},
+        )
+        grid = TableGrid(
+            "p1_t0", (50, 50, 250, 100), 1, 2, {c0.cell_id: c0, c1.cell_id: c1}
+        )
+
+        partitioner = TableCellPartitioner()
+        partitioner.partition_cells(p, [grid])
+        c_blocks = [b for b in p.blocks if b.block_type == "table_cell"]
+        self.assertEqual(len(c_blocks), 2)
+        self.assertEqual(c_blocks[0].text, "C")
+        self.assertEqual(c_blocks[1].text, "D")
+
+    def test_glyph_identity_and_provenance_conservation(self) -> None:
+        """All glyph provenance IDs {p_b_s_c} match input multiset exactly (C_out == C_in)."""
+        from layoutlingua.core.tables import TableCellPartitioner
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        chars = [
+            CharInfo("X", (60, 70, 70, 85), (60, 80)),
+            CharInfo("Y", (160, 70, 170, 85), (160, 80)),
+        ]
+        span = GlyphSpan(
+            "s0", "XY", (60, 70, 170, 85), "DejaVuSans", 10.0, "#000000", chars=chars
+        )
+        p.blocks.append(TextBlock("b0", (60, 70, 170, 85), spans=[span]))
+
+        c0 = CellGeometry(
+            "p1_t0_r0_c0", 0, 0, (50, 50, 150, 100),
+            {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0},
+        )
+        c1 = CellGeometry(
+            "p1_t0_r0_c1", 0, 1, (150, 50, 250, 100),
+            {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0},
+        )
+        grid = TableGrid(
+            "p1_t0", (50, 50, 250, 100), 1, 2, {c0.cell_id: c0, c1.cell_id: c1}
+        )
+
+        partitioner = TableCellPartitioner()
+        success = partitioner.partition_cells(p, [grid])
+        self.assertTrue(success)
+
+    def test_glyph_conservation_detects_drop_and_duplicate_with_same_count(self) -> None:
+        """Synthetically dropping one character and duplicating another with identical count aborts partitioning fail-closed."""
+        from layoutlingua.core.tables import TableCellPartitioner
+
+        partitioner = TableCellPartitioner()
+        c_in = {"p1_b0_s0_c0": 1, "p1_b0_s0_c1": 1}
+        c_out_tampered = {"p1_b0_s0_c0": 2}
+        self.assertFalse(partitioner._verify_multiset_conservation(c_in, c_out_tampered))
+
+    def test_atomic_formula_token_crossing_border_fails_closed(self) -> None:
+        """A formula token ⟦LL_FORMULA_0001⟧ intersecting a cell divider is not split; table aborts partitioning fail-closed."""
+        from layoutlingua.core.tables import TableCellPartitioner
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        span = GlyphSpan(
+            "s0", "⟦LL_FORMULA_0001⟧", (140, 70, 170, 85), "DejaVuSans", 10.0, "#000000"
+        )
+        p.blocks.append(TextBlock("b0", (140, 70, 170, 85), spans=[span]))
+
+        c0 = CellGeometry(
+            "p1_t0_r0_c0", 0, 0, (50, 50, 150, 100),
+            {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0},
+        )
+        c1 = CellGeometry(
+            "p1_t0_r0_c1", 0, 1, (150, 50, 250, 100),
+            {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0},
+        )
+        grid = TableGrid(
+            "p1_t0", (50, 50, 250, 100), 1, 2, {c0.cell_id: c0, c1.cell_id: c1}
+        )
+
+        partitioner = TableCellPartitioner()
+        success = partitioner.partition_cells(p, [grid])
+        self.assertFalse(success)
+        self.assertEqual(p.blocks[0].block_type, "table_rejected")
+
+    def test_ambiguous_glyph_ownership_fails_closed(self) -> None:
+        """Glyphs straddling cell divider lines without clean separation abort table partitioning; source text preserved."""
+        from layoutlingua.core.tables import TableCellPartitioner
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        chars = [CharInfo("?", (145, 70, 155, 85), (145, 80))]
+        span = GlyphSpan(
+            "s0", "?", (145, 70, 155, 85), "DejaVuSans", 10.0, "#000000", chars=chars
+        )
+        p.blocks.append(TextBlock("b0", (145, 70, 155, 85), spans=[span]))
+
+        c0 = CellGeometry(
+            "p1_t0_r0_c0", 0, 0, (50, 50, 150, 100),
+            {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0},
+        )
+        c1 = CellGeometry(
+            "p1_t0_r0_c1", 0, 1, (150, 50, 250, 100),
+            {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0},
+        )
+        grid = TableGrid(
+            "p1_t0", (50, 50, 250, 100), 1, 2, {c0.cell_id: c0, c1.cell_id: c1}
+        )
+
+        partitioner = TableCellPartitioner()
+        success = partitioner.partition_cells(p, [grid])
+        self.assertFalse(success)
+        self.assertEqual(p.blocks[0].block_type, "table_rejected")
+
+    def test_unsupported_merged_cells_fail_closed(self) -> None:
+        """Table with None in cells and unverified merge geometry triggers SKIPPED_UNSUPPORTED; source text preserved."""
+        from layoutlingua.core.tables import TableCellPartitioner
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        block = TextBlock(
+            "b0", (60, 60, 100, 80),
+            spans=[GlyphSpan("s0", "Merged", (60, 60, 100, 80), "DejaVuSans", 10.0, "#000000")],
+        )
+        p.blocks.append(block)
+
+        grid = TableGrid("p1_t0", (50, 50, 250, 100), 2, 2, {})
+        partitioner = TableCellPartitioner()
+        success = partitioner.partition_cells(p, [grid])
+        self.assertFalse(success)
+        self.assertEqual(p.blocks[0].block_type, "table_rejected")
+
+
 if __name__ == "__main__":
     unittest.main()
-

@@ -8,11 +8,13 @@ rejection semantics.
 from __future__ import annotations
 
 import math
+import re
+from collections import Counter
 from typing import Any, Sequence
 
 import pymupdf
 
-from layoutlingua.core.ir import PageIR, TextBlock
+from layoutlingua.core.ir import CharInfo, GlyphSpan, PageIR, TextBlock
 from layoutlingua.core.table_models import BorderLine, CellGeometry, TableGrid
 
 
@@ -357,3 +359,326 @@ class TableGridValidator:
             if max(bx0, tx0) < min(bx1, tx1) and max(by0, ty0) < min(by1, ty1):
                 block.block_type = "table_rejected"
                 preserved_ids.add(block.block_id)
+
+
+FORMULA_PATTERN = re.compile(r"⟦LL_FORMULA_[^⟧]+⟧|<b\d+>.*?</b\d+>|⟦.*?⟧")
+
+
+class TableCellPartitioner:
+    """Pre-translation table cell partitioner and glyph provenance invariant enforcer.
+
+    Slice 4C.2: Splits PageIR TextBlocks and GlyphSpans that intersect corroborated
+    TableGrids into cell-bounded TextBlocks (block_type="table_cell").
+    Strictly verifies glyph provenance multiset conservation before committing.
+    Fails closed upon ambiguous glyph ownership, crossing atomic formula tokens,
+    or unverified merged grid geometries.
+    """
+
+    def __init__(self, tolerance_pt: float = 1.0) -> None:
+        self.tolerance_pt = tolerance_pt
+
+    def _verify_multiset_conservation(
+        self,
+        c_in: dict[str, int] | Counter[str],
+        c_out: dict[str, int] | Counter[str],
+    ) -> bool:
+        """Verify exact equality of glyph provenance ID multisets."""
+        return Counter(c_in) == Counter(c_out)
+
+    def _reject_table_and_blocks(
+        self,
+        page_ir: PageIR,
+        grid: TableGrid,
+        candidate_blocks: list[TextBlock],
+    ) -> None:
+        """Tag candidate blocks as table_rejected and register in metadata (fail-closed)."""
+        rejected_bboxes = page_ir.metadata.setdefault("rejected_table_bboxes", [])
+        if grid.bbox not in rejected_bboxes:
+            rejected_bboxes.append(grid.bbox)
+
+        preserved_ids = page_ir.metadata.setdefault("preserved_block_ids", set())
+        if isinstance(preserved_ids, list):
+            preserved_ids = set(preserved_ids)
+            page_ir.metadata["preserved_block_ids"] = preserved_ids
+
+        for block in candidate_blocks:
+            block.block_type = "table_rejected"
+            preserved_ids.add(block.block_id)
+
+    def _build_glyph_span(
+        self,
+        cell_id: str,
+        span_idx: int,
+        src_span: GlyphSpan,
+        chars: list[CharInfo],
+    ) -> GlyphSpan:
+        """Construct a new GlyphSpan from a list of CharInfos partitioned into a cell."""
+        text = "".join(c.char for c in chars)
+        min_x = min(c.bbox[0] for c in chars)
+        min_y = min(c.bbox[1] for c in chars)
+        max_x = max(c.bbox[2] for c in chars)
+        max_y = max(c.bbox[3] for c in chars)
+        origin = chars[0].origin if chars else src_span.origin
+        return GlyphSpan(
+            span_id=f"{cell_id}_s{span_idx}",
+            text=text,
+            bbox=(min_x, min_y, max_x, max_y),
+            font_name=src_span.font_name,
+            font_size=src_span.font_size,
+            color=src_span.color,
+            flags=src_span.flags,
+            origin=origin,
+            chars=chars,
+            is_math_or_symbol=src_span.is_math_or_symbol,
+        )
+
+    def partition_cells(self, page_ir: PageIR, grids: list[TableGrid]) -> bool:
+        """Partition TextBlocks on page_ir intersecting grids into cell-bounded TextBlocks.
+
+        Returns:
+            True if all tables were partitioned successfully.
+            False if any table failed closed (aborted and marked table_rejected).
+        """
+        if not grids:
+            return True
+
+        all_ok = True
+
+        for grid in grids:
+            tx0, ty0, tx1, ty1 = grid.bbox
+            candidate_blocks = [
+                b for b in page_ir.blocks
+                if max(b.bbox[0], tx0) < min(b.bbox[2], tx1)
+                and max(b.bbox[1], ty0) < min(b.bbox[3], ty1)
+            ]
+
+            # 1. Check table grid validity (fail-closed on incomplete/merged cells)
+            if (
+                not grid.cells
+                or grid.row_count < 1
+                or grid.col_count < 1
+                or len(grid.cells) < grid.row_count * grid.col_count
+                or any(c is None for c in grid.cells.values())
+            ):
+                self._reject_table_and_blocks(page_ir, grid, candidate_blocks)
+                all_ok = False
+                continue
+
+            if not candidate_blocks:
+                continue
+
+            # 2. Inspect for atomic formula tokens crossing cell borders
+            has_crossing_formula = False
+            for block in candidate_blocks:
+                for span in block.spans:
+                    if FORMULA_PATTERN.search(span.text):
+                        # Token must be strictly inside a single cell
+                        containing_cells = [
+                            c for c in grid.cells.values()
+                            if (c.bbox[0] - self.tolerance_pt <= span.bbox[0] and
+                                span.bbox[2] <= c.bbox[2] + self.tolerance_pt and
+                                c.bbox[1] - self.tolerance_pt <= span.bbox[1] and
+                                span.bbox[3] <= c.bbox[3] + self.tolerance_pt)
+                        ]
+                        if len(containing_cells) != 1:
+                            has_crossing_formula = True
+                            break
+                if has_crossing_formula:
+                    break
+
+            if has_crossing_formula:
+                self._reject_table_and_blocks(page_ir, grid, candidate_blocks)
+                all_ok = False
+                continue
+
+            # 3. Partition glyphs/spans into cells
+            c_in: Counter[str] = Counter()
+            c_out: Counter[str] = Counter()
+            cell_chars: dict[str, list[tuple[CharInfo, GlyphSpan, TextBlock, int, str]]] = {
+                cid: [] for cid in grid.cells.keys()
+            }
+            remainder_chars: list[tuple[CharInfo, GlyphSpan, TextBlock, int, str]] = []
+            ambiguous_ownership = False
+
+            for block in candidate_blocks:
+                for span in block.spans:
+                    if span.chars:
+                        for char_offset, char_info in enumerate(span.chars):
+                            prov_id = f"p{page_ir.page_number}_{block.block_id}_{span.span_id}_c{char_offset}"
+                            c_in[prov_id] += 1
+
+                            # Check cell overlaps
+                            overlapping_cells: list[tuple[CellGeometry, float, float]] = []
+                            for cell in grid.cells.values():
+                                c_bbox = cell.bbox
+                                ov_w = max(0.0, min(char_info.bbox[2], c_bbox[2]) - max(char_info.bbox[0], c_bbox[0]))
+                                ov_h = max(0.0, min(char_info.bbox[3], c_bbox[3]) - max(char_info.bbox[1], c_bbox[1]))
+                                if ov_w > 0 and ov_h > 0:
+                                    overlapping_cells.append((cell, ov_w, ov_h))
+
+                            sig_overlaps = [
+                                c for c, w, h in overlapping_cells
+                                if w > self.tolerance_pt and h > self.tolerance_pt
+                            ]
+                            if len(sig_overlaps) > 1:
+                                ambiguous_ownership = True
+                                break
+
+                            # Assign by center or best overlap
+                            cx = (char_info.bbox[0] + char_info.bbox[2]) / 2.0
+                            cy = (char_info.bbox[1] + char_info.bbox[3]) / 2.0
+                            target_cell: CellGeometry | None = None
+                            for cell in grid.cells.values():
+                                c_bbox = cell.bbox
+                                if (c_bbox[0] - self.tolerance_pt <= cx <= c_bbox[2] + self.tolerance_pt and
+                                        c_bbox[1] - self.tolerance_pt <= cy <= c_bbox[3] + self.tolerance_pt):
+                                    target_cell = cell
+                                    break
+
+                            if target_cell is not None:
+                                cell_chars[target_cell.cell_id].append(
+                                    (char_info, span, block, char_offset, prov_id)
+                                )
+                                c_out[prov_id] += 1
+                            elif overlapping_cells:
+                                best_cell = max(overlapping_cells, key=lambda it: it[1] * it[2])[0]
+                                cell_chars[best_cell.cell_id].append(
+                                    (char_info, span, block, char_offset, prov_id)
+                                )
+                                c_out[prov_id] += 1
+                            else:
+                                remainder_chars.append(
+                                    (char_info, span, block, char_offset, prov_id)
+                                )
+                                c_out[prov_id] += 1
+
+                        if ambiguous_ownership:
+                            break
+                    else:
+                        # span.chars is empty. Check if span is fully inside one cell
+                        overlapping_cells_span: list[CellGeometry] = []
+                        for cell in grid.cells.values():
+                            c_bbox = cell.bbox
+                            ov_w = max(0.0, min(span.bbox[2], c_bbox[2]) - max(span.bbox[0], c_bbox[0]))
+                            ov_h = max(0.0, min(span.bbox[3], c_bbox[3]) - max(span.bbox[1], c_bbox[1]))
+                            if ov_w > self.tolerance_pt and ov_h > self.tolerance_pt:
+                                overlapping_cells_span.append(cell)
+
+                        if len(overlapping_cells_span) > 1:
+                            ambiguous_ownership = True
+                            break
+
+                        target_c = overlapping_cells_span[0] if overlapping_cells_span else None
+                        for char_offset, ch in enumerate(span.text):
+                            prov_id = f"p{page_ir.page_number}_{block.block_id}_{span.span_id}_c{char_offset}"
+                            c_in[prov_id] += 1
+                            synth_char = CharInfo(char=ch, bbox=span.bbox, origin=span.origin)
+                            if target_c is not None:
+                                cell_chars[target_c.cell_id].append(
+                                    (synth_char, span, block, char_offset, prov_id)
+                                )
+                            else:
+                                remainder_chars.append(
+                                    (synth_char, span, block, char_offset, prov_id)
+                                )
+                            c_out[prov_id] += 1
+
+                if ambiguous_ownership:
+                    break
+
+            if ambiguous_ownership:
+                self._reject_table_and_blocks(page_ir, grid, candidate_blocks)
+                all_ok = False
+                continue
+
+            # 4. Multiset conservation gate
+            if not self._verify_multiset_conservation(c_in, c_out):
+                self._reject_table_and_blocks(page_ir, grid, candidate_blocks)
+                all_ok = False
+                continue
+
+            # 5. Build cell TextBlocks
+            sorted_cells = sorted(grid.cells.values(), key=lambda c: (c.row_idx, c.col_idx))
+            new_cell_blocks: list[TextBlock] = []
+
+            for cell in sorted_cells:
+                chars_in_cell = cell_chars.get(cell.cell_id, [])
+                if not chars_in_cell:
+                    continue
+
+                cell_spans: list[GlyphSpan] = []
+                group_chars: list[CharInfo] = []
+                curr_src_span: GlyphSpan | None = None
+
+                for cinfo, src_span, src_block, char_offset, prov_id in chars_in_cell:
+                    if curr_src_span is None or src_span.span_id == curr_src_span.span_id:
+                        group_chars.append(cinfo)
+                        curr_src_span = src_span
+                    else:
+                        cell_spans.append(
+                            self._build_glyph_span(cell.cell_id, len(cell_spans), curr_src_span, group_chars)
+                        )
+                        group_chars = [cinfo]
+                        curr_src_span = src_span
+
+                if group_chars and curr_src_span is not None:
+                    cell_spans.append(
+                        self._build_glyph_span(cell.cell_id, len(cell_spans), curr_src_span, group_chars)
+                    )
+
+                new_cell_blocks.append(
+                    TextBlock(
+                        block_id=cell.cell_id,
+                        bbox=cell.bbox,
+                        spans=cell_spans,
+                        block_type="table_cell",
+                    )
+                )
+
+            # Build remainder blocks if any
+            remainder_blocks: list[TextBlock] = []
+            if remainder_chars:
+                rem_spans: list[GlyphSpan] = []
+                group_chars = []
+                curr_src_span = None
+                for cinfo, src_span, src_block, char_offset, prov_id in remainder_chars:
+                    if curr_src_span is None or src_span.span_id == curr_src_span.span_id:
+                        group_chars.append(cinfo)
+                        curr_src_span = src_span
+                    else:
+                        rem_spans.append(
+                            self._build_glyph_span(f"rem_{grid.table_id}", len(rem_spans), curr_src_span, group_chars)
+                        )
+                        group_chars = [cinfo]
+                        curr_src_span = src_span
+                if group_chars and curr_src_span is not None:
+                    rem_spans.append(
+                        self._build_glyph_span(f"rem_{grid.table_id}", len(rem_spans), curr_src_span, group_chars)
+                    )
+
+                min_x = min(s.bbox[0] for s in rem_spans)
+                min_y = min(s.bbox[1] for s in rem_spans)
+                max_x = max(s.bbox[2] for s in rem_spans)
+                max_y = max(s.bbox[3] for s in rem_spans)
+                remainder_blocks.append(
+                    TextBlock(
+                        block_id=f"{grid.table_id}_remainder",
+                        bbox=(min_x, min_y, max_x, max_y),
+                        spans=rem_spans,
+                        block_type="text",
+                    )
+                )
+
+            # Replace candidate blocks in page_ir.blocks
+            first_idx = len(page_ir.blocks)
+            for b in candidate_blocks:
+                if b in page_ir.blocks:
+                    idx = page_ir.blocks.index(b)
+                    if idx < first_idx:
+                        first_idx = idx
+
+            page_ir.blocks = [b for b in page_ir.blocks if b not in candidate_blocks]
+            replacement_blocks = new_cell_blocks + remainder_blocks
+            page_ir.blocks[first_idx:first_idx] = replacement_blocks
+
+        return all_ok

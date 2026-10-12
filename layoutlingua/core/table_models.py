@@ -28,6 +28,10 @@ class CellGeometry:
     cell_bbox: tuple[float, float, float, float]
     border_widths: dict[str, float]  # {"top": w, "bottom": w, "left": w, "right": w}
 
+    @property
+    def bbox(self) -> tuple[float, float, float, float]:
+        return self.cell_bbox
+
 
 @dataclass(frozen=True)
 class TableGrid:
