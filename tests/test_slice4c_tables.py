@@ -111,5 +111,146 @@ class TestSlice4CTablesSchema(unittest.TestCase):
         self.assertEqual(report.rejected_tables, 0)
 
 
+
+class TestTableGridValidator(unittest.TestCase):
+    """Task 2: Vector Primitive Filtering & TableGridValidator."""
+
+    def test_table_grid_corroboration_lines_and_rects(self) -> None:
+        """2x2 table with borders drawn via 'l' lines and 're' rect edges is validated when edge coverage >= 90%."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        shape = page.new_shape()
+        shape.draw_rect(pymupdf.Rect(50, 50, 250, 150))
+        shape.finish(color=(0, 0, 0), width=1.0)
+        shape.draw_line(pymupdf.Point(150, 50), pymupdf.Point(150, 150))
+        shape.finish(color=(0, 0, 0), width=1.0)
+        shape.draw_line(pymupdf.Point(50, 100), pymupdf.Point(250, 100))
+        shape.finish(color=(0, 0, 0), width=1.0)
+        shape.commit()
+
+        page.insert_text(pymupdf.Point(60, 80), "Cell 00")
+        page.insert_text(pymupdf.Point(160, 80), "Cell 01")
+        page.insert_text(pymupdf.Point(60, 130), "Cell 10")
+        page.insert_text(pymupdf.Point(160, 130), "Cell 11")
+
+        geom = PageGeometry(width=300, height=300)
+        page_ir = PageIR(page_number=1, geometry=geom)
+        from layoutlingua.core.tables import TableGridValidator
+
+        validator = TableGridValidator(tolerance_pt=2.0, min_edge_coverage=0.90)
+        grids = validator.validate_page_tables(page, page_ir)
+        self.assertEqual(len(grids), 1)
+        grid = grids[0]
+        self.assertEqual(grid.row_count, 2)
+        self.assertEqual(grid.col_count, 2)
+        self.assertEqual(len(grid.cells), 4)
+        doc.close()
+
+    def test_table_grid_corroboration_rejects_weak_evidence(self) -> None:
+        """Table missing internal divider or with edge gap > 2.0 pt is rejected -> fail-closed."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        shape = page.new_shape()
+        shape.draw_rect(pymupdf.Rect(50, 50, 250, 150))  # Outer only, NO internal dividers!
+        shape.finish(color=(0, 0, 0), width=1.0)
+        shape.commit()
+        page.insert_text(pymupdf.Point(60, 80), "Cell 00")
+        page.insert_text(pymupdf.Point(160, 80), "Cell 01")
+
+        geom = PageGeometry(width=300, height=300)
+        page_ir = PageIR(page_number=1, geometry=geom)
+        from layoutlingua.core.tables import TableGridValidator
+
+        validator = TableGridValidator(tolerance_pt=2.0, min_edge_coverage=0.90)
+        grids = validator.validate_page_tables(page, page_ir)
+        self.assertEqual(len(grids), 0)
+        doc.close()
+
+    def test_vector_evidence_rejects_fill_only_rectangles(self) -> None:
+        """Drawing with type='f' and no stroke is rejected as a grid line candidate."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        shape = page.new_shape()
+        shape.draw_rect(pymupdf.Rect(50, 50, 250, 150))
+        shape.finish(fill=(0.9, 0.9, 0.9), color=None)  # Pure fill, NO stroke!
+        shape.commit()
+        page.insert_text(pymupdf.Point(60, 80), "Cell 00")
+
+        geom = PageGeometry(width=300, height=300)
+        page_ir = PageIR(page_number=1, geometry=geom)
+        from layoutlingua.core.tables import TableGridValidator
+
+        validator = TableGridValidator()
+        grids = validator.validate_page_tables(page, page_ir)
+        self.assertEqual(len(grids), 0)
+        doc.close()
+
+    def test_vector_evidence_rejects_curve_bounding_boxes(self) -> None:
+        """Primitive item 'c' (bezier curve) is strictly ignored; its bbox is not used as a straight grid line."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        shape = page.new_shape()
+        shape.draw_bezier(
+            pymupdf.Point(50, 50),
+            pymupdf.Point(100, 100),
+            pymupdf.Point(200, 0),
+            pymupdf.Point(250, 150),
+        )
+        shape.finish(color=(0, 0, 0), width=1.0)
+        shape.commit()
+
+        geom = PageGeometry(width=300, height=300)
+        page_ir = PageIR(page_number=1, geometry=geom)
+        from layoutlingua.core.tables import TableGridValidator
+
+        validator = TableGridValidator()
+        grids = validator.validate_page_tables(page, page_ir)
+        self.assertEqual(len(grids), 0)
+        doc.close()
+
+    def test_vector_evidence_mixed_path_line_and_curve(self) -> None:
+        """Path with mixed 'l' and 'c' items admits only 'l' segments and filters out 'c'."""
+        raw_items = [
+            ("l", pymupdf.Point(50, 50), pymupdf.Point(250, 50)),
+            (
+                "c",
+                pymupdf.Point(250, 50),
+                pymupdf.Point(260, 60),
+                pymupdf.Point(260, 70),
+                pymupdf.Point(250, 80),
+            ),
+            ("l", pymupdf.Point(250, 80), pymupdf.Point(50, 80)),
+        ]
+        drawing = {"type": "s", "color": (0, 0, 0), "width": 1.0, "items": raw_items}
+        from layoutlingua.core.tables import extract_valid_vector_segments
+
+        segments = extract_valid_vector_segments([drawing])
+        self.assertEqual(len(segments), 2)
+
+    def test_table_dimension_varieties_1x2_and_2x1(self) -> None:
+        """1x2 and 2x1 tables with clear vector borders are recognized and validated."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        shape = page.new_shape()
+        shape.draw_rect(pymupdf.Rect(50, 50, 250, 100))
+        shape.draw_line(pymupdf.Point(150, 50), pymupdf.Point(150, 100))
+        shape.finish(color=(0, 0, 0), width=1.0)
+        shape.commit()
+        page.insert_text(pymupdf.Point(60, 75), "Col 0")
+        page.insert_text(pymupdf.Point(160, 75), "Col 1")
+
+        geom = PageGeometry(width=300, height=300)
+        page_ir = PageIR(page_number=1, geometry=geom)
+        from layoutlingua.core.tables import TableGridValidator
+
+        validator = TableGridValidator()
+        grids = validator.validate_page_tables(page, page_ir)
+        self.assertEqual(len(grids), 1)
+        self.assertEqual(grids[0].row_count, 1)
+        self.assertEqual(grids[0].col_count, 2)
+        doc.close()
+
+
 if __name__ == "__main__":
     unittest.main()
+
