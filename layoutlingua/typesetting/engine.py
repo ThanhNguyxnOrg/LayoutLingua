@@ -107,14 +107,32 @@ class TypesetEngine:
                 candidate_blocks=candidate_blocks,
             )
 
-            # Structure: (block, tight_line_rects, translated_text, orig_font_size, dominant_color, final_font_size, lineheight, line_count)
+            # Structure: (block, tight_line_rects, translated_text, orig_font_size, dominant_color, final_font_size, lineheight, line_count, target_layout_box, is_cell, grid, cell_geom)
             fitting_plan: list[
-                tuple[TextBlock, list[tuple[float, float, float, float]], str, float, tuple[float, float, float], float, float, int]
+                tuple[
+                    TextBlock,
+                    list[tuple[float, float, float, float]],
+                    str,
+                    float,
+                    tuple[float, float, float],
+                    float,
+                    float,
+                    int,
+                    tuple[float, float, float, float],
+                    bool,
+                    Any,
+                    Any,
+                ]
             ] = []
 
             for block in page_ir.blocks:
                 report.total_blocks += 1
                 page_summary.total_blocks += 1
+
+                is_cell = (block.block_type == "table_cell")
+                if is_cell:
+                    report.total_cells += 1
+                    page_summary.total_cells += 1
 
                 # 3. Formula preservation check
                 if block.block_type == "formula":
@@ -140,6 +158,9 @@ class TypesetEngine:
                 if block.block_type == "table_rejected" or block.block_id in preserved_ids:
                     report.skipped_blocks += 1
                     page_summary.skipped_blocks += 1
+                    if is_cell:
+                        report.skipped_cells += 1
+                        page_summary.skipped_cells += 1
                     report.details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
@@ -151,16 +172,85 @@ class TypesetEngine:
                             final_font_size=10.0,
                             shrink_ratio=1.0,
                             bbox=block.bbox,
+                            unit_kind="CELL" if is_cell else "BLOCK",
                             reason="Preserved source text: constituent block of rejected table.",
                         )
                     )
                     continue
+
+                # 3c. Table cell geometry and stroke-aware insets resolution (Task 5)
+                grid = None
+                cell_geom = None
+                inner_bbox = None
+                if is_cell:
+                    if hasattr(page_ir, "metadata") and isinstance(page_ir.metadata, dict):
+                        tables = page_ir.metadata.get("tables", {})
+                        if isinstance(tables, dict):
+                            for g in tables.values():
+                                if hasattr(g, "cells") and isinstance(g.cells, dict) and block.block_id in g.cells:
+                                    grid = g
+                                    cell_geom = g.cells[block.block_id]
+                                    break
+
+                    if cell_geom is None:
+                        # Missing cell geometry in table grid (fail-closed)
+                        report.skipped_blocks += 1
+                        report.skipped_cells += 1
+                        page_summary.skipped_blocks += 1
+                        page_summary.skipped_cells += 1
+                        report.details.append(
+                            BlockFittingDetail(
+                                block_id=block.block_id,
+                                page_number=page_ir.page_number,
+                                status=BlockFittingStatus.SKIPPED_UNSUPPORTED,
+                                original_text=block.text,
+                                translated_text="",
+                                original_font_size=10.0,
+                                final_font_size=10.0,
+                                shrink_ratio=1.0,
+                                bbox=block.bbox,
+                                unit_kind="CELL",
+                                reason="Missing cell geometry in table grid (fail-closed).",
+                            )
+                        )
+                        continue
+
+                    inner_bbox = cell_geom.compute_inner_bbox()
+                    if inner_bbox is None:
+                        # Narrow or shallow cell where padding exceeds dimensions (fail-closed)
+                        report.overflow_blocks += 1
+                        report.overflow_cells += 1
+                        page_summary.overflow_blocks += 1
+                        page_summary.overflow_cells += 1
+                        report.details.append(
+                            BlockFittingDetail(
+                                block_id=block.block_id,
+                                page_number=page_ir.page_number,
+                                status=BlockFittingStatus.OVERFLOW_FALLBACK,
+                                original_text=block.text,
+                                translated_text="",
+                                original_font_size=10.0,
+                                final_font_size=10.0,
+                                shrink_ratio=1.0,
+                                bbox=block.bbox,
+                                overflow_cause=OverflowCause.OVERFLOW_WIDTH_AT_MIN_SIZE,
+                                unit_kind="CELL",
+                                table_id=grid.table_id if grid else None,
+                                row_idx=cell_geom.row_idx,
+                                col_idx=cell_geom.col_idx,
+                                reason="Cell too narrow or shallow for stroke-aware insets (fail-closed).",
+                            )
+                        )
+                        continue
 
                 # 4. Extract translation candidate
                 translated_text = self._resolve_translated_text(block, translated_segments)
                 if not translated_text or not translated_text.strip():
                     report.skipped_blocks += 1
                     page_summary.skipped_blocks += 1
+                    if is_cell:
+                        report.skipped_cells += 1
+                        page_summary.skipped_cells += 1
                     report.details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
@@ -172,6 +262,10 @@ class TypesetEngine:
                             final_font_size=10.0,
                             shrink_ratio=1.0,
                             bbox=block.bbox,
+                            unit_kind="CELL" if is_cell else "BLOCK",
+                            table_id=grid.table_id if grid else None,
+                            row_idx=cell_geom.row_idx if cell_geom else None,
+                            col_idx=cell_geom.col_idx if cell_geom else None,
                             reason="No translation provided or text is whitespace.",
                         )
                     )
@@ -180,6 +274,9 @@ class TypesetEngine:
                 if translated_text.strip() == block.text.strip():
                     report.skipped_blocks += 1
                     page_summary.skipped_blocks += 1
+                    if is_cell:
+                        report.skipped_cells += 1
+                        page_summary.skipped_cells += 1
                     report.details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
@@ -191,6 +288,10 @@ class TypesetEngine:
                             final_font_size=10.0,
                             shrink_ratio=1.0,
                             bbox=block.bbox,
+                            unit_kind="CELL" if is_cell else "BLOCK",
+                            table_id=grid.table_id if grid else None,
+                            row_idx=cell_geom.row_idx if cell_geom else None,
+                            col_idx=cell_geom.col_idx if cell_geom else None,
                             reason="Translated text is identical to source text.",
                         )
                     )
@@ -201,6 +302,9 @@ class TypesetEngine:
                 if decision is not None and not decision.is_approved:
                     report.collision_blocks += 1
                     page_summary.collision_blocks += 1
+                    if is_cell:
+                        report.collision_cells += 1
+                        page_summary.collision_cells += 1
                     coll = decision.collision_detail
                     coll_type = coll.collision_type if coll else "UNKNOWN"
                     coll_desc = coll.description if coll else "Geometric collision detected."
@@ -215,6 +319,10 @@ class TypesetEngine:
                             final_font_size=10.0,
                             shrink_ratio=1.0,
                             bbox=block.bbox,
+                            unit_kind="CELL" if is_cell else "BLOCK",
+                            table_id=grid.table_id if grid else None,
+                            row_idx=cell_geom.row_idx if cell_geom else None,
+                            col_idx=cell_geom.col_idx if cell_geom else None,
                             collision_detail=coll,
                             reason=f"Collision detected ({coll_type}): {coll_desc}. Source retained.",
                         )
@@ -228,18 +336,37 @@ class TypesetEngine:
                 )
 
                 # 7. Precision Binary Search fitting test with dynamic line-height
+                target_layout_box = inner_bbox if is_cell and inner_bbox else block.bbox
+
                 fits, final_font_size, overflow_cause, line_count, effective_lineheight = self._fit_tester.test_fit(
-                    rect=block.bbox,
+                    rect=target_layout_box,
                     text=translated_text,
                     orig_font_size=orig_font_size,
                     options=self.options,
                 )
 
-                tight_line_rects = (
-                    decision.tight_line_rects
-                    if decision
-                    else [(block.bbox[0], block.bbox[1], block.bbox[2], block.bbox[3])]
-                )
+                if is_cell and inner_bbox:
+                    # Clamp tight line redaction rects strictly within inner_bbox
+                    raw_lines = decision.tight_line_rects if decision else [inner_bbox]
+                    tight_line_rects = [
+                        (
+                            max(inner_bbox[0], r[0]),
+                            max(inner_bbox[1], r[1]),
+                            min(inner_bbox[2], r[2]),
+                            min(inner_bbox[3], r[3]),
+                        )
+                        for r in raw_lines
+                        if min(inner_bbox[2], r[2]) > max(inner_bbox[0], r[0])
+                        and min(inner_bbox[3], r[3]) > max(inner_bbox[1], r[1])
+                    ]
+                    if not tight_line_rects:
+                        tight_line_rects = [inner_bbox]
+                else:
+                    tight_line_rects = (
+                        decision.tight_line_rects
+                        if decision
+                        else [(block.bbox[0], block.bbox[1], block.bbox[2], block.bbox[3])]
+                    )
 
                 if fits:
                     fitting_plan.append((
@@ -251,11 +378,18 @@ class TypesetEngine:
                         final_font_size,
                         effective_lineheight,
                         line_count,
+                        target_layout_box,
+                        is_cell,
+                        grid,
+                        cell_geom,
                     ))
                 else:
                     # Overflow event: fail-closed preserves source text
                     report.overflow_blocks += 1
                     page_summary.overflow_blocks += 1
+                    if is_cell:
+                        report.overflow_cells += 1
+                        page_summary.overflow_cells += 1
                     report.details.append(
                         BlockFittingDetail(
                             block_id=block.block_id,
@@ -268,18 +402,22 @@ class TypesetEngine:
                             shrink_ratio=1.0,
                             line_height_em=effective_lineheight,
                             line_count=line_count,
-                            bbox=block.bbox,
+                            bbox=target_layout_box,
                             overflow_cause=overflow_cause,
+                            unit_kind="CELL" if is_cell else "BLOCK",
+                            table_id=grid.table_id if grid else None,
+                            row_idx=cell_geom.row_idx if cell_geom else None,
+                            col_idx=cell_geom.col_idx if cell_geom else None,
                             reason=(
-                                f"Translated text overflowed bounding box ({overflow_cause.value}) "
-                                f"at minimum scale ({self.options.min_font_scale:.0%}). Source retained."
+                                f"Translated text overflowed {'cell inner' if is_cell else ''} bounding box "
+                                f"({overflow_cause.value}) at minimum scale ({self.options.min_font_scale:.0%}). Source retained."
                             ),
                         )
                     )
 
             # 8. Apply selective redaction ONLY to approved, fitting candidates using tight line rects
             if fitting_plan:
-                for block, tight_line_rects, _, _, _, _, _, _ in fitting_plan:
+                for block, tight_line_rects, _, _, _, _, _, _, _, _, _, _ in fitting_plan:
                     for line_rect in tight_line_rects:
                         rect = pymupdf.Rect(*line_rect)
                         page.add_redact_annot(rect, fill=False, cross_out=False)
@@ -291,8 +429,21 @@ class TypesetEngine:
                 )
 
                 # 9. Insert translated text using identical effective line-height
-                for block, _, text, orig_size, color, final_size, lineheight, line_count in fitting_plan:
-                    rect = pymupdf.Rect(*block.bbox)
+                for (
+                    block,
+                    _,
+                    text,
+                    orig_size,
+                    color,
+                    final_size,
+                    lineheight,
+                    line_count,
+                    target_layout_box,
+                    is_cell,
+                    grid,
+                    cell_geom,
+                ) in fitting_plan:
+                    rect = pymupdf.Rect(*target_layout_box)
                     page.insert_textbox(
                         rect,
                         text,
@@ -308,6 +459,9 @@ class TypesetEngine:
 
                     report.replaced_blocks += 1
                     page_summary.replaced_blocks += 1
+                    if is_cell:
+                        report.replaced_cells += 1
+                        page_summary.replaced_cells += 1
 
                     if shrink_ratio < self.options.severe_shrink_threshold:
                         report.severe_shrink_blocks_count += 1
@@ -324,9 +478,17 @@ class TypesetEngine:
                             shrink_ratio=shrink_ratio,
                             line_height_em=lineheight,
                             line_count=line_count,
-                            bbox=block.bbox,
+                            bbox=target_layout_box,
                             overflow_cause=OverflowCause.NONE,
-                            reason="Fitted and typeset successfully via binary search.",
+                            unit_kind="CELL" if is_cell else "BLOCK",
+                            table_id=grid.table_id if grid else None,
+                            row_idx=cell_geom.row_idx if cell_geom else None,
+                            col_idx=cell_geom.col_idx if cell_geom else None,
+                            reason=(
+                                f"Successfully typeset with shrink ratio {shrink_ratio:.2f}."
+                                if not is_cell
+                                else f"Successfully typeset inside stroke-aware cell inner bbox (shrink ratio {shrink_ratio:.2f})."
+                            ),
                         )
                     )
 

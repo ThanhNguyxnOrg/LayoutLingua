@@ -15,7 +15,14 @@ from typing import Any, Sequence
 import pymupdf
 
 from layoutlingua.core.ir import CharInfo, GlyphSpan, PageIR, TextBlock
-from layoutlingua.core.table_models import BorderLine, CellGeometry, TableGrid
+from layoutlingua.core.table_models import (
+    BorderLine,
+    CellGeometry,
+    CellInsets,
+    TableGrid,
+    compute_cell_inner_bbox,
+    compute_stroke_aware_insets,
+)
 
 
 def extract_valid_vector_segments(

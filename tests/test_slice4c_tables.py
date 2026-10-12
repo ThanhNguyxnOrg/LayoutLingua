@@ -663,5 +663,223 @@ class TestPipelineFailClosedPreservation(unittest.TestCase):
         self.assertNotIn("b_rejected_table", result.translated_segments)
 
 
+class TestSlice4CStrokeAwareInsets(unittest.TestCase):
+    """Task 5: Stable geometry contract, stroke-aware inset padding, and cell fitting."""
+
+    def test_stroke_aware_insets_calculation(self) -> None:
+        """p_side = max(1.0, w/2 + 0.5) for each side with asymmetric border stroke widths."""
+        from layoutlingua.core.table_models import CellGeometry, CellInsets
+        from layoutlingua.core.tables import compute_cell_inner_bbox, compute_stroke_aware_insets
+
+        border_widths = {"top": 2.0, "bottom": 4.0, "left": 1.0, "right": 3.0}
+        insets = compute_stroke_aware_insets(border_widths)
+
+        self.assertIsInstance(insets, CellInsets)
+        self.assertEqual(insets.top, 1.5)      # max(1.0, 2.0/2 + 0.5) = 1.5
+        self.assertEqual(insets.bottom, 2.5)   # max(1.0, 4.0/2 + 0.5) = 2.5
+        self.assertEqual(insets.left, 1.0)     # max(1.0, 1.0/2 + 0.5) = 1.0
+        self.assertEqual(insets.right, 2.0)    # max(1.0, 3.0/2 + 0.5) = 2.0
+
+        cell_bbox = (10.0, 20.0, 100.0, 80.0)
+        inner_bbox = compute_cell_inner_bbox(cell_bbox, border_widths)
+        self.assertIsNotNone(inner_bbox)
+        # inner: (10 + 1.0, 20 + 1.5, 100 - 2.0, 80 - 2.5)
+        self.assertEqual(inner_bbox, (11.0, 21.5, 98.0, 77.5))
+
+        # Check method on CellGeometry as well
+        cg = CellGeometry(
+            cell_id="p1_t0_r0_c0",
+            row_idx=0,
+            col_idx=0,
+            cell_bbox=cell_bbox,
+            border_widths=border_widths,
+        )
+        self.assertEqual(cg.compute_inner_bbox(), (11.0, 21.5, 98.0, 77.5))
+        self.assertEqual(cg.insets.top, 1.5)
+
+    def test_stroke_aware_insets_minimum_clamp(self) -> None:
+        """Hairline borders or missing strokes (w <= 1.0) clamp to 1.0 pt minimum clearance."""
+        from layoutlingua.core.tables import compute_cell_inner_bbox, compute_stroke_aware_insets
+
+        border_widths = {"top": 0.0, "bottom": 0.5, "left": 0.8, "right": 1.0}
+        insets = compute_stroke_aware_insets(border_widths)
+
+        self.assertEqual(insets.top, 1.0)
+        self.assertEqual(insets.bottom, 1.0)
+        self.assertEqual(insets.left, 1.0)
+        self.assertEqual(insets.right, 1.0)
+
+        cell_bbox = (0.0, 0.0, 50.0, 50.0)
+        inner_bbox = compute_cell_inner_bbox(cell_bbox, border_widths)
+        self.assertEqual(inner_bbox, (1.0, 1.0, 49.0, 49.0))
+
+    def test_narrow_cell_fail_closed(self) -> None:
+        """Cell narrower or shallower than insets fails closed; compute returns None and typeset engine preserves source."""
+        from layoutlingua.core.table_models import CellGeometry, TableGrid
+        from layoutlingua.core.tables import compute_cell_inner_bbox
+        from layoutlingua.typesetting.engine import TypesetEngine
+
+        # Width = 1.5 pt, but left=1.0, right=1.0 -> required 2.0 pt
+        cell_bbox = (50.0, 50.0, 51.5, 70.0)
+        border_widths = {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0}
+        inner_bbox = compute_cell_inner_bbox(cell_bbox, border_widths)
+        self.assertIsNone(inner_bbox)
+
+        # Integration with TypesetEngine
+        cg = CellGeometry("p1_t0_r0_c0", 0, 0, cell_bbox, border_widths)
+        grid = TableGrid("p1_t0", (50.0, 50.0, 51.5, 70.0), 1, 1, {cg.cell_id: cg})
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom, metadata={"tables": {"p1_t0": grid}})
+        b = TextBlock(
+            cg.cell_id, cell_bbox,
+            spans=[GlyphSpan("s0", "Narrow", cell_bbox, "DejaVuSans", 8.0, "#000000")],
+            block_type="table_cell",
+        )
+        p.blocks.append(b)
+        doc_ir = DocumentIR("doc1", "test.pdf", 1, pages=[p])
+
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        page.insert_text(pymupdf.Point(50.5, 60), "Narrow")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        engine = TypesetEngine()
+        result = engine.typeset(
+            original_pdf=pdf_bytes,
+            document_ir=doc_ir,
+            translated_segments={cg.cell_id: "Hẹp"},
+        )
+        self.assertEqual(result.fitting_report.total_cells, 1)
+        self.assertEqual(result.fitting_report.replaced_cells, 0)
+        self.assertEqual(result.fitting_report.overflow_cells, 1)
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertIn("Narrow", out_doc[0].get_text())
+        out_doc.close()
+
+    def test_missing_cell_geometry_fail_closed(self) -> None:
+        """table_cell block with unresolvable CellGeometry fails closed and retains source text."""
+        from layoutlingua.typesetting.engine import TypesetEngine
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)  # No "tables" in metadata
+        b = TextBlock(
+            "orphan_cell", (50.0, 50.0, 100.0, 80.0),
+            spans=[GlyphSpan("s0", "Orphan Text", (50.0, 50.0, 100.0, 80.0), "DejaVuSans", 10.0, "#000000")],
+            block_type="table_cell",
+        )
+        p.blocks.append(b)
+        doc_ir = DocumentIR("doc1", "test.pdf", 1, pages=[p])
+
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        page.insert_text(pymupdf.Point(55, 65), "Orphan Text")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        engine = TypesetEngine()
+        result = engine.typeset(
+            original_pdf=pdf_bytes,
+            document_ir=doc_ir,
+            translated_segments={"orphan_cell": "Đã Dịch"},
+        )
+        self.assertEqual(result.fitting_report.total_cells, 1)
+        self.assertEqual(result.fitting_report.replaced_cells, 0)
+        self.assertEqual(result.fitting_report.skipped_cells, 1)
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertIn("Orphan Text", out_doc[0].get_text())
+        self.assertNotIn("Đã Dịch", out_doc[0].get_text())
+        out_doc.close()
+
+    def test_cell_typesetting_within_inner_bbox(self) -> None:
+        """Cell translation is fitted and placed strictly inside inner bbox, leaving outer stroke area intact."""
+        from layoutlingua.core.table_models import CellGeometry, TableGrid
+        from layoutlingua.typesetting.engine import TypesetEngine
+
+        cell_bbox = (50.0, 50.0, 150.0, 100.0)
+        # 2.0 pt borders -> inset is 1.5 pt on all sides
+        border_widths = {"top": 2.0, "bottom": 2.0, "left": 2.0, "right": 2.0}
+        cg = CellGeometry("p1_t0_r0_c0", 0, 0, cell_bbox, border_widths)
+        grid = TableGrid("p1_t0", cell_bbox, 1, 1, {cg.cell_id: cg})
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom, metadata={"tables": {"p1_t0": grid}})
+        b = TextBlock(
+            cg.cell_id, cell_bbox,
+            spans=[GlyphSpan("s0", "Source Cell", (52.0, 55.0, 140.0, 70.0), "DejaVuSans", 10.0, "#000000")],
+            block_type="table_cell",
+        )
+        p.blocks.append(b)
+        doc_ir = DocumentIR("doc1", "test.pdf", 1, pages=[p])
+
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        # Draw table border with 2.0 width
+        page.draw_rect(pymupdf.Rect(*cell_bbox), color=(0, 0, 0), width=2.0)
+        page.insert_text(pymupdf.Point(52, 65), "Source Cell")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        engine = TypesetEngine()
+        result = engine.typeset(
+            original_pdf=pdf_bytes,
+            document_ir=doc_ir,
+            translated_segments={cg.cell_id: "Ô Đã Dịch"},
+        )
+        self.assertEqual(result.fitting_report.total_cells, 1)
+        self.assertEqual(result.fitting_report.replaced_cells, 1)
+        self.assertEqual(result.fitting_report.overflow_cells, 0)
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        out_text = out_doc[0].get_text()
+        self.assertIn("Ô Đã Dịch", out_text)
+        out_doc.close()
+
+    def test_cell_text_overflow_fail_closed(self) -> None:
+        """Cell text that overflows inner bbox at minimum scale fails closed and increments overflow_cells."""
+        from layoutlingua.core.table_models import CellGeometry, TableGrid
+        from layoutlingua.typesetting.engine import TypesetEngine
+
+        cell_bbox = (50.0, 50.0, 80.0, 65.0)  # 30 x 15 pt cell
+        border_widths = {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0}
+        cg = CellGeometry("p1_t0_r0_c0", 0, 0, cell_bbox, border_widths)
+        grid = TableGrid("p1_t0", cell_bbox, 1, 1, {cg.cell_id: cg})
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom, metadata={"tables": {"p1_t0": grid}})
+        b = TextBlock(
+            cg.cell_id, cell_bbox,
+            spans=[GlyphSpan("s0", "Ok", (52.0, 52.0, 60.0, 60.0), "DejaVuSans", 8.0, "#000000")],
+            block_type="table_cell",
+        )
+        p.blocks.append(b)
+        doc_ir = DocumentIR("doc1", "test.pdf", 1, pages=[p])
+
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        page.insert_text(pymupdf.Point(52, 60), "Ok")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        engine = TypesetEngine()
+        huge_text = "Văn bản này quá dài để có thể vừa vào một ô bảng siêu nhỏ như thế này ngay cả ở cỡ chữ tối thiểu"
+        result = engine.typeset(
+            original_pdf=pdf_bytes,
+            document_ir=doc_ir,
+            translated_segments={cg.cell_id: huge_text},
+        )
+        self.assertEqual(result.fitting_report.total_cells, 1)
+        self.assertEqual(result.fitting_report.replaced_cells, 0)
+        self.assertEqual(result.fitting_report.overflow_cells, 1)
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertIn("Ok", out_doc[0].get_text())
+        self.assertNotIn("quá dài", out_doc[0].get_text())
+        out_doc.close()
+
+
 if __name__ == "__main__":
     unittest.main()
