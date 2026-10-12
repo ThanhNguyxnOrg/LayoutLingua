@@ -354,9 +354,44 @@ class ClearancePlanner:
                     )
                 )
 
+        # 1b. Preserved rejected tables and constituent blocks (fail-closed)
+        preserved_ids = set()
+        if hasattr(page_ir, "metadata") and isinstance(page_ir.metadata, dict):
+            p_ids = page_ir.metadata.get("preserved_block_ids", set())
+            if isinstance(p_ids, (set, list, tuple)):
+                preserved_ids.update(p_ids)
+            for rej_idx, rej_bbox in enumerate(page_ir.metadata.get("rejected_table_bboxes", [])):
+                zones.append(
+                    ExclusionZone(
+                        zone_id=f"rejected_table_{rej_idx}",
+                        zone_type=ExclusionZoneType.VECTOR_ART,
+                        bbox=rej_bbox,
+                        source_id=f"rejected_table_{rej_idx}",
+                        confidence=1.0,
+                        metadata={"type": "rejected_table"},
+                    )
+                )
+
+        for b in page_ir.blocks:
+            if b.block_type == "table_rejected" or b.block_id in preserved_ids:
+                zones.append(
+                    ExclusionZone(
+                        zone_id=f"preserved_{b.block_id}",
+                        zone_type=ExclusionZoneType.ADJACENT_TEXT,
+                        bbox=b.bbox,
+                        source_id=b.block_id,
+                        confidence=1.0,
+                        metadata={"block_id": b.block_id, "block_type": "table_rejected"},
+                    )
+                )
+
         # 2. Adjacent text: tight line bounds of all non-candidate text blocks
         for b in page_ir.blocks:
-            if b.block_id not in candidate_ids and b.block_type != "formula":
+            if (
+                b.block_id not in candidate_ids
+                and b.block_type not in ("formula", "table_rejected")
+                and b.block_id not in preserved_ids
+            ):
                 line_rects = compute_tight_line_clearance_regions(b, padding=self.padding_pt)
                 for l_idx, l_rect in enumerate(line_rects):
                     zones.append(

@@ -78,11 +78,22 @@ class TypesetEngine:
             page_summary = PageFittingSummary(page_number=page_ir.page_number)
             page_replaced_ratios: list[float] = []
 
+            # 0. Collect preserved block IDs from document and page metadata (fail-closed)
+            preserved_ids = set()
+            if hasattr(document_ir, "metadata") and isinstance(document_ir.metadata, dict):
+                p_ids = document_ir.metadata.get("preserved_block_ids", set())
+                if isinstance(p_ids, (set, list, tuple)):
+                    preserved_ids.update(p_ids)
+            if hasattr(page_ir, "metadata") and isinstance(page_ir.metadata, dict):
+                p_ids = page_ir.metadata.get("preserved_block_ids", set())
+                if isinstance(p_ids, (set, list, tuple)):
+                    preserved_ids.update(p_ids)
+
             # 1. Identify translation candidate blocks for this page
             candidate_blocks: list[TextBlock] = []
             block_translation_map: dict[str, str] = {}
             for block in page_ir.blocks:
-                if block.block_type == "formula":
+                if block.block_type in ("formula", "table_rejected") or block.block_id in preserved_ids:
                     continue
                 trans_text = self._resolve_translated_text(block, translated_segments)
                 if trans_text and trans_text.strip() and trans_text.strip() != block.text.strip():
@@ -121,6 +132,26 @@ class TypesetEngine:
                             shrink_ratio=1.0,
                             bbox=block.bbox,
                             reason="Formula block preserved intact without translation mutation.",
+                        )
+                    )
+                    continue
+
+                # 3b. Preserved / Rejected table block check (fail-closed)
+                if block.block_type == "table_rejected" or block.block_id in preserved_ids:
+                    report.skipped_blocks += 1
+                    page_summary.skipped_blocks += 1
+                    report.details.append(
+                        BlockFittingDetail(
+                            block_id=block.block_id,
+                            page_number=page_ir.page_number,
+                            status=BlockFittingStatus.SKIPPED_UNSUPPORTED,
+                            original_text=block.text,
+                            translated_text="",
+                            original_font_size=10.0,
+                            final_font_size=10.0,
+                            shrink_ratio=1.0,
+                            bbox=block.bbox,
+                            reason="Preserved source text: constituent block of rejected table.",
                         )
                     )
                     continue

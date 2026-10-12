@@ -15,8 +15,10 @@ from __future__ import annotations
 import unittest
 import pymupdf
 
-from layoutlingua.core.ir import CharInfo, GlyphSpan, PageGeometry, PageIR, TextBlock
+from layoutlingua.core.ir import CharInfo, DocumentIR, GlyphSpan, PageGeometry, PageIR, TextBlock
 from layoutlingua.core.table_models import BorderLine, CellGeometry, TableGrid
+from layoutlingua.translation.mock import MockTranslationProvider
+from layoutlingua.typesetting.engine import TypesetEngine
 from layoutlingua.typesetting.models import (
     BlockFittingDetail,
     BlockFittingStatus,
@@ -443,6 +445,149 @@ class TestTableCellPartitioner(unittest.TestCase):
         success = partitioner.partition_cells(p, [grid])
         self.assertFalse(success)
         self.assertEqual(p.blocks[0].block_type, "table_rejected")
+
+class TestPipelineFailClosedPreservation(unittest.TestCase):
+    """Task 4: Pipeline Fail-Closed Preservation & Block Suppression."""
+
+    def test_rejected_table_source_blocks_strictly_preserved_fail_closed(self) -> None:
+        """Candidate table rejected due to grid evidence keeps all source blocks intact with zero mutation."""
+        from layoutlingua.core.tables import TableGridValidator
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        block = TextBlock(
+            "b0", (60, 60, 140, 80),
+            spans=[GlyphSpan("s0", "Original Table Text", (60, 60, 140, 80), "DejaVuSans", 10.0, "#000000")],
+        )
+        p.blocks.append(block)
+        doc_ir = DocumentIR("doc1", "test.pdf", 1, pages=[p])
+
+        from unittest.mock import MagicMock
+
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        dummy_tab = MagicMock()
+        dummy_tab.bbox = (50.0, 50.0, 250.0, 150.0)
+        dummy_tab.row_count = 1
+        dummy_tab.col_count = 1
+        dummy_finder = MagicMock()
+        dummy_finder.tables = [dummy_tab]
+        page.find_tables = MagicMock(return_value=dummy_finder)
+
+        validator = TableGridValidator()
+        validator.validate_page_tables(page, p)
+
+        self.assertEqual(block.block_type, "table_rejected")
+        self.assertIn("b0", p.metadata.get("preserved_block_ids", set()))
+        doc.close()
+
+    def test_rejected_table_pipeline_preservation_contract(self) -> None:
+        """End-to-end integration: rejected table constituent blocks tagged table_rejected
+        and stored in document_ir.metadata['preserved_block_ids'];
+        TypesetEngine applies 0 redactions; output PDF contains 100% untouched source text;
+        telemetry reports SKIPPED_UNSUPPORTED without cell metric inflation."""
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        b = TextBlock(
+            "b_table_0", (60, 60, 140, 80),
+            spans=[GlyphSpan("s0", "Preserved Cell Text", (60, 60, 140, 80), "DejaVuSans", 10.0, "#000000")],
+            block_type="table_rejected",
+        )
+        p.blocks.append(b)
+        doc_ir = DocumentIR(
+            "doc1", "test.pdf", 1, pages=[p],
+            metadata={"preserved_block_ids": {"b_table_0"}, "rejected_table_bboxes": [(50, 50, 150, 100)]},
+        )
+
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        page.insert_text(pymupdf.Point(60, 75), "Preserved Cell Text")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        engine = TypesetEngine()
+        result = engine.typeset(
+            original_pdf=pdf_bytes,
+            document_ir=doc_ir,
+            translated_segments={"b_table_0": "Văn bản bị từ chối"},
+        )
+        self.assertEqual(result.fitting_report.replaced_blocks, 0)
+        self.assertEqual(result.fitting_report.skipped_blocks, 1)
+        self.assertEqual(result.fitting_report.total_cells, 0)
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        out_text = out_doc[0].get_text()
+        self.assertIn("Preserved Cell Text", out_text)
+        self.assertNotIn("Văn bản bị từ chối", out_text)
+        out_doc.close()
+
+    def test_translation_pipeline_skips_rejected_table_blocks_and_translates_valid_blocks(self) -> None:
+        """Translation preserves rejected table block text untouched while translating normal text and valid table cells."""
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        b_normal = TextBlock(
+            "b_normal", (10, 10, 50, 30),
+            spans=[GlyphSpan("s_norm", "Hello World", (10, 10, 50, 30), "DejaVuSans", 10.0, "#000000")],
+            block_type="text",
+        )
+        b_rejected = TextBlock(
+            "b_rej", (60, 60, 140, 80),
+            spans=[GlyphSpan("s_rej", "Do Not Translate", (60, 60, 140, 80), "DejaVuSans", 10.0, "#000000")],
+            block_type="table_rejected",
+        )
+        b_cell = TextBlock(
+            "b_cell_0", (150, 60, 200, 80),
+            spans=[GlyphSpan("s_cell", "Table Cell Text", (150, 60, 200, 80), "DejaVuSans", 10.0, "#000000")],
+            block_type="table_cell",
+        )
+        p.blocks.extend([b_normal, b_rejected, b_cell])
+        doc_ir = DocumentIR(
+            "doc1", "test.pdf", 1, pages=[p],
+            metadata={"preserved_block_ids": {"b_rej"}},
+        )
+
+        mock_provider = MockTranslationProvider()
+        translated_doc = mock_provider.translate_document(doc_ir, target_lang="vi")
+
+        # Rejected block must be untouched
+        self.assertEqual(translated_doc.pages[0].blocks[1].spans[0].text, "Do Not Translate")
+        # Normal block and valid table_cell block must be translated
+        self.assertNotEqual(translated_doc.pages[0].blocks[0].spans[0].text, "Hello World")
+        self.assertNotEqual(translated_doc.pages[0].blocks[2].spans[0].text, "Table Cell Text")
+
+    def test_fail_closed_missing_or_corrupt_metadata(self) -> None:
+        """Even with empty/corrupt metadata, blocks with block_type='table_rejected' are strictly preserved fail-closed."""
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        b_rej = TextBlock(
+            "b_corrupt_meta", (60, 60, 140, 80),
+            spans=[GlyphSpan("s0", "Keep Original Ink", (60, 60, 140, 80), "DejaVuSans", 10.0, "#000000")],
+            block_type="table_rejected",
+        )
+        p.blocks.append(b_rej)
+        # Empty metadata
+        doc_ir = DocumentIR("doc1", "test.pdf", 1, pages=[p], metadata={})
+
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        page.insert_text(pymupdf.Point(60, 75), "Keep Original Ink")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        engine = TypesetEngine()
+        result = engine.typeset(
+            original_pdf=pdf_bytes,
+            document_ir=doc_ir,
+            translated_segments={"b_corrupt_meta": "Đã bị dịch sai"},
+        )
+        self.assertEqual(result.fitting_report.replaced_blocks, 0)
+        self.assertEqual(result.fitting_report.skipped_blocks, 1)
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        out_text = out_doc[0].get_text()
+        self.assertIn("Keep Original Ink", out_text)
+        self.assertNotIn("Đã bị dịch sai", out_text)
+        out_doc.close()
 
 
 if __name__ == "__main__":

@@ -148,8 +148,22 @@ class MockTranslationProvider(BaseTranslationProvider):
         """Produce a translated clone of DocumentIR with all geometry and IDs intact."""
         cloned_doc = copy.deepcopy(doc_ir)
 
+        doc_preserved_ids = set()
+        if hasattr(cloned_doc, "metadata") and isinstance(cloned_doc.metadata, dict):
+            p_ids = cloned_doc.metadata.get("preserved_block_ids", set())
+            if isinstance(p_ids, (set, list, tuple)):
+                doc_preserved_ids.update(p_ids)
+
         for page in cloned_doc.pages:
+            page_preserved_ids = set(doc_preserved_ids)
+            if hasattr(page, "metadata") and isinstance(page.metadata, dict):
+                p_ids = page.metadata.get("preserved_block_ids", set())
+                if isinstance(p_ids, (set, list, tuple)):
+                    page_preserved_ids.update(p_ids)
+
             for block in page.blocks:
+                if block.block_type in ("formula", "table_rejected") or block.block_id in page_preserved_ids:
+                    continue
                 for span in block.spans:
                     span.text = self.translate_segment(
                         segment_id=span.span_id,
