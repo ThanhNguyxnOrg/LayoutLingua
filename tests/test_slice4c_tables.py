@@ -18,6 +18,9 @@ import pymupdf
 from layoutlingua.core.ir import CharInfo, DocumentIR, GlyphSpan, PageGeometry, PageIR, TextBlock
 from layoutlingua.core.table_models import BorderLine, CellGeometry, TableGrid
 from layoutlingua.translation.mock import MockTranslationProvider
+from layoutlingua.translation.models import BatchTranslationRequest, ProviderCapabilities
+from layoutlingua.translation.provider import BaseTranslationProvider
+from layoutlingua.translation.service import TranslationService
 from layoutlingua.typesetting.engine import TypesetEngine
 from layoutlingua.typesetting.models import (
     BlockFittingDetail,
@@ -588,6 +591,76 @@ class TestPipelineFailClosedPreservation(unittest.TestCase):
         self.assertIn("Keep Original Ink", out_text)
         self.assertNotIn("Đã bị dịch sai", out_text)
         out_doc.close()
+
+    def test_translation_service_spy_verifies_rejected_blocks_never_sent_to_provider(self) -> None:
+        """Integration test with spy provider: rejected table blocks are never sent to TranslationService provider;
+        normal paragraphs and valid table cells are properly sent and translated."""
+        from layoutlingua.translation.models import BatchTranslationResult
+
+        class SpyTranslationProvider(BaseTranslationProvider):
+            def __init__(self) -> None:
+                self.received_segment_ids: list[str] = []
+                self.received_texts: list[str] = []
+
+            @property
+            def name(self) -> str:
+                return "spy_provider"
+
+            @property
+            def model(self) -> str:
+                return "spy_model"
+
+            @property
+            def capabilities(self) -> ProviderCapabilities:
+                return ProviderCapabilities()
+
+            def translate_batch(self, request: BatchTranslationRequest) -> BatchTranslationResult:
+                translations = {}
+                for s in request.segments:
+                    self.received_segment_ids.append(s.segment_id)
+                    self.received_texts.append(s.masked_text)
+                    translations[s.segment_id] = f"[TRANSLATED] {s.masked_text}"
+                return BatchTranslationResult(translations=translations)
+
+        geom = PageGeometry(width=300, height=300)
+        p = PageIR(page_number=1, geometry=geom)
+        b_normal = TextBlock(
+            "b_normal", (10, 10, 50, 30),
+            spans=[GlyphSpan("s_norm", "Normal Paragraph", (10, 10, 50, 30), "DejaVuSans", 10.0, "#000000")],
+            block_type="text",
+        )
+        b_rejected = TextBlock(
+            "b_rejected_table", (60, 60, 140, 80),
+            spans=[GlyphSpan("s_rej", "Secret Table Data", (60, 60, 140, 80), "DejaVuSans", 10.0, "#000000")],
+            block_type="table_rejected",
+        )
+        b_cell = TextBlock(
+            "b_valid_cell", (150, 60, 200, 80),
+            spans=[GlyphSpan("s_cell", "Valid Cell Header", (150, 60, 200, 80), "DejaVuSans", 10.0, "#000000")],
+            block_type="table_cell",
+        )
+        p.blocks.extend([b_normal, b_rejected, b_cell])
+        doc_ir = DocumentIR(
+            "doc1", "test.pdf", 1, pages=[p],
+            metadata={"preserved_block_ids": {"b_rejected_table"}},
+        )
+
+        spy_provider = SpyTranslationProvider()
+        service = TranslationService(provider=spy_provider, no_cache=True)
+        result = service.translate_document(doc_ir, target_language="vi")
+
+        # 1. Spy provider must NEVER have received b_rejected_table
+        self.assertNotIn("b_rejected_table", spy_provider.received_segment_ids)
+        self.assertNotIn("Secret Table Data", spy_provider.received_texts)
+
+        # 2. Spy provider MUST have received normal block and valid table cell
+        self.assertIn("b_normal", spy_provider.received_segment_ids)
+        self.assertIn("b_valid_cell", spy_provider.received_segment_ids)
+
+        # 3. Translated result map contains valid blocks, but 0 entries for rejected block
+        self.assertIn("b_normal", result.translated_segments)
+        self.assertIn("b_valid_cell", result.translated_segments)
+        self.assertNotIn("b_rejected_table", result.translated_segments)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from layoutlingua.core.ir import DocumentIR
 from layoutlingua.processing.formula.isolator import FormulaIsolator
 from layoutlingua.processing.formula.models import FormulaToken, TextSegment
 from layoutlingua.translation._resilience import ResilientExecutor, TokenBucketRateLimiter
@@ -39,6 +40,47 @@ def _to_opaque_placeholders(text: str) -> str:
 def _from_opaque_placeholders(text: str) -> str:
     """Restore opaque brackets ⟦LL_FORMULA_N⟧ back to canonical <bN></bN> format."""
     return _OPAQUE_PATTERN.sub(r"<b\1></b\1>", text)
+
+
+def extract_document_segments(
+    doc_ir: DocumentIR,
+    isolator: FormulaIsolator | None = None,
+) -> list[TextSegment]:
+    """Extract translatable TextSegments from DocumentIR, enforcing fail-closed block suppression.
+
+    Strictly excludes:
+    - blocks with block_type == "formula"
+    - blocks with block_type == "table_rejected"
+    - blocks whose ID is registered in doc_ir.metadata["preserved_block_ids"] or page.metadata["preserved_block_ids"]
+    """
+    iso = isolator or FormulaIsolator()
+    doc_preserved: set[str] = set()
+    if hasattr(doc_ir, "metadata") and isinstance(doc_ir.metadata, dict):
+        p_ids = doc_ir.metadata.get("preserved_block_ids", set())
+        if isinstance(p_ids, (set, list, tuple)):
+            doc_preserved.update(p_ids)
+
+    segments: list[TextSegment] = []
+    for page in doc_ir.pages:
+        page_preserved = set(doc_preserved)
+        if hasattr(page, "metadata") and isinstance(page.metadata, dict):
+            p_ids = page.metadata.get("preserved_block_ids", set())
+            if isinstance(p_ids, (set, list, tuple)):
+                page_preserved.update(p_ids)
+
+        for block in page.blocks:
+            if (
+                block.block_type in ("formula", "table_rejected")
+                or block.block_id in page_preserved
+            ):
+                continue
+            if not block.text.strip():
+                continue
+
+            segment = iso.isolate_block(block)
+            segments.append(segment)
+
+    return segments
 
 
 class TranslationService:
@@ -331,6 +373,30 @@ class TranslationService:
             generation_settings_hash=info["settings_hash"],
         )
 
+        return self.translate_job(job, on_progress=on_progress)
+
+    def extract_segments(self, doc_ir: DocumentIR) -> list[TextSegment]:
+        """Extract translatable TextSegments from DocumentIR, enforcing fail-closed block suppression."""
+        return extract_document_segments(doc_ir, isolator=self._isolator)
+
+    def translate_document(
+        self,
+        doc_ir: DocumentIR,
+        target_language: str,
+        source_language: str = "en",
+        job_id: str | None = None,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> TranslationJobResult:
+        """Translate a DocumentIR through the production TranslationService pipeline, strictly omitting suppressed blocks."""
+        segments = self.extract_segments(doc_ir)
+        jid = job_id or f"job_{doc_ir.doc_id}_{int(time.time() * 1000)}"
+        job = TranslationJob(
+            job_id=jid,
+            document_fingerprint=doc_ir.doc_id or "doc_fingerprint",
+            source_language=source_language,
+            target_language=target_language,
+            segments=tuple(segments),
+        )
         return self.translate_job(job, on_progress=on_progress)
 
     def _pack_batches(

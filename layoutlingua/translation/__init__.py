@@ -33,7 +33,7 @@ from layoutlingua.translation.models import (
 from layoutlingua.translation.openai_compat import OpenAITranslationProvider
 from layoutlingua.translation.profiles import ModelProfile, ModelProfileCatalog
 from layoutlingua.translation.provider import BaseTranslationProvider
-from layoutlingua.translation.service import TranslationService
+from layoutlingua.translation.service import TranslationService, extract_document_segments
 
 __all__ = [
     "ArgosModelInfo",
@@ -65,4 +65,5 @@ __all__ = [
     "TranslationJobResult",
     "TranslationRoute",
     "TranslationService",
+    "extract_document_segments",
 ]
