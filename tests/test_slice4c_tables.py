@@ -1073,5 +1073,226 @@ class TestSlice4CPageTransaction(unittest.TestCase):
         doc.close()
 
 
+class TestSlice4CMultiPageAccumulator(unittest.TestCase):
+    """Task 7: Multi-Page Document Accumulator & Document-Level Preservation."""
+
+    def test_multipage_assembly_exact_order_and_no_duplication(self) -> None:
+        """Accumulator arranges pages in exact ascending order 0..N-1 even if DocumentIR pages are unordered."""
+        doc = pymupdf.open()
+        p1 = doc.new_page(width=300, height=300)
+        p1.insert_text(pymupdf.Point(50, 50), "Page 1 Content")
+        p2 = doc.new_page(width=300, height=300)
+        p2.insert_text(pymupdf.Point(50, 50), "Page 2 Content")
+        p3 = doc.new_page(width=300, height=300)
+        p3.insert_text(pymupdf.Point(50, 50), "Page 3 Content")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(width=300, height=300)
+        b1 = TextBlock("b1", (50, 40, 200, 60), spans=[GlyphSpan("s1", "Page 1 Content", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")])
+        b2 = TextBlock("b2", (50, 40, 200, 60), spans=[GlyphSpan("s2", "Page 2 Content", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")])
+        b3 = TextBlock("b3", (50, 40, 200, 60), spans=[GlyphSpan("s3", "Page 3 Content", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")])
+
+        page1 = PageIR(1, geom, blocks=[b1])
+        page2 = PageIR(2, geom, blocks=[b2])
+        page3 = PageIR(3, geom, blocks=[b3])
+
+        # Scrambled page order in DocumentIR
+        doc_ir = DocumentIR("doc3", "test.pdf", 3, pages=[page3, page1, page2])
+
+        trans = {
+            "b1": "Trang 1 Bản Dịch",
+            "b2": "Trang 2 Bản Dịch",
+            "b3": "Trang 3 Bản Dịch",
+        }
+
+        engine = TypesetEngine()
+        result = engine.typeset(original_pdf=pdf_bytes, document_ir=doc_ir, translated_segments=trans)
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertEqual(len(out_doc), 3)
+        self.assertIn("Trang 1 Bản Dịch", out_doc[0].get_text())
+        self.assertIn("Trang 2 Bản Dịch", out_doc[1].get_text())
+        self.assertIn("Trang 3 Bản Dịch", out_doc[2].get_text())
+        out_doc.close()
+
+    def test_multipage_transaction_isolation_rollback_preserves_other_pages(self) -> None:
+        """3-page PDF: page 1 success, page 2 fallback, page 3 untouched; all 3 pages valid and in order."""
+        doc = pymupdf.open()
+        p1 = doc.new_page(width=300, height=300)
+        p1.insert_text(pymupdf.Point(50, 50), "Page 1 Source")
+        p2 = doc.new_page(width=300, height=300)
+        p2.insert_text(pymupdf.Point(50, 50), "Page 2 Cell A")
+        p2.insert_text(pymupdf.Point(150, 50), "Page 2 Cell B")
+        p3 = doc.new_page(width=300, height=300)
+        p3.insert_text(pymupdf.Point(50, 50), "Page 3 Source Untouched")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(width=300, height=300)
+        b_p1 = TextBlock("p1_b0", (50, 40, 200, 60), spans=[GlyphSpan("s1", "Page 1 Source", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")])
+        b_p2_a = TextBlock("p2_t0_r0_c0", (50, 40, 140, 60), spans=[GlyphSpan("s2a", "Page 2 Cell A", (50, 40, 140, 60), "DejaVuSans", 10.0, "#000000")], block_type="table_cell")
+        b_p2_b = TextBlock("p2_t0_r0_c1", (150, 40, 240, 60), spans=[GlyphSpan("s2b", "Page 2 Cell B", (150, 40, 240, 60), "DejaVuSans", 10.0, "#000000")], block_type="table_cell")
+        b_p3 = TextBlock("p3_b0", (50, 40, 200, 60), spans=[GlyphSpan("s3", "Page 3 Source Untouched", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")])
+
+        page1 = PageIR(1, geom, blocks=[b_p1])
+        page2 = PageIR(2, geom, blocks=[b_p2_a, b_p2_b])
+        page3 = PageIR(3, geom, blocks=[b_p3])
+        doc_ir = DocumentIR("doc3", "test.pdf", 3, pages=[page1, page2, page3])
+
+        # Page 2 cell_b has huge text that overflows, but without geometry it fails closed
+        trans = {
+            "p1_b0": "Trang 1 Dịch",
+            "p2_t0_r0_c0": "Trang 2 Ô A",
+            "p2_t0_r0_c1": "Extremely huge overflow text " * 20,
+            "p3_b0": "Page 3 Source Untouched",
+        }
+
+        engine = TypesetEngine()
+        result = engine.typeset(original_pdf=pdf_bytes, document_ir=doc_ir, translated_segments=trans)
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertEqual(len(out_doc), 3)
+        self.assertIn("Trang 1 Dịch", out_doc[0].get_text())
+        # Page 2 has uncorrupted text
+        self.assertIn("Page 2 Cell B", out_doc[1].get_text())
+        self.assertIn("Page 3 Source Untouched", out_doc[2].get_text())
+        out_doc.close()
+
+    def test_multipage_document_level_metadata_and_toc_preservation(self) -> None:
+        """Input PDF document title/author metadata, TOC, page labels, and embedded files are preserved in output."""
+        doc = pymupdf.open()
+        doc.new_page(width=300, height=300)
+        doc.new_page(width=300, height=300)
+        doc.set_metadata({
+            "title": "Sample Doc",
+            "author": "Alice",
+            "subject": "Test Subject",
+            "keywords": "layout, lingua, pdf",
+        })
+        doc.set_toc([[1, "Chapter 1", 1], [2, "Section 1.1", 2]])
+        doc.embfile_add("data.txt", b"Hello Attachment")
+        doc.set_page_labels([{"startpage": 0, "prefix": "sec-"}])
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 300)
+        doc_ir = DocumentIR("doc_meta", "meta.pdf", 2, pages=[PageIR(1, geom), PageIR(2, geom)])
+        engine = TypesetEngine()
+        result = engine.typeset(pdf_bytes, doc_ir, {})
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertEqual(out_doc.metadata.get("title"), "Sample Doc")
+        self.assertEqual(out_doc.metadata.get("author"), "Alice")
+        self.assertEqual(out_doc.metadata.get("subject"), "Test Subject")
+        self.assertEqual(out_doc.metadata.get("keywords"), "layout, lingua, pdf")
+        toc = out_doc.get_toc()
+        self.assertEqual(len(toc), 2)
+        self.assertEqual(toc[0][1], "Chapter 1")
+        self.assertEqual(toc[1][1], "Section 1.1")
+        self.assertIn("data.txt", out_doc.embfile_names())
+        labels = out_doc.get_page_labels()
+        self.assertTrue(len(labels) > 0)
+        out_doc.close()
+
+    def test_multipage_commit_phase_exception_recovery(self) -> None:
+        """Exception during output_doc.insert_pdf() commit step on page 2 triggers atomic rollback,
+        emergency commits pristine source page 2, preserves page 1 translations, and produces exact 3-page document."""
+        doc = pymupdf.open()
+        p1 = doc.new_page(width=300, height=300)
+        p1.insert_text(pymupdf.Point(50, 50), "P1 Source")
+        p2 = doc.new_page(width=300, height=300)
+        p2.insert_text(pymupdf.Point(50, 50), "P2 Source")
+        p3 = doc.new_page(width=300, height=300)
+        p3.insert_text(pymupdf.Point(50, 50), "P3 Source")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 300)
+        b1 = TextBlock("b1", (50, 40, 200, 60), spans=[GlyphSpan("s1", "P1 Source", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")])
+        b2 = TextBlock("b2", (50, 40, 200, 60), spans=[GlyphSpan("s2", "P2 Source", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")])
+        b3 = TextBlock("b3", (50, 40, 200, 60), spans=[GlyphSpan("s3", "P3 Source", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")])
+
+        doc_ir = DocumentIR("doc_rec", "rec.pdf", 3, pages=[PageIR(1, geom, blocks=[b1]), PageIR(2, geom, blocks=[b2]), PageIR(3, geom, blocks=[b3])])
+        trans = {"b1": "P1 Trans", "b2": "P2 Trans", "b3": "P3 Trans"}
+
+        engine = TypesetEngine()
+
+        # Simulate exception on page 2 commit by monkeypatching stage_page_transaction or insert_pdf
+        orig_stage = engine.stage_page_transaction
+        call_count = 0
+        def faulty_stage(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            res = orig_stage(*args, **kwargs)
+            if res.page_number == 2:
+                # Force res.staging_doc to close prematurely so output_doc.insert_pdf(res.staging_doc) raises ValueError
+                res.staging_doc.close()
+            return res
+
+        engine.stage_page_transaction = faulty_stage
+        try:
+            result = engine.typeset(pdf_bytes, doc_ir, trans)
+        finally:
+            engine.stage_page_transaction = orig_stage
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertEqual(len(out_doc), 3)
+        self.assertIn("P1 Trans", out_doc[0].get_text())
+        # Page 2 rolled back to pristine source due to commit failure
+        self.assertIn("P2 Source", out_doc[1].get_text())
+        self.assertNotIn("P2 Trans", out_doc[1].get_text())
+        self.assertIn("P3 Trans", out_doc[2].get_text())
+        out_doc.close()
+
+        # Verify telemetry for page 2 reflects transaction_fallback and 0 false success
+        p2_summary = [p for p in result.fitting_report.pages if p.page_number == 2][0]
+        self.assertEqual(p2_summary.replaced_blocks, 0)
+        self.assertEqual(p2_summary.transaction_fallback_blocks, 1)
+
+    def test_multipage_catastrophic_page_exception_emergency_fallback(self) -> None:
+        """Unhandled exception during page 2 staging triggers emergency fallback committing pristine page 2;
+        page 1 remains translated, page 3 remains translated; total page count equals 3."""
+        doc = pymupdf.open()
+        p1 = doc.new_page(width=300, height=300)
+        p1.insert_text(pymupdf.Point(50, 50), "P1 Source")
+        p2 = doc.new_page(width=300, height=300)
+        p2.insert_text(pymupdf.Point(50, 50), "P2 Source")
+        p3 = doc.new_page(width=300, height=300)
+        p3.insert_text(pymupdf.Point(50, 50), "P3 Source")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 300)
+        b1 = TextBlock("b1", (50, 40, 200, 60), spans=[GlyphSpan("s1", "P1 Source", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")])
+        b2 = TextBlock("b2", (50, 40, 200, 60), spans=[GlyphSpan("s2", "P2 Source", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")])
+        b3 = TextBlock("b3", (50, 40, 200, 60), spans=[GlyphSpan("s3", "P3 Source", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")])
+
+        doc_ir = DocumentIR("doc_cat", "cat.pdf", 3, pages=[PageIR(1, geom, blocks=[b1]), PageIR(2, geom, blocks=[b2]), PageIR(3, geom, blocks=[b3])])
+        trans = {"b1": "P1 Trans", "b2": "P2 Trans", "b3": "P3 Trans"}
+
+        engine = TypesetEngine()
+        orig_stage = engine.stage_page_transaction
+        def crashing_stage(*args, **kwargs):
+            page_ir = kwargs.get("page_ir") or args[1]
+            if page_ir.page_number == 2:
+                raise RuntimeError("Catastrophic staging crash")
+            return orig_stage(*args, **kwargs)
+
+        engine.stage_page_transaction = crashing_stage
+        try:
+            result = engine.typeset(pdf_bytes, doc_ir, trans)
+        finally:
+            engine.stage_page_transaction = orig_stage
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertEqual(len(out_doc), 3)
+        self.assertIn("P1 Trans", out_doc[0].get_text())
+        self.assertIn("P2 Source", out_doc[1].get_text())
+        self.assertIn("P3 Trans", out_doc[2].get_text())
+        out_doc.close()
+
+
 if __name__ == "__main__":
     unittest.main()
+

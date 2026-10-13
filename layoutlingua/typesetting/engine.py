@@ -9,6 +9,7 @@ from __future__ import annotations
 import pymupdf
 
 from layoutlingua.core.ir import DocumentIR, PageIR, TextBlock
+from layoutlingua.typesetting.accumulator import DocumentAccumulator
 from layoutlingua.typesetting.fitting import TextFitTester, parse_color
 from layoutlingua.typesetting.fonts import FontManager
 from layoutlingua.typesetting.models import (
@@ -548,13 +549,171 @@ class TypesetEngine:
                 pass
             return _build_fallback_result("Unhandled exception during page staging.")
 
+    def _build_fallback_page_transaction(
+        self,
+        source_doc: pymupdf.Document,
+        page_ir: PageIR,
+        source_page_index: int,
+        translated_segments: dict[str, str],
+        reason: str = "Transaction rollback to pristine source page.",
+    ) -> PageTransactionResult:
+        """Construct fallback PageTransactionResult with pristine source page copy."""
+        fallback_doc = pymupdf.open()
+        fallback_doc.insert_pdf(source_doc, from_page=source_page_index, to_page=source_page_index)
+
+        page_number = page_ir.page_number
+        summary = PageFittingSummary(page_number=page_number)
+        details: list[BlockFittingDetail] = []
+
+        for block in page_ir.blocks:
+            is_cell = (block.block_type == "table_cell")
+            summary.total_blocks += 1
+            if is_cell:
+                summary.total_cells += 1
+
+            trans_text = self._resolve_translated_text(block, translated_segments)
+            was_candidate = bool(
+                trans_text
+                and trans_text.strip()
+                and trans_text.strip() != block.text.strip()
+                and block.block_type not in ("formula", "table_rejected")
+            )
+
+            if was_candidate:
+                summary.transaction_fallback_blocks += 1
+                if is_cell:
+                    summary.transaction_fallback_cells += 1
+                status = BlockFittingStatus.TRANSACTION_FALLBACK
+            else:
+                summary.skipped_blocks += 1
+                if is_cell:
+                    summary.skipped_cells += 1
+                status = BlockFittingStatus.SKIPPED_UNCHANGED
+
+            details.append(
+                BlockFittingDetail(
+                    block_id=block.block_id,
+                    page_number=page_number,
+                    status=status,
+                    original_text=block.text,
+                    translated_text=trans_text if was_candidate else "",
+                    original_font_size=10.0,
+                    final_font_size=10.0,
+                    shrink_ratio=1.0,
+                    bbox=block.bbox,
+                    unit_kind="CELL" if is_cell else "BLOCK",
+                    reason=reason,
+                )
+            )
+
+        return PageTransactionResult(
+            page_number=page_number,
+            source_page_index=source_page_index,
+            staging_doc=fallback_doc,
+            is_fallback=True,
+            details=details,
+            summary=summary,
+        )
+
+    def _commit_page_telemetry(
+        self,
+        report: FittingReport,
+        tx_result: PageTransactionResult,
+        all_replaced_shrink_ratios: list[float],
+    ) -> None:
+        """Record successful page transaction metrics into FittingReport."""
+        report.total_blocks += tx_result.summary.total_blocks
+        report.replaced_blocks += tx_result.summary.replaced_blocks
+        report.overflow_blocks += tx_result.summary.overflow_blocks
+        report.collision_blocks += tx_result.summary.collision_blocks
+        report.skipped_blocks += tx_result.summary.skipped_blocks
+        report.transaction_fallback_blocks += tx_result.summary.transaction_fallback_blocks
+
+        report.total_cells += tx_result.summary.total_cells
+        report.replaced_cells += tx_result.summary.replaced_cells
+        report.overflow_cells += tx_result.summary.overflow_cells
+        report.collision_cells += tx_result.summary.collision_cells
+        report.skipped_cells += tx_result.summary.skipped_cells
+        report.transaction_fallback_cells += tx_result.summary.transaction_fallback_cells
+
+        report.pages.append(tx_result.summary)
+        report.details.extend(tx_result.details)
+
+        for d in tx_result.details:
+            if d.status == BlockFittingStatus.SUCCESS:
+                shrink_ratio = d.shrink_ratio
+                all_replaced_shrink_ratios.append(shrink_ratio)
+                if shrink_ratio < self.options.severe_shrink_threshold:
+                    report.severe_shrink_blocks_count += 1
+
+    def _commit_emergency_fallback_telemetry(
+        self,
+        report: FittingReport,
+        page_ir: PageIR,
+        page_number: int,
+        translated_segments: dict[str, str],
+    ) -> None:
+        """Record fallback telemetry for a page whose output insertion failed."""
+        summary = PageFittingSummary(page_number=page_number)
+        details: list[BlockFittingDetail] = []
+        for block in page_ir.blocks:
+            is_cell = (block.block_type == "table_cell")
+            summary.total_blocks += 1
+            if is_cell:
+                summary.total_cells += 1
+
+            trans_text = self._resolve_translated_text(block, translated_segments)
+            was_candidate = bool(
+                trans_text
+                and trans_text.strip()
+                and trans_text.strip() != block.text.strip()
+                and block.block_type not in ("formula", "table_rejected")
+            )
+
+            if was_candidate:
+                summary.transaction_fallback_blocks += 1
+                if is_cell:
+                    summary.transaction_fallback_cells += 1
+                status = BlockFittingStatus.TRANSACTION_FALLBACK
+            else:
+                summary.skipped_blocks += 1
+                if is_cell:
+                    summary.skipped_cells += 1
+                status = BlockFittingStatus.SKIPPED_UNCHANGED
+
+            details.append(
+                BlockFittingDetail(
+                    block_id=block.block_id,
+                    page_number=page_number,
+                    status=status,
+                    original_text=block.text,
+                    translated_text=trans_text if was_candidate else "",
+                    original_font_size=10.0,
+                    final_font_size=10.0,
+                    shrink_ratio=1.0,
+                    bbox=block.bbox,
+                    unit_kind="CELL" if is_cell else "BLOCK",
+                    reason="Commit phase failure: rolled back to pristine source page.",
+                )
+            )
+
+        report.total_blocks += summary.total_blocks
+        report.skipped_blocks += summary.skipped_blocks
+        report.transaction_fallback_blocks += summary.transaction_fallback_blocks
+        report.total_cells += summary.total_cells
+        report.skipped_cells += summary.skipped_cells
+        report.transaction_fallback_cells += summary.transaction_fallback_cells
+
+        report.pages.append(summary)
+        report.details.extend(details)
+
     def typeset(
         self,
         original_pdf: bytes,
         document_ir: DocumentIR,
         translated_segments: dict[str, str],
     ) -> TypesetResult:
-        """Render translated segments into a new PDF using page-level transactional staging.
+        """Render translated segments into a new PDF using multi-page accumulation with atomic commit gates.
 
         Args:
             original_pdf: Raw byte buffer of the input PDF document.
@@ -570,60 +729,60 @@ class TypesetEngine:
         source_doc = pymupdf.open(stream=original_pdf, filetype="pdf")
         report = FittingReport()
         all_replaced_shrink_ratios: list[float] = []
-        output_doc = pymupdf.open()
 
-        for page_ir in document_ir.pages:
-            source_page_index = page_ir.page_number - 1
-            if source_page_index < 0 or source_page_index >= len(source_doc):
-                continue
+        accumulator = DocumentAccumulator(source_doc=source_doc)
+        pages_by_number: dict[int, PageIR] = {p.page_number: p for p in document_ir.pages}
 
-            tx_result = self.stage_page_transaction(
-                source_doc=source_doc,
-                page_ir=page_ir,
-                document_ir=document_ir,
-                translated_segments=translated_segments,
-            )
+        try:
+            for p in range(len(source_doc)):
+                page_number = p + 1
+                page_ir = pages_by_number.get(page_number)
 
-            # Insert committed single page into output document
-            output_doc.insert_pdf(tx_result.staging_doc)
-            tx_result.staging_doc.close()
+                if page_ir is None:
+                    accumulator.commit_pristine_source_page(p)
+                    continue
 
-            # Aggregate telemetry into FittingReport
-            report.total_blocks += tx_result.summary.total_blocks
-            report.replaced_blocks += tx_result.summary.replaced_blocks
-            report.overflow_blocks += tx_result.summary.overflow_blocks
-            report.collision_blocks += tx_result.summary.collision_blocks
-            report.skipped_blocks += tx_result.summary.skipped_blocks
-            report.transaction_fallback_blocks += tx_result.summary.transaction_fallback_blocks
+                try:
+                    tx_result = self.stage_page_transaction(
+                        source_doc=source_doc,
+                        page_ir=page_ir,
+                        document_ir=document_ir,
+                        translated_segments=translated_segments,
+                    )
+                except Exception:
+                    tx_result = self._build_fallback_page_transaction(
+                        source_doc=source_doc,
+                        page_ir=page_ir,
+                        source_page_index=p,
+                        translated_segments=translated_segments,
+                        reason="Catastrophic exception during page staging; emergency source fallback.",
+                    )
 
-            report.total_cells += tx_result.summary.total_cells
-            report.replaced_cells += tx_result.summary.replaced_cells
-            report.overflow_cells += tx_result.summary.overflow_cells
-            report.collision_cells += tx_result.summary.collision_cells
-            report.skipped_cells += tx_result.summary.skipped_cells
-            report.transaction_fallback_cells += tx_result.summary.transaction_fallback_cells
+                committed_cleanly = accumulator.commit_page(tx_result)
 
-            report.pages.append(tx_result.summary)
-            report.details.extend(tx_result.details)
+                # Telemetry Commit Gate: only record tx_result metrics if commit cleanly succeeded
+                if committed_cleanly:
+                    self._commit_page_telemetry(report, tx_result, all_replaced_shrink_ratios)
+                else:
+                    self._commit_emergency_fallback_telemetry(
+                        report=report,
+                        page_ir=page_ir,
+                        page_number=page_number,
+                        translated_segments=translated_segments,
+                    )
 
-            for d in tx_result.details:
-                if d.status == BlockFittingStatus.SUCCESS:
-                    shrink_ratio = d.shrink_ratio
-                    all_replaced_shrink_ratios.append(shrink_ratio)
-                    if shrink_ratio < self.options.severe_shrink_threshold:
-                        report.severe_shrink_blocks_count += 1
+            if all_replaced_shrink_ratios:
+                report.avg_shrink_ratio = sum(all_replaced_shrink_ratios) / len(all_replaced_shrink_ratios)
+                report.worst_shrink_ratio = min(all_replaced_shrink_ratios)
+            else:
+                report.avg_shrink_ratio = 1.0
+                report.worst_shrink_ratio = 1.0
 
-        if all_replaced_shrink_ratios:
-            report.avg_shrink_ratio = sum(all_replaced_shrink_ratios) / len(all_replaced_shrink_ratios)
-            report.worst_shrink_ratio = min(all_replaced_shrink_ratios)
-        else:
-            report.avg_shrink_ratio = 1.0
-            report.worst_shrink_ratio = 1.0
-
-        output_bytes = output_doc.tobytes(deflate=True, garbage=3)
-        output_doc.close()
-        source_doc.close()
-        return TypesetResult(pdf_bytes=output_bytes, fitting_report=report)
+            output_bytes = accumulator.finish()
+            return TypesetResult(pdf_bytes=output_bytes, fitting_report=report)
+        finally:
+            accumulator.close()
+            source_doc.close()
 
     def _resolve_translated_text(
         self,
