@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pymupdf
 
-from layoutlingua.typesetting.models import PageTransactionResult
+from layoutlingua.typesetting.models import FittingReport, PageTransactionResult
+
+PREDEFINED_NAMED_ACTIONS: frozenset[str] = frozenset({"NextPage", "PrevPage", "FirstPage", "LastPage"})
 
 
 class DocumentAccumulator:
@@ -16,6 +18,9 @@ class DocumentAccumulator:
       and commits the pristine source page.
     - Preserves document-level properties: metadata, TOC, page labels, embedded files,
       and XML metadata.
+    - Post-assembly link restoration: re-inserts LINK_GOTO, LINK_URI, and dual
+      LINK_NAMED (predefined actions + named destination resolution) after all pages
+      are committed with links=False.
     """
 
     def __init__(self, source_doc: pymupdf.Document) -> None:
@@ -87,6 +92,144 @@ class DocumentAccumulator:
             join_duplicates=True,
         )
 
+    def restore_links(self, report: FittingReport) -> None:
+        """Post-assembly link restoration from source_doc into output_doc.
+
+        Handles three link categories:
+        1. LINK_GOTO / LINK_URI: re-inserted verbatim into corresponding output page.
+        2. LINK_NAMED predefined actions (NextPage, PrevPage, FirstPage, LastPage):
+           re-inserted verbatim as LINK_NAMED.
+        3. LINK_NAMED with nameddest=<name>: resolved via source_doc name table,
+           converted to LINK_GOTO with coordinate transformation via destination
+           page's transformation_matrix. Unresolvable names emit a warning.
+        """
+        # Build resolved name table from source document
+        resolved_names: dict[str, dict] = {}
+        try:
+            resolved_names = self.source_doc.resolve_names() or {}
+        except Exception:
+            pass
+
+        # Track which named destinations from the catalog are referenced by links
+        referenced_dest_names: set[str] = set()
+
+        num_pages = min(len(self.source_doc), len(self.output_doc))
+        for page_idx in range(num_pages):
+            source_page = self.source_doc[page_idx]
+            output_page = self.output_doc[page_idx]
+
+            try:
+                source_links = source_page.get_links()
+            except Exception:
+                continue
+
+            for link in source_links:
+                kind = link.get("kind")
+
+                if kind == pymupdf.LINK_GOTO:
+                    # Internal cross-page link: re-insert verbatim
+                    try:
+                        output_page.insert_link(link)
+                    except Exception:
+                        pass
+
+                elif kind == pymupdf.LINK_URI:
+                    # External URI link: re-insert verbatim
+                    try:
+                        output_page.insert_link(link)
+                    except Exception:
+                        pass
+
+                elif kind == pymupdf.LINK_NAMED:
+                    name = link.get("name") or link.get("nameddest") or ""
+
+                    # Check predefined viewer actions first
+                    if name in PREDEFINED_NAMED_ACTIONS:
+                        try:
+                            action_link = {
+                                "kind": pymupdf.LINK_NAMED,
+                                "from": link.get("from", pymupdf.Rect(0, 0, 0, 0)),
+                                "name": name,
+                            }
+                            output_page.insert_link(action_link)
+                        except Exception:
+                            pass
+                        continue
+
+                    # Extract destination name from "nameddest=<name>" format
+                    dest_name = ""
+                    if name.startswith("nameddest="):
+                        dest_name = name[len("nameddest="):]
+                    else:
+                        dest_name = name
+
+                    if not dest_name:
+                        continue
+
+                    referenced_dest_names.add(dest_name)
+
+                    # Resolve named destination from source document name table
+                    dest_info = resolved_names.get(dest_name)
+                    if dest_info is None:
+                        # Unresolvable: skip link insertion, emit warning
+                        report.warnings.append(
+                            f"Unresolvable named destination '{dest_name}' on page {page_idx + 1}; "
+                            f"link skipped to prevent dead link."
+                        )
+                        continue
+
+                    # Convert resolved destination to LINK_GOTO
+                    dest_page = dest_info.get("page", -1)
+                    dest_to = dest_info.get("to")
+
+                    if dest_page < 0 or dest_page >= len(self.output_doc):
+                        report.warnings.append(
+                            f"Named destination '{dest_name}' resolves to invalid page {dest_page}; "
+                            f"link skipped."
+                        )
+                        continue
+
+                    # Apply coordinate transformation via destination page's transformation_matrix
+                    goto_point = pymupdf.Point(0, 0)
+                    if dest_to is not None:
+                        try:
+                            dest_output_page = self.output_doc[dest_page]
+                            raw_point = pymupdf.Point(dest_to)
+                            goto_point = raw_point * dest_output_page.transformation_matrix
+                        except Exception:
+                            goto_point = pymupdf.Point(dest_to) if dest_to else pymupdf.Point(0, 0)
+
+                    goto_link = {
+                        "kind": pymupdf.LINK_GOTO,
+                        "from": link.get("from", pymupdf.Rect(0, 0, 0, 0)),
+                        "page": dest_page,
+                        "to": goto_point,
+                    }
+                    try:
+                        output_page.insert_link(goto_link)
+                    except Exception:
+                        report.warnings.append(
+                            f"Failed to insert resolved LINK_GOTO for destination '{dest_name}' "
+                            f"on page {page_idx + 1}."
+                        )
+
+                else:
+                    # Unknown link kind: attempt verbatim restoration
+                    try:
+                        output_page.insert_link(link)
+                    except Exception:
+                        pass
+
+        # Emit diagnostic warnings for standalone catalog named destinations
+        # that exist in the name table but were not referenced by any link
+        if resolved_names:
+            standalone_dests = set(resolved_names.keys()) - referenced_dest_names
+            for dest_name in sorted(standalone_dests):
+                report.warnings.append(
+                    f"Standalone catalog named destination '{dest_name}' preserved in document "
+                    f"structure but not referenced by any link."
+                )
+
     def preserve_document_properties(self) -> None:
         """Transfer document-level attributes verbatim from source_doc to output_doc."""
         # 1. Document metadata (title, author, subject, keywords, creator, producer, dates)
@@ -138,9 +281,16 @@ class DocumentAccumulator:
         except Exception:
             pass
 
-    def finish(self) -> bytes:
-        """Finalize and return the accumulated PDF bytes, closing the output document."""
+    def finish(self, report: FittingReport | None = None) -> bytes:
+        """Finalize and return the accumulated PDF bytes, closing the output document.
+
+        Args:
+            report: If provided, post-assembly link restoration is performed and
+                    warnings are appended to report.warnings.
+        """
         self.preserve_document_properties()
+        if report is not None:
+            self.restore_links(report)
         pdf_bytes = self.output_doc.tobytes(deflate=True, garbage=3)
         self.output_doc.close()
         return pdf_bytes

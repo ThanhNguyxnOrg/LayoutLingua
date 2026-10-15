@@ -1293,6 +1293,224 @@ class TestSlice4CMultiPageAccumulator(unittest.TestCase):
         out_doc.close()
 
 
+class TestPostAssemblyLinkRestoration(unittest.TestCase):
+    """Task 8: Post-Assembly Link Restoration & Dual LINK_NAMED Engine."""
+
+    def test_multipage_cross_page_internal_and_external_link_restoration(self) -> None:
+        """3-page PDF: internal link from page 1 pointing to page 3, internal link from page 3 pointing to page 1,
+        and external URI link on page 2. Verifies after serializing to bytes and reopening that all 3 links exist."""
+        doc = pymupdf.open()
+        p1 = doc.new_page(width=300, height=300)
+        p2 = doc.new_page(width=300, height=300)
+        p3 = doc.new_page(width=300, height=300)
+
+        # Retrieve through doc[i] to ensure valid internal page references
+        doc[0].insert_link({"kind": pymupdf.LINK_GOTO, "from": pymupdf.Rect(50, 50, 100, 70), "page": 2, "to": pymupdf.Point(50, 100)})
+        doc[1].insert_link({"kind": pymupdf.LINK_URI, "from": pymupdf.Rect(50, 50, 100, 70), "uri": "https://example.com"})
+        doc[2].insert_link({"kind": pymupdf.LINK_GOTO, "from": pymupdf.Rect(50, 50, 100, 70), "page": 0, "to": pymupdf.Point(50, 50)})
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 300)
+        doc_ir = DocumentIR("doc_links", "links.pdf", 3, pages=[PageIR(1, geom), PageIR(2, geom), PageIR(3, geom)])
+        engine = TypesetEngine()
+        result = engine.typeset(pdf_bytes, doc_ir, {})
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        l1 = out_doc[0].get_links()
+        self.assertEqual(len(l1), 1)
+        self.assertEqual(l1[0]["kind"], pymupdf.LINK_GOTO)
+        self.assertEqual(l1[0]["page"], 2)
+        self.assertEqual(l1[0]["to"], pymupdf.Point(50, 100))
+
+        l2 = out_doc[1].get_links()
+        self.assertEqual(len(l2), 1)
+        self.assertEqual(l2[0]["kind"], pymupdf.LINK_URI)
+        self.assertEqual(l2[0]["uri"], "https://example.com")
+
+        l3 = out_doc[2].get_links()
+        self.assertEqual(len(l3), 1)
+        self.assertEqual(l3[0]["kind"], pymupdf.LINK_GOTO)
+        self.assertEqual(l3[0]["page"], 0)
+        self.assertEqual(l3[0]["to"], pymupdf.Point(50, 50))
+        out_doc.close()
+
+    def test_multipage_named_actions_preservation(self) -> None:
+        """2-page PDF fixture containing standard predefined viewer action links (name='NextPage', 'PrevPage')."""
+        doc = pymupdf.open()
+        doc.new_page(width=300, height=300)
+        doc.new_page(width=300, height=300)
+        doc[0].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "NextPage"})
+        doc[1].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "PrevPage"})
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 300)
+        doc_ir = DocumentIR("doc_act", "act.pdf", 2, pages=[PageIR(1, geom), PageIR(2, geom)])
+        engine = TypesetEngine()
+        result = engine.typeset(pdf_bytes, doc_ir, {})
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        l1 = out_doc[0].get_links()
+        self.assertEqual(len(l1), 1)
+        self.assertEqual(l1[0]["kind"], pymupdf.LINK_NAMED)
+        self.assertIn("NextPage", l1[0].get("name", "") or l1[0].get("nameddest", ""))
+
+        l2 = out_doc[1].get_links()
+        self.assertEqual(len(l2), 1)
+        self.assertEqual(l2[0]["kind"], pymupdf.LINK_NAMED)
+        self.assertIn("PrevPage", l2[0].get("name", "") or l2[0].get("nameddest", ""))
+        out_doc.close()
+
+    def test_multipage_named_destination_resolution_standard_page(self) -> None:
+        """2-page standard PDF (300 x 400 pt, unrotated): catalog /Dests defines section_std pointing to page 1
+        at PDF coordinates (x=40, y=320). Verifies conversion to LINK_GOTO targeting Point(40.0, 80.0)."""
+        doc = pymupdf.open()
+        doc.new_page(width=300, height=400)
+        doc.new_page(width=300, height=400)
+        cat = doc.pdf_catalog()
+        p2_xref = doc.page_xref(1)
+        doc.xref_set_key(cat, "Dests", f"<</section_std [{p2_xref} 0 R /XYZ 40 320 0]>>")
+        doc[0].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "nameddest=section_std"})
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 400)
+        doc_ir = DocumentIR("doc_std", "std.pdf", 2, pages=[PageIR(1, geom), PageIR(2, geom)])
+        engine = TypesetEngine()
+        result = engine.typeset(pdf_bytes, doc_ir, {})
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        links = out_doc[0].get_links()
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["kind"], pymupdf.LINK_GOTO)
+        self.assertEqual(links[0]["page"], 1)
+        self.assertEqual(links[0]["to"], pymupdf.Point(40.0, 80.0))
+        out_doc.close()
+
+    def test_multipage_named_destination_resolution_offset_cropbox(self) -> None:
+        """2-page PDF where destination page 1 has offset CropBox: MediaBox = Rect(0, 0, 300, 400),
+        CropBox = Rect(50, 50, 250, 350). Catalog destination section_crop has PDF coordinates (100, 200)."""
+        doc = pymupdf.open()
+        doc.new_page(width=300, height=400)
+        doc.new_page(width=300, height=400)
+        doc[1].set_cropbox(pymupdf.Rect(50, 50, 250, 350))
+        cat = doc.pdf_catalog()
+        p2_xref = doc.page_xref(1)
+        doc.xref_set_key(cat, "Dests", f"<</section_crop [{p2_xref} 0 R /XYZ 100 200 0]>>")
+        doc[0].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "nameddest=section_crop"})
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 400)
+        doc_ir = DocumentIR("doc_crop", "crop.pdf", 2, pages=[PageIR(1, geom), PageIR(2, geom)])
+        engine = TypesetEngine()
+        result = engine.typeset(pdf_bytes, doc_ir, {})
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        links = out_doc[0].get_links()
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["kind"], pymupdf.LINK_GOTO)
+        self.assertEqual(links[0]["page"], 1)
+        self.assertEqual(links[0]["to"], pymupdf.Point(50.0, 150.0))
+        out_doc.close()
+
+    def test_multipage_named_destination_resolution_rotated_page(self) -> None:
+        """3-page PDF where destination page 1 has rotation = 90 and page 2 has rotation = 270.
+        Verifies links converted to LINK_GOTO with correct orientation."""
+        doc = pymupdf.open()
+        doc.new_page(width=300, height=400)
+        doc.new_page(width=300, height=400)
+        doc.new_page(width=300, height=400)
+        doc[1].set_rotation(90)
+        doc[2].set_rotation(270)
+        cat = doc.pdf_catalog()
+        p2_xref = doc.page_xref(1)
+        doc.xref_set_key(cat, "Dests", f"<</section_rot [{p2_xref} 0 R /XYZ 40 320 0]>>")
+        doc[0].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "nameddest=section_rot"})
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 400)
+        doc_ir = DocumentIR("doc_rot", "rot.pdf", 3, pages=[PageIR(1, geom), PageIR(2, geom), PageIR(3, geom)])
+        engine = TypesetEngine()
+        result = engine.typeset(pdf_bytes, doc_ir, {})
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        links = out_doc[0].get_links()
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["kind"], pymupdf.LINK_GOTO)
+        self.assertEqual(links[0]["page"], 1)
+        expected_to = (
+            pymupdf.Point(40, 320)
+            * out_doc[1].transformation_matrix
+            * out_doc[1].rotation_matrix
+        )
+        self.assertEqual(links[0]["to"], expected_to)
+        out_doc.close()
+
+    def test_multipage_unresolvable_named_destination_emits_warning_no_dead_link(self) -> None:
+        """Input PDF contains link with name='nameddest=missing_target' where destination is absent from catalog /Dests.
+        Verifies link insertion is skipped (no dead link) and warning is logged."""
+        doc = pymupdf.open()
+        doc.new_page(width=300, height=400)
+        doc[0].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "nameddest=missing_target"})
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 400)
+        doc_ir = DocumentIR("doc_unres", "unres.pdf", 1, pages=[PageIR(1, geom)])
+        engine = TypesetEngine()
+        result = engine.typeset(pdf_bytes, doc_ir, {})
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertEqual(len(out_doc[0].get_links()), 0)
+        out_doc.close()
+
+        self.assertTrue(any("missing_target" in w for w in result.fitting_report.warnings))
+
+    def test_multipage_form_widgets_and_catalog_dests_warning(self) -> None:
+        """Multi-page form with shared field names retains unified identity via join_duplicates=True;
+        standalone catalog named destinations log diagnostic warning."""
+        doc = pymupdf.open()
+        doc.new_page(width=300, height=400)
+        doc.new_page(width=300, height=400)
+        cat = doc.pdf_catalog()
+        p2_xref = doc.page_xref(1)
+        doc.xref_set_key(cat, "Dests", f"<</standalone_dest [{p2_xref} 0 R /XYZ 50 100 0]>>")
+
+        widget1 = pymupdf.Widget()
+        widget1.field_type = pymupdf.PDF_WIDGET_TYPE_TEXT
+        widget1.rect = pymupdf.Rect(50, 50, 150, 70)
+        widget1.field_name = "test_field"
+        doc[0].add_widget(widget1)
+
+        widget2 = pymupdf.Widget()
+        widget2.field_type = pymupdf.PDF_WIDGET_TYPE_TEXT
+        widget2.rect = pymupdf.Rect(50, 50, 150, 70)
+        widget2.field_name = "test_field"
+        doc[1].add_widget(widget2)
+
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 400)
+        doc_ir = DocumentIR("doc_form", "form.pdf", 2, pages=[PageIR(1, geom), PageIR(2, geom)])
+        engine = TypesetEngine()
+        result = engine.typeset(pdf_bytes, doc_ir, {})
+
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertEqual(len(out_doc), 2)
+        # Verify form widgets preserved
+        fields = [w.field_name for page in out_doc for w in page.widgets()]
+        self.assertTrue(len(fields) >= 2)
+        self.assertIn("test_field", fields)
+        out_doc.close()
+
+        # Verify standalone catalog named destinations warning emitted
+        self.assertTrue(any("standalone_dest" in w or "catalog" in w.lower() for w in result.fitting_report.warnings))
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -130,6 +130,7 @@ class FittingReport:
     line_count_delta: int = 0
     pages: list[PageFittingSummary] = field(default_factory=list)
     details: list[BlockFittingDetail] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def success_rate(self) -> float:

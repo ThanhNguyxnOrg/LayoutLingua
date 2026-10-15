@@ -778,7 +778,7 @@ class TypesetEngine:
                 report.avg_shrink_ratio = 1.0
                 report.worst_shrink_ratio = 1.0
 
-            output_bytes = accumulator.finish()
+            output_bytes = accumulator.finish(report=report)
             return TypesetResult(pdf_bytes=output_bytes, fitting_report=report)
         finally:
             accumulator.close()
