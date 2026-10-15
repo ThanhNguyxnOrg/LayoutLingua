@@ -1511,6 +1511,174 @@ class TestPostAssemblyLinkRestoration(unittest.TestCase):
         self.assertTrue(any("standalone_dest" in w or "catalog" in w.lower() for w in result.fitting_report.warnings))
 
 
+
+class TestTelemetryCacheAndIntegrity(unittest.TestCase):
+    def test_table_level_telemetry_isolation_no_block_inflation(self) -> None:
+        """Rejected table logs unit_kind='TABLE' without inflating skipped_blocks or total_cells."""
+        report = FittingReport()
+        summary = PageFittingSummary(page_number=1)
+        detail = BlockFittingDetail(
+            block_id="p1_table_0",
+            page_number=1,
+            status=BlockFittingStatus.SKIPPED_UNSUPPORTED,
+            original_text="",
+            translated_text="",
+            original_font_size=10.0,
+            final_font_size=10.0,
+            unit_kind="TABLE",
+            reason="Table grid corroboration failed: missing divider.",
+        )
+        report.details.append(detail)
+        report.rejected_tables += 1
+        self.assertEqual(report.rejected_tables, 1)
+        self.assertEqual(report.total_cells, 0)
+        self.assertEqual(report.replaced_cells, 0)
+
+    def test_table_cell_translation_cache_isolation_from_merged_blocks(self) -> None:
+        """Partitioned cell translations do not hit stale cache entries from previous merged-block translations."""
+        from layoutlingua.translation._storage import compute_cache_key
+
+        key_merged = compute_cache_key("mock", "model", "en", "vi", "p1", "norm", "gloss", "gen", "Col A Col B")
+        key_cell_a = compute_cache_key("mock", "model", "en", "vi", "p1", "norm", "gloss", "gen", "Col A")
+        key_cell_b = compute_cache_key("mock", "model", "en", "vi", "p1", "norm", "gloss", "gen", "Col B")
+        key_cell_a_dup = compute_cache_key("mock", "model", "en", "vi", "p1", "norm", "gloss", "gen", "Col A")
+
+        self.assertNotEqual(key_merged, key_cell_a)
+        self.assertNotEqual(key_merged, key_cell_b)
+        self.assertEqual(key_cell_a, key_cell_a_dup)
+
+    def test_rebuilt_pdf_table_visual_and_structural_integrity(self) -> None:
+        """Output PDF contains valid vector drawings, correct text placement, unchanged page dimensions."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        shape = page.new_shape()
+        shape.draw_rect(pymupdf.Rect(50, 50, 250, 150))
+        shape.finish(color=(0, 0, 0), width=1.0)
+        shape.commit()
+        page.insert_text(pymupdf.Point(60, 80), "Header")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 300)
+        p = PageIR(1, geom, blocks=[TextBlock("b0", (60, 70, 100, 85), spans=[GlyphSpan("s0", "Header", (60, 70, 100, 85), "DejaVuSans", 10.0, "#000000")])])
+        doc_ir = DocumentIR("doc_vis", "vis.pdf", 1, pages=[p])
+
+        engine = TypesetEngine()
+        result = engine.typeset(pdf_bytes, doc_ir, {"b0": "Tiêu đề"})
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertGreaterEqual(len(out_doc[0].get_drawings()), 1)
+        self.assertEqual(out_doc[0].rect.width, 300)
+        self.assertEqual(out_doc[0].rect.height, 300)
+        text_out = out_doc[0].get_text()
+        self.assertIn("Tiêu đề", text_out)
+        out_doc.close()
+
+    def test_end_to_end_full_pipeline_multi_page_pdf_integration(self) -> None:
+        """End-to-end integration: 2-page document with text, table cells, drawings, and cross-page link."""
+        doc = pymupdf.open()
+        doc.new_page(width=300, height=400)
+        doc.new_page(width=300, height=400)
+        p0 = doc[0]
+        p1 = doc[1]
+
+        # Page 0 has a vector table border and text
+        shape = p0.new_shape()
+        shape.draw_rect(pymupdf.Rect(50, 50, 250, 150))
+        shape.finish(color=(0, 0, 0), width=1.0)
+        shape.commit()
+        p0.insert_text(pymupdf.Point(60, 80), "Cell A")
+        p0.insert_text(pymupdf.Point(160, 80), "Cell B")
+
+        # Page 0 has a cross-page link to Page 1
+        p0.insert_link({
+            "kind": pymupdf.LINK_GOTO,
+            "from": pymupdf.Rect(50, 200, 150, 220),
+            "page": 1,
+            "to": pymupdf.Point(50, 50),
+        })
+
+        # Page 1 has regular text
+        p1.insert_text(pymupdf.Point(50, 50), "Target on Page 2")
+
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        geom = PageGeometry(300, 400)
+        c0 = CellGeometry("p1_t0_r0_c0", 0, 0, (50, 50, 150, 150), {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0})
+        c1 = CellGeometry("p1_t0_r0_c1", 0, 1, (150, 50, 250, 150), {"top": 1.0, "bottom": 1.0, "left": 1.0, "right": 1.0})
+        grid = TableGrid("p1_t0", (50, 50, 250, 150), 1, 2, {c0.cell_id: c0, c1.cell_id: c1})
+
+        b_c0 = TextBlock(
+            "p1_t0_r0_c0",
+            (50, 50, 150, 150),
+            spans=[GlyphSpan("s0", "Cell A", (60, 70, 100, 85), "DejaVuSans", 10.0, "#000000")],
+            block_type="table_cell",
+        )
+        b_c1 = TextBlock(
+            "p1_t0_r0_c1",
+            (150, 50, 250, 150),
+            spans=[GlyphSpan("s1", "Cell B", (160, 70, 200, 85), "DejaVuSans", 10.0, "#000000")],
+            block_type="table_cell",
+        )
+        page1_ir = PageIR(
+            page_number=1,
+            geometry=geom,
+            blocks=[b_c0, b_c1],
+            metadata={"tables": {"p1_t0": grid}},
+        )
+        b_p2 = TextBlock(
+            "p2_b0",
+            (50, 40, 200, 60),
+            spans=[GlyphSpan("s2", "Target on Page 2", (50, 40, 200, 60), "DejaVuSans", 10.0, "#000000")],
+            block_type="text",
+        )
+        page2_ir = PageIR(page_number=2, geometry=geom, blocks=[b_p2])
+
+        doc_ir = DocumentIR("e2e_doc", "e2e.pdf", 2, pages=[page1_ir, page2_ir])
+
+        translations = {
+            "p1_t0_r0_c0": "Ô A",
+            "p1_t0_r0_c1": "Ô B",
+            "p2_b0": "Đích đến ở Trang 2",
+        }
+
+        engine = TypesetEngine()
+        result = engine.typeset(pdf_bytes, doc_ir, translations)
+
+        self.assertIsNotNone(result.pdf_bytes)
+        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
+        self.assertEqual(len(out_doc), 2)
+
+        # 1. Vector drawings preserved
+        self.assertGreaterEqual(len(out_doc[0].get_drawings()), 1)
+
+        # 2. Cell text replaced
+        text_p1 = out_doc[0].get_text()
+        self.assertIn("Ô A", text_p1)
+        self.assertIn("Ô B", text_p1)
+
+        # 3. Target text replaced
+        text_p2 = out_doc[1].get_text()
+        self.assertIn("Đích đến ở Trang 2", text_p2)
+
+        # 4. Cross-page link restored
+        links_p1 = out_doc[0].get_links()
+        self.assertEqual(len(links_p1), 1)
+        self.assertEqual(links_p1[0]["kind"], pymupdf.LINK_GOTO)
+        self.assertEqual(links_p1[0]["page"], 1)
+
+        # 5. Multi-tier telemetry
+        rep = result.fitting_report
+        self.assertEqual(rep.total_cells, 2)
+        self.assertEqual(rep.replaced_cells, 2)
+        self.assertEqual(rep.total_blocks, 3)
+        self.assertEqual(rep.replaced_blocks, 3)
+        self.assertEqual(rep.rejected_tables, 0)
+        self.assertEqual(len(rep.warnings), 0)
+
+        out_doc.close()
+
+
 if __name__ == "__main__":
     unittest.main()
 
