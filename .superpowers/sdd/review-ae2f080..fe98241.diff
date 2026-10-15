@@ -1,0 +1,443 @@
+diff --git a/layoutlingua/typesetting/accumulator.py b/layoutlingua/typesetting/accumulator.py
+index a226a6a..954f84d 100644
+--- a/layoutlingua/typesetting/accumulator.py
++++ b/layoutlingua/typesetting/accumulator.py
+@@ -4,7 +4,9 @@ from __future__ import annotations
+ 
+ import pymupdf
+ 
+-from layoutlingua.typesetting.models import PageTransactionResult
++from layoutlingua.typesetting.models import FittingReport, PageTransactionResult
++
++PREDEFINED_NAMED_ACTIONS: frozenset[str] = frozenset({"NextPage", "PrevPage", "FirstPage", "LastPage"})
+ 
+ 
+ class DocumentAccumulator:
+@@ -16,6 +18,9 @@ class DocumentAccumulator:
+       and commits the pristine source page.
+     - Preserves document-level properties: metadata, TOC, page labels, embedded files,
+       and XML metadata.
++    - Post-assembly link restoration: re-inserts LINK_GOTO, LINK_URI, and dual
++      LINK_NAMED (predefined actions + named destination resolution) after all pages
++      are committed with links=False.
+     """
+ 
+     def __init__(self, source_doc: pymupdf.Document) -> None:
+@@ -87,6 +92,144 @@ class DocumentAccumulator:
+             join_duplicates=True,
+         )
+ 
++    def restore_links(self, report: FittingReport) -> None:
++        """Post-assembly link restoration from source_doc into output_doc.
++
++        Handles three link categories:
++        1. LINK_GOTO / LINK_URI: re-inserted verbatim into corresponding output page.
++        2. LINK_NAMED predefined actions (NextPage, PrevPage, FirstPage, LastPage):
++           re-inserted verbatim as LINK_NAMED.
++        3. LINK_NAMED with nameddest=<name>: resolved via source_doc name table,
++           converted to LINK_GOTO with coordinate transformation via destination
++           page's transformation_matrix. Unresolvable names emit a warning.
++        """
++        # Build resolved name table from source document
++        resolved_names: dict[str, dict] = {}
++        try:
++            resolved_names = self.source_doc.resolve_names() or {}
++        except Exception:
++            pass
++
++        # Track which named destinations from the catalog are referenced by links
++        referenced_dest_names: set[str] = set()
++
++        num_pages = min(len(self.source_doc), len(self.output_doc))
++        for page_idx in range(num_pages):
++            source_page = self.source_doc[page_idx]
++            output_page = self.output_doc[page_idx]
++
++            try:
++                source_links = source_page.get_links()
++            except Exception:
++                continue
++
++            for link in source_links:
++                kind = link.get("kind")
++
++                if kind == pymupdf.LINK_GOTO:
++                    # Internal cross-page link: re-insert verbatim
++                    try:
++                        output_page.insert_link(link)
++                    except Exception:
++                        pass
++
++                elif kind == pymupdf.LINK_URI:
++                    # External URI link: re-insert verbatim
++                    try:
++                        output_page.insert_link(link)
++                    except Exception:
++                        pass
++
++                elif kind == pymupdf.LINK_NAMED:
++                    name = link.get("name") or link.get("nameddest") or ""
++
++                    # Check predefined viewer actions first
++                    if name in PREDEFINED_NAMED_ACTIONS:
++                        try:
++                            action_link = {
++                                "kind": pymupdf.LINK_NAMED,
++                                "from": link.get("from", pymupdf.Rect(0, 0, 0, 0)),
++                                "name": name,
++                            }
++                            output_page.insert_link(action_link)
++                        except Exception:
++                            pass
++                        continue
++
++                    # Extract destination name from "nameddest=<name>" format
++                    dest_name = ""
++                    if name.startswith("nameddest="):
++                        dest_name = name[len("nameddest="):]
++                    else:
++                        dest_name = name
++
++                    if not dest_name:
++                        continue
++
++                    referenced_dest_names.add(dest_name)
++
++                    # Resolve named destination from source document name table
++                    dest_info = resolved_names.get(dest_name)
++                    if dest_info is None:
++                        # Unresolvable: skip link insertion, emit warning
++                        report.warnings.append(
++                            f"Unresolvable named destination '{dest_name}' on page {page_idx + 1}; "
++                            f"link skipped to prevent dead link."
++                        )
++                        continue
++
++                    # Convert resolved destination to LINK_GOTO
++                    dest_page = dest_info.get("page", -1)
++                    dest_to = dest_info.get("to")
++
++                    if dest_page < 0 or dest_page >= len(self.output_doc):
++                        report.warnings.append(
++                            f"Named destination '{dest_name}' resolves to invalid page {dest_page}; "
++                            f"link skipped."
++                        )
++                        continue
++
++                    # Apply coordinate transformation via destination page's transformation_matrix
++                    goto_point = pymupdf.Point(0, 0)
++                    if dest_to is not None:
++                        try:
++                            dest_output_page = self.output_doc[dest_page]
++                            raw_point = pymupdf.Point(dest_to)
++                            goto_point = raw_point * dest_output_page.transformation_matrix
++                        except Exception:
++                            goto_point = pymupdf.Point(dest_to) if dest_to else pymupdf.Point(0, 0)
++
++                    goto_link = {
++                        "kind": pymupdf.LINK_GOTO,
++                        "from": link.get("from", pymupdf.Rect(0, 0, 0, 0)),
++                        "page": dest_page,
++                        "to": goto_point,
++                    }
++                    try:
++                        output_page.insert_link(goto_link)
++                    except Exception:
++                        report.warnings.append(
++                            f"Failed to insert resolved LINK_GOTO for destination '{dest_name}' "
++                            f"on page {page_idx + 1}."
++                        )
++
++                else:
++                    # Unknown link kind: attempt verbatim restoration
++                    try:
++                        output_page.insert_link(link)
++                    except Exception:
++                        pass
++
++        # Emit diagnostic warnings for standalone catalog named destinations
++        # that exist in the name table but were not referenced by any link
++        if resolved_names:
++            standalone_dests = set(resolved_names.keys()) - referenced_dest_names
++            for dest_name in sorted(standalone_dests):
++                report.warnings.append(
++                    f"Standalone catalog named destination '{dest_name}' preserved in document "
++                    f"structure but not referenced by any link."
++                )
++
+     def preserve_document_properties(self) -> None:
+         """Transfer document-level attributes verbatim from source_doc to output_doc."""
+         # 1. Document metadata (title, author, subject, keywords, creator, producer, dates)
+@@ -138,9 +281,16 @@ class DocumentAccumulator:
+         except Exception:
+             pass
+ 
+-    def finish(self) -> bytes:
+-        """Finalize and return the accumulated PDF bytes, closing the output document."""
++    def finish(self, report: FittingReport | None = None) -> bytes:
++        """Finalize and return the accumulated PDF bytes, closing the output document.
++
++        Args:
++            report: If provided, post-assembly link restoration is performed and
++                    warnings are appended to report.warnings.
++        """
+         self.preserve_document_properties()
++        if report is not None:
++            self.restore_links(report)
+         pdf_bytes = self.output_doc.tobytes(deflate=True, garbage=3)
+         self.output_doc.close()
+         return pdf_bytes
+diff --git a/layoutlingua/typesetting/engine.py b/layoutlingua/typesetting/engine.py
+index e65025d..7124e27 100644
+--- a/layoutlingua/typesetting/engine.py
++++ b/layoutlingua/typesetting/engine.py
+@@ -778,7 +778,7 @@ class TypesetEngine:
+                 report.avg_shrink_ratio = 1.0
+                 report.worst_shrink_ratio = 1.0
+ 
+-            output_bytes = accumulator.finish()
++            output_bytes = accumulator.finish(report=report)
+             return TypesetResult(pdf_bytes=output_bytes, fitting_report=report)
+         finally:
+             accumulator.close()
+diff --git a/layoutlingua/typesetting/models.py b/layoutlingua/typesetting/models.py
+index fc56f11..8256746 100644
+--- a/layoutlingua/typesetting/models.py
++++ b/layoutlingua/typesetting/models.py
+@@ -130,6 +130,7 @@ class FittingReport:
+     line_count_delta: int = 0
+     pages: list[PageFittingSummary] = field(default_factory=list)
+     details: list[BlockFittingDetail] = field(default_factory=list)
++    warnings: list[str] = field(default_factory=list)
+ 
+     @property
+     def success_rate(self) -> float:
+diff --git a/tests/test_slice4c_tables.py b/tests/test_slice4c_tables.py
+index 5c5e8fa..28c9ffe 100644
+--- a/tests/test_slice4c_tables.py
++++ b/tests/test_slice4c_tables.py
+@@ -1293,6 +1293,224 @@ class TestSlice4CMultiPageAccumulator(unittest.TestCase):
+         out_doc.close()
+ 
+ 
++class TestPostAssemblyLinkRestoration(unittest.TestCase):
++    """Task 8: Post-Assembly Link Restoration & Dual LINK_NAMED Engine."""
++
++    def test_multipage_cross_page_internal_and_external_link_restoration(self) -> None:
++        """3-page PDF: internal link from page 1 pointing to page 3, internal link from page 3 pointing to page 1,
++        and external URI link on page 2. Verifies after serializing to bytes and reopening that all 3 links exist."""
++        doc = pymupdf.open()
++        p1 = doc.new_page(width=300, height=300)
++        p2 = doc.new_page(width=300, height=300)
++        p3 = doc.new_page(width=300, height=300)
++
++        # Retrieve through doc[i] to ensure valid internal page references
++        doc[0].insert_link({"kind": pymupdf.LINK_GOTO, "from": pymupdf.Rect(50, 50, 100, 70), "page": 2, "to": pymupdf.Point(50, 100)})
++        doc[1].insert_link({"kind": pymupdf.LINK_URI, "from": pymupdf.Rect(50, 50, 100, 70), "uri": "https://example.com"})
++        doc[2].insert_link({"kind": pymupdf.LINK_GOTO, "from": pymupdf.Rect(50, 50, 100, 70), "page": 0, "to": pymupdf.Point(50, 50)})
++        pdf_bytes = doc.tobytes()
++        doc.close()
++
++        geom = PageGeometry(300, 300)
++        doc_ir = DocumentIR("doc_links", "links.pdf", 3, pages=[PageIR(1, geom), PageIR(2, geom), PageIR(3, geom)])
++        engine = TypesetEngine()
++        result = engine.typeset(pdf_bytes, doc_ir, {})
++
++        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
++        l1 = out_doc[0].get_links()
++        self.assertEqual(len(l1), 1)
++        self.assertEqual(l1[0]["kind"], pymupdf.LINK_GOTO)
++        self.assertEqual(l1[0]["page"], 2)
++        self.assertEqual(l1[0]["to"], pymupdf.Point(50, 100))
++
++        l2 = out_doc[1].get_links()
++        self.assertEqual(len(l2), 1)
++        self.assertEqual(l2[0]["kind"], pymupdf.LINK_URI)
++        self.assertEqual(l2[0]["uri"], "https://example.com")
++
++        l3 = out_doc[2].get_links()
++        self.assertEqual(len(l3), 1)
++        self.assertEqual(l3[0]["kind"], pymupdf.LINK_GOTO)
++        self.assertEqual(l3[0]["page"], 0)
++        self.assertEqual(l3[0]["to"], pymupdf.Point(50, 50))
++        out_doc.close()
++
++    def test_multipage_named_actions_preservation(self) -> None:
++        """2-page PDF fixture containing standard predefined viewer action links (name='NextPage', 'PrevPage')."""
++        doc = pymupdf.open()
++        doc.new_page(width=300, height=300)
++        doc.new_page(width=300, height=300)
++        doc[0].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "NextPage"})
++        doc[1].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "PrevPage"})
++        pdf_bytes = doc.tobytes()
++        doc.close()
++
++        geom = PageGeometry(300, 300)
++        doc_ir = DocumentIR("doc_act", "act.pdf", 2, pages=[PageIR(1, geom), PageIR(2, geom)])
++        engine = TypesetEngine()
++        result = engine.typeset(pdf_bytes, doc_ir, {})
++
++        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
++        l1 = out_doc[0].get_links()
++        self.assertEqual(len(l1), 1)
++        self.assertEqual(l1[0]["kind"], pymupdf.LINK_NAMED)
++        self.assertIn("NextPage", l1[0].get("name", "") or l1[0].get("nameddest", ""))
++
++        l2 = out_doc[1].get_links()
++        self.assertEqual(len(l2), 1)
++        self.assertEqual(l2[0]["kind"], pymupdf.LINK_NAMED)
++        self.assertIn("PrevPage", l2[0].get("name", "") or l2[0].get("nameddest", ""))
++        out_doc.close()
++
++    def test_multipage_named_destination_resolution_standard_page(self) -> None:
++        """2-page standard PDF (300 x 400 pt, unrotated): catalog /Dests defines section_std pointing to page 1
++        at PDF coordinates (x=40, y=320). Verifies conversion to LINK_GOTO targeting Point(40.0, 80.0)."""
++        doc = pymupdf.open()
++        doc.new_page(width=300, height=400)
++        doc.new_page(width=300, height=400)
++        cat = doc.pdf_catalog()
++        p2_xref = doc.page_xref(1)
++        doc.xref_set_key(cat, "Dests", f"<</section_std [{p2_xref} 0 R /XYZ 40 320 0]>>")
++        doc[0].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "nameddest=section_std"})
++        pdf_bytes = doc.tobytes()
++        doc.close()
++
++        geom = PageGeometry(300, 400)
++        doc_ir = DocumentIR("doc_std", "std.pdf", 2, pages=[PageIR(1, geom), PageIR(2, geom)])
++        engine = TypesetEngine()
++        result = engine.typeset(pdf_bytes, doc_ir, {})
++
++        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
++        links = out_doc[0].get_links()
++        self.assertEqual(len(links), 1)
++        self.assertEqual(links[0]["kind"], pymupdf.LINK_GOTO)
++        self.assertEqual(links[0]["page"], 1)
++        self.assertEqual(links[0]["to"], pymupdf.Point(40.0, 80.0))
++        out_doc.close()
++
++    def test_multipage_named_destination_resolution_offset_cropbox(self) -> None:
++        """2-page PDF where destination page 1 has offset CropBox: MediaBox = Rect(0, 0, 300, 400),
++        CropBox = Rect(50, 50, 250, 350). Catalog destination section_crop has PDF coordinates (100, 200)."""
++        doc = pymupdf.open()
++        doc.new_page(width=300, height=400)
++        doc.new_page(width=300, height=400)
++        doc[1].set_cropbox(pymupdf.Rect(50, 50, 250, 350))
++        cat = doc.pdf_catalog()
++        p2_xref = doc.page_xref(1)
++        doc.xref_set_key(cat, "Dests", f"<</section_crop [{p2_xref} 0 R /XYZ 100 200 0]>>")
++        doc[0].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "nameddest=section_crop"})
++        pdf_bytes = doc.tobytes()
++        doc.close()
++
++        geom = PageGeometry(300, 400)
++        doc_ir = DocumentIR("doc_crop", "crop.pdf", 2, pages=[PageIR(1, geom), PageIR(2, geom)])
++        engine = TypesetEngine()
++        result = engine.typeset(pdf_bytes, doc_ir, {})
++
++        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
++        links = out_doc[0].get_links()
++        self.assertEqual(len(links), 1)
++        self.assertEqual(links[0]["kind"], pymupdf.LINK_GOTO)
++        self.assertEqual(links[0]["page"], 1)
++        self.assertEqual(links[0]["to"], pymupdf.Point(50.0, 150.0))
++        out_doc.close()
++
++    def test_multipage_named_destination_resolution_rotated_page(self) -> None:
++        """3-page PDF where destination page 1 has rotation = 90 and page 2 has rotation = 270.
++        Verifies links converted to LINK_GOTO with correct orientation."""
++        doc = pymupdf.open()
++        doc.new_page(width=300, height=400)
++        doc.new_page(width=300, height=400)
++        doc.new_page(width=300, height=400)
++        doc[1].set_rotation(90)
++        doc[2].set_rotation(270)
++        cat = doc.pdf_catalog()
++        p2_xref = doc.page_xref(1)
++        doc.xref_set_key(cat, "Dests", f"<</section_rot [{p2_xref} 0 R /XYZ 40 320 0]>>")
++        doc[0].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "nameddest=section_rot"})
++        pdf_bytes = doc.tobytes()
++        doc.close()
++
++        geom = PageGeometry(300, 400)
++        doc_ir = DocumentIR("doc_rot", "rot.pdf", 3, pages=[PageIR(1, geom), PageIR(2, geom), PageIR(3, geom)])
++        engine = TypesetEngine()
++        result = engine.typeset(pdf_bytes, doc_ir, {})
++
++        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
++        links = out_doc[0].get_links()
++        self.assertEqual(len(links), 1)
++        self.assertEqual(links[0]["kind"], pymupdf.LINK_GOTO)
++        self.assertEqual(links[0]["page"], 1)
++        expected_to = (
++            pymupdf.Point(40, 320)
++            * out_doc[1].transformation_matrix
++            * out_doc[1].rotation_matrix
++        )
++        self.assertEqual(links[0]["to"], expected_to)
++        out_doc.close()
++
++    def test_multipage_unresolvable_named_destination_emits_warning_no_dead_link(self) -> None:
++        """Input PDF contains link with name='nameddest=missing_target' where destination is absent from catalog /Dests.
++        Verifies link insertion is skipped (no dead link) and warning is logged."""
++        doc = pymupdf.open()
++        doc.new_page(width=300, height=400)
++        doc[0].insert_link({"kind": pymupdf.LINK_NAMED, "from": pymupdf.Rect(50, 50, 100, 70), "name": "nameddest=missing_target"})
++        pdf_bytes = doc.tobytes()
++        doc.close()
++
++        geom = PageGeometry(300, 400)
++        doc_ir = DocumentIR("doc_unres", "unres.pdf", 1, pages=[PageIR(1, geom)])
++        engine = TypesetEngine()
++        result = engine.typeset(pdf_bytes, doc_ir, {})
++
++        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
++        self.assertEqual(len(out_doc[0].get_links()), 0)
++        out_doc.close()
++
++        self.assertTrue(any("missing_target" in w for w in result.fitting_report.warnings))
++
++    def test_multipage_form_widgets_and_catalog_dests_warning(self) -> None:
++        """Multi-page form with shared field names retains unified identity via join_duplicates=True;
++        standalone catalog named destinations log diagnostic warning."""
++        doc = pymupdf.open()
++        doc.new_page(width=300, height=400)
++        doc.new_page(width=300, height=400)
++        cat = doc.pdf_catalog()
++        p2_xref = doc.page_xref(1)
++        doc.xref_set_key(cat, "Dests", f"<</standalone_dest [{p2_xref} 0 R /XYZ 50 100 0]>>")
++
++        widget1 = pymupdf.Widget()
++        widget1.field_type = pymupdf.PDF_WIDGET_TYPE_TEXT
++        widget1.rect = pymupdf.Rect(50, 50, 150, 70)
++        widget1.field_name = "test_field"
++        doc[0].add_widget(widget1)
++
++        widget2 = pymupdf.Widget()
++        widget2.field_type = pymupdf.PDF_WIDGET_TYPE_TEXT
++        widget2.rect = pymupdf.Rect(50, 50, 150, 70)
++        widget2.field_name = "test_field"
++        doc[1].add_widget(widget2)
++
++        pdf_bytes = doc.tobytes()
++        doc.close()
++
++        geom = PageGeometry(300, 400)
++        doc_ir = DocumentIR("doc_form", "form.pdf", 2, pages=[PageIR(1, geom), PageIR(2, geom)])
++        engine = TypesetEngine()
++        result = engine.typeset(pdf_bytes, doc_ir, {})
++
++        out_doc = pymupdf.open(stream=result.pdf_bytes, filetype="pdf")
++        self.assertEqual(len(out_doc), 2)
++        # Verify form widgets preserved
++        fields = [w.field_name for page in out_doc for w in page.widgets()]
++        self.assertTrue(len(fields) >= 2)
++        self.assertIn("test_field", fields)
++        out_doc.close()
++
++        # Verify standalone catalog named destinations warning emitted
++        self.assertTrue(any("standalone_dest" in w or "catalog" in w.lower() for w in result.fitting_report.warnings))
++
++
+ if __name__ == "__main__":
+     unittest.main()
+ 
