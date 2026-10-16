@@ -28,6 +28,7 @@ import pymupdf
 from layoutlingua._version import __version__
 from layoutlingua.core.ir import DocumentIR
 from layoutlingua.core.parser import parse_pdf
+from layoutlingua.translation.errors import RateLimitError
 from layoutlingua.translation.mock import MockTranslationProvider
 from layoutlingua.translation.models import TextSegment
 from layoutlingua.translation.service import (
@@ -478,6 +479,21 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         try:
                             b_res = provider_inst.translate_batch(req)
                             translated_segments.update(b_res.translations)
+                        except RateLimitError as rl_err:
+                            print(f"[LayoutLingua] Rate limit error: {rl_err}")
+                            with _LOCK:
+                                session["progress"] = {
+                                    "current_page": approx_p,
+                                    "total_pages": total_p,
+                                    "status": "rate-limited",
+                                    "speed": 0,
+                                    "eta_seconds": 0,
+                                    "message": "Google free quota temporarily blocked (HTTP 429). Please switch provider.",
+                                    "error_type": "rate_limit",
+                                    "provider": "google",
+                                }
+                            self._send_error(429, str(rl_err))
+                            return
                         except Exception as b_err:
                             print(f"[LayoutLingua] Live batch error: {b_err}, falling back to mock")
                             mock_fallback = MockTranslationProvider()

@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import re
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Dict, List
 
-from layoutlingua.translation.errors import ProviderUnavailableError
+from layoutlingua.translation.errors import ProviderUnavailableError, RateLimitError
 from layoutlingua.translation.models import (
     BatchTranslationRequest,
     BatchTranslationResult,
@@ -88,32 +89,55 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
 
     def _fetch_single_chunk(self, chunk: str, s_lang: str, t_lang: str) -> str:
         encoded = urllib.parse.quote(chunk)
-        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl={s_lang}&tl={t_lang}&dt=t&q={encoded}"
-
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": self._user_agent,
-                "Accept": "*/*",
-            },
-        )
+        # Pool of Google endpoints & clients. dict-chrome-ex uses extension quota which bypasses web gtx rate-limits.
+        endpoints = [
+            ("translate.googleapis.com", "dict-chrome-ex"),
+            ("translate.google.com", "dict-chrome-ex"),
+            ("translate.googleapis.com", "gtx"),
+        ]
 
         last_err: Exception | None = None
-        for attempt in range(self._max_retries + 1):
-            try:
-                with urllib.request.urlopen(req, timeout=12) as resp:
-                    raw = resp.read().decode("utf-8")
-                    data = json.loads(raw)
-                    parts: List[str] = []
-                    if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
-                        for item in data[0]:
-                            if isinstance(item, list) and len(item) > 0 and item[0]:
-                                parts.append(str(item[0]))
-                    return "".join(parts) if parts else chunk
-            except Exception as e:
-                last_err = e
-                if attempt < self._max_retries:
-                    time.sleep(0.4 * (attempt + 1))
+        rate_limited_count = 0
+
+        for host, client in endpoints:
+            url = f"https://{host}/translate_a/single?client={client}&sl={s_lang}&tl={t_lang}&dt=t&q={encoded}"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": self._user_agent,
+                    "Accept": "*/*",
+                },
+            )
+            for attempt in range(self._max_retries + 1):
+                try:
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        raw = resp.read().decode("utf-8")
+                        data = json.loads(raw)
+                        parts: List[str] = []
+                        if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+                            for item in data[0]:
+                                if isinstance(item, list) and len(item) > 0 and item[0]:
+                                    parts.append(str(item[0]))
+                        return "".join(parts) if parts else chunk
+                except urllib.error.HTTPError as he:
+                    last_err = he
+                    if he.code in (429, 403):
+                        rate_limited_count += 1
+                        # Break immediately to try next endpoint in the pool
+                        break
+                    if attempt < self._max_retries:
+                        time.sleep(0.3 * (attempt + 1))
+                except Exception as e:
+                    last_err = e
+                    if attempt < self._max_retries:
+                        time.sleep(0.3 * (attempt + 1))
+
+        if rate_limited_count >= len(endpoints):
+            raise RateLimitError(
+                "Google Translate free RPC rate limit reached (HTTP 429). "
+                "The public free endpoint temporarily blocked requests from this IP. "
+                "Please switch to an API provider (OpenAI, Gemini, DeepSeek, Groq) in Settings."
+            )
 
         raise ProviderUnavailableError(f"Google RPC network error after retries: {last_err}")
 
@@ -158,6 +182,8 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
                 seg_id, raw_t = pack[0]
                 try:
                     translations[seg_id] = self._translate_single(raw_t, s_lang, t_lang)
+                except RateLimitError:
+                    raise
                 except Exception:
                     translations[seg_id] = raw_t
                 return
@@ -170,13 +196,17 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
                     for (seg_id, _), part in zip(pack, split_parts):
                         translations[seg_id] = _sanitize_translated_tokens(part.strip())
                     return
+            except RateLimitError:
+                raise
             except Exception:
                 pass
 
-            # Fallback: if delimiter split count differs or error, translate individually
+            # Fallback: if delimiter split count differs or transient error, translate individually
             for seg_id, raw_t in pack:
                 try:
                     translations[seg_id] = self._translate_single(raw_t, s_lang, t_lang)
+                except RateLimitError:
+                    raise
                 except Exception:
                     translations[seg_id] = raw_t
 

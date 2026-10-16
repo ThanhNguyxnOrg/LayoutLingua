@@ -9,7 +9,7 @@ import { useSettings, type AppSettings, type ProviderType } from '../services/se
 import { apiUrl } from '../services/api'
 import { updateHistoryStatus } from '../services/history'
 
-type Phase = 'idle' | 'processing' | 'done' | 'provider-error' | 'cancelled'
+type Phase = 'idle' | 'processing' | 'done' | 'provider-error' | 'rate-limited' | 'cancelled'
 type Tab = 'translation' | 'quality' | 'page'
 
 /* ---------- Document navigator ---------- */
@@ -374,6 +374,35 @@ function Inspector(p: {
                 <span className="font-mono">{p.done}</span> of {p.total} pages were translated and kept.
               </StateNotice>
             )}
+            {p.phase === 'rate-limited' && (
+              <StateNotice
+                tone="warning"
+                icon={<IconAlert className="size-5 text-amber-ink" />}
+                title="Google Free Quota Blocked (Rate Limit)"
+                actions={
+                  <div className="flex flex-col gap-2 w-full pt-1">
+                    <Button variant="primary" className="w-full text-[13px]" onClick={p.onOpenSettings}>
+                      <IconSettings /> Open Settings to switch provider
+                    </Button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button size="sm" onClick={() => { p.onUpdateProvider('openai'); p.start() }}>
+                        Use OpenAI / LLM
+                      </Button>
+                      <Button size="sm" onClick={() => { p.onUpdateProvider('gemini'); p.start() }}>
+                        Use Gemini API
+                      </Button>
+                    </div>
+                    <Button size="sm" className="w-full text-muted hover:text-ink" onClick={p.start}>
+                      Retry with Google
+                    </Button>
+                  </div>
+                }
+              >
+                Google Translate public RPC temporarily rate-limited your IP (HTTP 429) because this document is large (<span className="font-mono">{p.total}</span> pages).
+                <br /><br />
+                <strong>Pages 1–{p.done} are safely saved.</strong> Free endpoints have strict quotas; please switch to an API provider (Gemini 2.0 Flash, DeepSeek, or Groq) in Settings to finish translating without interruption.
+              </StateNotice>
+            )}
             {p.phase === 'provider-error' && (
               <StateNotice tone="error" icon={<IconError className="size-5" />} title={`${p.settings.provider.toUpperCase()} stopped responding`} actions={<><Button size="sm" variant="primary" onClick={p.start}>Retry from page {p.done + 1}</Button><Button size="sm" onClick={() => p.onUpdateProvider('google')}>Switch to Google (Free)</Button></>}>
                 The provider returned an error on page {p.done + 1}. Pages 1–{p.done} are kept; nothing needs to be redone.
@@ -548,6 +577,11 @@ export default function Workspace({
                 message: pData.message,
               })
             }
+            if (pData.status === 'rate-limited' && active) {
+              if (progressTimer) clearInterval(progressTimer)
+              setPhase('rate-limited')
+              return
+            }
           }
         } catch {}
       }, 400)
@@ -567,7 +601,12 @@ export default function Workspace({
         .then(async (res) => {
           if (!active) return
           if (progressTimer) clearInterval(progressTimer)
-          if (res.ok) {
+          if (res.status === 429) {
+            setPhase('rate-limited')
+            if (docInfo?.id || docInfo?.name) {
+              updateHistoryStatus(docInfo.id || docInfo.name, 'failed')
+            }
+          } else if (res.ok) {
             setDone(totalPages)
             setPhase('done')
             if (docInfo?.id || docInfo?.name) {
@@ -623,7 +662,7 @@ export default function Workspace({
     }
   }, [docPages, done, phase, visibleIssues])
 
-  const docState: DocState = phase === 'processing' ? 'processing' : phase === 'done' ? (counts.review > 0 ? 'review' : 'done') : phase === 'provider-error' ? 'failed' : 'not-started'
+  const docState: DocState = phase === 'processing' ? 'processing' : phase === 'done' ? (counts.review > 0 ? 'review' : 'done') : (phase === 'provider-error' || phase === 'rate-limited') ? 'failed' : 'not-started'
   const fitW = Math.max(160, Math.min(mode === 'side' ? (box.w - 64) / 2 : box.w - 48, ((box.h - 56) * 210) / 297))
   const width = zoom ? PAGE_W * zoom : fitW
   const pct = Math.round((width / PAGE_W) * 100)
@@ -669,6 +708,17 @@ export default function Workspace({
           <PdfPage page={page} type="translated" width={width} docId={docInfo?.id} {...mark} />
           {page.status === 'fallback' && <span className="absolute inset-y-0 -left-[5px] w-[3px] bg-red" aria-hidden="true" />}
         </div>
+      )
+    }
+    if (phase === 'rate-limited') {
+      return (
+        <OutputPlaceholder
+          width={width}
+          height={height}
+          busy={false}
+          title="Google Translate Rate Limit (HTTP 429)"
+          body="Google temporarily rate-limited public requests due to volume. Open Settings or Inspector to select Gemini or an OpenAI-compatible provider (DeepSeek / Groq) to continue."
+        />
       )
     }
     if (phase === 'provider-error') {

@@ -4,7 +4,7 @@
 
 export type PageStatus = 'original' | 'translated' | 'review' | 'failed' | 'pending'
 export type Severity = 'low' | 'med' | 'high'
-export type Phase = 'idle' | 'processing' | 'done' | 'provider-error' | 'cancelled'
+export type Phase = 'idle' | 'processing' | 'done' | 'provider-error' | 'rate-limited' | 'cancelled'
 export type StageId = 'extract' | 'layout' | 'translate' | 'typeset' | 'verify'
 
 export interface Page {
