@@ -117,6 +117,8 @@ class FontManager:
 
     def register_on_page(self, page: Any, font_name: str = "DejaVuSans") -> str:
         """Register the font asset into the given PyMuPDF page resource dictionary."""
+        if font_name in ("china-s", "china-t", "japan", "korea"):
+            return font_name
         buf = self.get_font_buffer()
         page.insert_font(fontname=font_name, fontbuffer=buf)
         return font_name

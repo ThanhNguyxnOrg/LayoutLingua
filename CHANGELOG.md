@@ -31,6 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Adaptive Typesetting & Layout Preservation**:
   - Dynamic font downscaling with strict minimum line floor (7.5pt) to accommodate ~25–35% text length expansion in Vietnamese/German without overflow.
   - Multi-page transactional staging (`DocumentAccumulator`) with automatic rollback of corrupted pages to pristine source pages.
+- **Universal Multi-Language Font Preservation**:
+  - Language-aware font dispatch: automatically routes CJK targets (Chinese, Japanese, Korean) to PyMuPDF's built-in fonts (`china-s`, `china-t`, `japan`, `korea`) and Latin/Cyrillic/Vietnamese targets to version-pinned `DejaVuSans.ttf`.
+  - Guarantees zero mojibake, zero missing box glyphs, and zero character corruption regardless of source/target language pairing.
+- **Universal OpenAI-Compatible Model Discovery & Auto-Inference**:
+  - Renamed and generalized the provider to **OpenAI-Compatible** supporting any standard inference server (DeepSeek, Groq, OpenRouter, Qwen DashScope, Ollama, vLLM, LM Studio).
+  - Added live model discovery endpoint (`/api/models` / `/api/fetch-models`) to scan hosted models from the server with 1 click.
+  - Added one-click configuration presets for DeepSeek, Groq Cloud, OpenAI Official, OpenRouter, Ollama, and Qwen.
+  - Zero-friction model resolution: if the user leaves Model ID empty, the backend automatically infers the correct model based on the Base URL domain (e.g., DeepSeek $\rightarrow$ `deepseek-chat`, Groq $\rightarrow$ `llama-3.3-70b-versatile`, OpenAI $\rightarrow$ `gpt-4o-mini`).
 - **Open-Source Architectural Research**:
   - In-depth comparative research documenting patterns from `pdf2zh`, `BabelDOC`, `MinerU`, and `BilingualBookMaker` in `docs/research_opensource_pdf_translation_patterns.md`.
 

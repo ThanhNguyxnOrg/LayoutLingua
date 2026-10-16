@@ -165,6 +165,40 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
             self.wfile.write(pdf_bytes)
             return
 
+        # 5. Query models from any OpenAI-compatible provider
+        if path in ("/api/models", "/api/fetch-models"):
+            base_url = params.get("base_url", ["https://api.openai.com/v1"])[0].rstrip("/")
+            api_key = params.get("api_key", [""])[0].strip()
+
+            models_url = f"{base_url}/models"
+            try:
+                headers = {"User-Agent": "LayoutLingua/2.0"}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+                req = urllib.request.Request(models_url, headers=headers)
+                with urllib.request.urlopen(req, timeout=4.0) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    models = [m.get("id") for m in data.get("data", []) if m.get("id")]
+                    self._send_json({"models": models, "status": "ok"})
+                    return
+            except Exception as e:
+                # Intelligent fallbacks based on base_url domain
+                b_low = base_url.lower()
+                if "deepseek" in b_low:
+                    defaults = ["deepseek-chat", "deepseek-reasoner"]
+                elif "groq" in b_low:
+                    defaults = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+                elif "openrouter" in b_low:
+                    defaults = ["openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet", "deepseek/deepseek-chat"]
+                elif "ollama" in b_low or ":11434" in b_low:
+                    defaults = ["llama3.2", "qwen2.5", "mistral"]
+                elif "dashscope" in b_low or "aliyun" in b_low:
+                    defaults = ["qwen-plus", "qwen-max", "qwen-turbo"]
+                else:
+                    defaults = ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"]
+                self._send_json({"models": defaults, "status": "fallback", "notice": str(e)})
+                return
+
         self._send_json({"error": f"Path not found: {path}"}, status=404)
 
     def do_POST(self) -> None:
@@ -305,7 +339,22 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         from layoutlingua.translation.openai_compat import OpenAITranslationProvider
 
                         b_url = base_url if base_url else ("http://localhost:11434/v1" if provider_type == "ollama" else "https://api.openai.com/v1")
-                        m_id = model_name if model_name else ("llama3" if provider_type == "ollama" else "gpt-4o-mini")
+                        m_id = (model_name or "").strip()
+                        if not m_id:
+                            b_low = b_url.lower()
+                            if "deepseek" in b_low:
+                                m_id = "deepseek-chat"
+                            elif "groq" in b_low:
+                                m_id = "llama-3.3-70b-versatile"
+                            elif "openrouter" in b_low:
+                                m_id = "openai/gpt-4o-mini"
+                            elif "ollama" in b_low or ":11434" in b_low:
+                                m_id = "llama3.2"
+                            elif "dashscope" in b_low or "aliyun" in b_low:
+                                m_id = "qwen-plus"
+                            else:
+                                m_id = "gpt-4o-mini"
+
                         provider_inst = OpenAITranslationProvider(
                             api_key=api_key or "ollama",
                             model_id=m_id,
@@ -375,11 +424,20 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                                     segment_id=seg.segment_id,
                                     text=seg.masked_text,
                                     target_lang=target_lang,
-                                )
+                                    )
 
-                # Run TypesetEngine
+                # Run TypesetEngine with language-aware font selection
                 src_doc = pymupdf.open(stream=src_bytes, filetype="pdf")
-                engine = TypesetEngine(options=TypesetOptions())
+                t_lang = (target_lang or "vi").lower().strip()
+                typeset_font = "DejaVuSans"
+                if t_lang in ("zh", "chinese", "zh-cn", "zh-tw"):
+                    typeset_font = "china-s"
+                elif t_lang in ("ja", "japanese"):
+                    typeset_font = "japan"
+                elif t_lang in ("ko", "korean"):
+                    typeset_font = "korea"
+
+                engine = TypesetEngine(options=TypesetOptions(font_name=typeset_font))
 
                 # Typeset document page-by-page
                 from layoutlingua.typesetting.accumulator import DocumentAccumulator

@@ -45,13 +45,19 @@ class TextFitTester:
         min_font_size = max(options.min_font_pt, options.min_font_scale * orig_font_size)
         test_rect = pymupdf.Rect(x0, y0, x1, y1)
 
+        fontfile_arg = (
+            None
+            if self.font_name in ("china-s", "china-t", "japan", "korea")
+            else str(self.font_manager.font_path)
+        )
+
         # 1. Test original size
         rc_orig = self._page.insert_textbox(
             test_rect,
             text,
             fontsize=orig_font_size,
             fontname=self.font_name,
-            fontfile=str(self.font_manager.font_path),
+            fontfile=fontfile_arg,
             lineheight=effective_lineheight,
         )
         if rc_orig >= 0:
@@ -64,7 +70,7 @@ class TextFitTester:
             text,
             fontsize=min_font_size,
             fontname=self.font_name,
-            fontfile=str(self.font_manager.font_path),
+            fontfile=fontfile_arg,
             lineheight=effective_lineheight,
         )
         if rc_min < 0:
@@ -86,7 +92,7 @@ class TextFitTester:
                 text,
                 fontsize=mid,
                 fontname=self.font_name,
-                fontfile=str(self.font_manager.font_path),
+                fontfile=fontfile_arg,
                 lineheight=effective_lineheight,
             )
             if rc >= 0:
@@ -103,7 +109,7 @@ class TextFitTester:
             text,
             fontsize=best_size,
             fontname=self.font_name,
-            fontfile=str(self.font_manager.font_path),
+            fontfile=fontfile_arg,
             lineheight=effective_lineheight,
         )
         if confirm_rc >= 0:

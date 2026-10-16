@@ -286,11 +286,11 @@ function Inspector(p: {
                     onChange={(e) => p.onUpdateProvider(e.target.value as ProviderType)}
                     className={`${selectCls} flex-1 truncate`}
                   >
-                    <option value="ollama">Ollama ({p.settings.ollamaModel})</option>
+                    <option value="google">Google Translate RPC (Zero Setup)</option>
+                    <option value="openai">OpenAI-Compatible ({p.settings.openaiModel || 'Auto'})</option>
                     <option value="gemini">Google Gemini ({p.settings.geminiModel})</option>
-                    <option value="openai">OpenAI / Custom ({p.settings.openaiModel})</option>
+                    <option value="ollama">Ollama Local ({p.settings.ollamaModel})</option>
                     <option value="argos">Argos Translate (Offline)</option>
-                    <option value="google">Google Translate RPC</option>
                   </select>
                   <IconButton
                     label="Configure provider, keys and endpoints in Settings"

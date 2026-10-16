@@ -40,12 +40,26 @@ class OpenAITranslationProvider(BaseTranslationProvider):
         if not key:
             # Local endpoints (Ollama, LM Studio, vLLM) do not require authentication
             key = "ollama"
-        if not model_id or not model_id.strip():
-            raise ValueError("model_id must not be empty.")
+        clean_base = (base_url or "https://api.openai.com/v1").rstrip("/")
+        mid = (model_id or "").strip()
+        if not mid:
+            b_low = clean_base.lower()
+            if "deepseek" in b_low:
+                mid = "deepseek-chat"
+            elif "groq" in b_low:
+                mid = "llama-3.3-70b-versatile"
+            elif "openrouter" in b_low:
+                mid = "openai/gpt-4o-mini"
+            elif "ollama" in b_low or ":11434" in b_low:
+                mid = "llama3.2"
+            elif "dashscope" in b_low or "aliyun" in b_low:
+                mid = "qwen-plus"
+            else:
+                mid = "gpt-4o-mini"
 
         self._api_key = key
-        self._model_id = model_id.strip()
-        self._base_url = (base_url or "https://api.openai.com/v1").rstrip("/")
+        self._model_id = mid
+        self._base_url = clean_base
         # User constraint: supports_structured_json defaults to False for custom endpoints
         self._supports_structured_json = supports_structured_json
         self._timeout = timeout

@@ -8,6 +8,7 @@ import {
   saveSettings,
   useSettings,
 } from '../services/settings'
+import { apiUrl } from '../services/api'
 
 export { type AppSettings, loadSettings, saveSettings }
 
@@ -22,6 +23,42 @@ export default function SettingsModal({
   const [settings, setSettings] = useState<AppSettings>(globalSettings)
   const [saved, setSaved] = useState(false)
   const [activeTab, setActiveTab] = useState<'config' | 'guide'>(initialTab)
+  const [discoveredModels, setDiscoveredModels] = useState<string[]>([])
+  const [fetchingModels, setFetchingModels] = useState(false)
+
+  const fetchModels = async () => {
+    setFetchingModels(true)
+    try {
+      const res = await fetch(
+        apiUrl(
+          `/api/models?base_url=${encodeURIComponent(settings.openaiEndpoint)}&api_key=${encodeURIComponent(
+            settings.openaiKey
+          )}`
+        )
+      )
+      if (res.ok) {
+        const data = await res.json()
+        if (data.models && data.models.length > 0) {
+          setDiscoveredModels(data.models)
+          if (!settings.openaiModel || !data.models.includes(settings.openaiModel)) {
+            setSettings((prev) => ({ ...prev, openaiModel: data.models[0] }))
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch models:', e)
+    } finally {
+      setFetchingModels(false)
+    }
+  }
+
+  const applyPreset = (preset: { endpoint: string; model: string }) => {
+    setSettings((prev) => ({
+      ...prev,
+      openaiEndpoint: preset.endpoint,
+      openaiModel: preset.model,
+    }))
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -128,9 +165,9 @@ export default function SettingsModal({
                   },
                   {
                     id: 'openai',
-                    name: 'OpenAI / DeepSeek / Custom',
-                    sub: 'Custom API endpoint & model compatible',
-                    badge: 'Custom URL',
+                    name: 'OpenAI-Compatible (Any Endpoint)',
+                    sub: 'DeepSeek, Qwen, Groq, OpenRouter, vLLM, LM Studio',
+                    badge: 'OpenAI API',
                   },
                   {
                     id: 'argos',
@@ -262,47 +299,106 @@ export default function SettingsModal({
             )}
 
             {settings.provider === 'openai' && (
-              <div className="rounded-lg border border-line bg-canvas/30 p-4 space-y-3">
+              <div className="rounded-lg border border-line bg-canvas/30 p-4 space-y-3.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-bold text-ink">OpenAI / DeepSeek Configuration</span>
+                  <div>
+                    <span className="text-[13px] font-bold text-ink">OpenAI-Compatible Endpoint Configuration</span>
+                    <p className="text-[11.5px] text-muted">Supports any inference server implementing the OpenAI /v1 API standard.</p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setActiveTab('guide')}
-                    className="text-[12px] text-teal hover:underline cursor-pointer font-semibold"
+                    className="text-[12px] text-teal hover:underline cursor-pointer font-semibold shrink-0"
                   >
-                    DeepSeek / OpenAI setup guide →
+                    Setup guide →
                   </button>
                 </div>
+
+                {/* Quick Presets */}
+                <div>
+                  <span className="text-[11px] font-bold tracking-wider uppercase text-muted block mb-1.5">
+                    Quick Provider Presets
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+                      { label: 'Groq Cloud', endpoint: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+                      { label: 'OpenAI Official', endpoint: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+                      { label: 'OpenRouter', endpoint: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
+                      { label: 'Ollama Local', endpoint: 'http://localhost:11434/v1', model: 'llama3.2' },
+                      { label: 'Qwen / DashScope', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
+                    ].map((ps) => (
+                      <button
+                        key={ps.label}
+                        type="button"
+                        onClick={() => applyPreset(ps)}
+                        className="rounded-md border border-line bg-white px-2.5 py-1 text-[11.5px] font-medium text-ink hover:border-teal hover:text-teal transition-colors cursor-pointer"
+                      >
+                        {ps.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
-                  API Base Endpoint
+                  API Base URL
                   <input
                     type="text"
                     value={settings.openaiEndpoint}
-                    placeholder="https://api.deepseek.com/v1 or https://api.openai.com/v1"
+                    placeholder="https://api.deepseek.com/v1"
                     onChange={(e) => setSettings({ ...settings, openaiEndpoint: e.target.value })}
                     className="h-9 rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
                   />
                 </label>
+
                 <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
                   API Key
                   <input
                     type="password"
                     value={settings.openaiKey}
-                    placeholder="sk-..."
+                    placeholder="sk-... (leave blank if local server without auth)"
                     onChange={(e) => setSettings({ ...settings, openaiKey: e.target.value })}
                     className="h-9 rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
                   />
                 </label>
-                <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
-                  Model Name
-                  <input
-                    type="text"
-                    value={settings.openaiModel}
-                    placeholder="deepseek-chat or gpt-4o-mini"
-                    onChange={(e) => setSettings({ ...settings, openaiModel: e.target.value })}
-                    className="h-9 rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
-                  />
-                </label>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[12.5px] font-semibold text-ink">
+                      Model ID <span className="font-normal text-muted">(Optional — auto-detected if empty)</span>
+                    </label>
+                    <button
+                      type="button"
+                      disabled={fetchingModels || !settings.openaiEndpoint}
+                      onClick={fetchModels}
+                      className="text-[12px] font-semibold text-teal hover:underline disabled:opacity-50 cursor-pointer"
+                    >
+                      {fetchingModels ? 'Scanning models...' : '🔍 Fetch Available Models'}
+                    </button>
+                  </div>
+                  {discoveredModels.length > 0 ? (
+                    <select
+                      value={settings.openaiModel}
+                      onChange={(e) => setSettings({ ...settings, openaiModel: e.target.value })}
+                      className="h-9 w-full rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
+                    >
+                      {discoveredModels.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={settings.openaiModel}
+                      placeholder="e.g. deepseek-chat, gpt-4o-mini (leave empty for auto-detect)"
+                      onChange={(e) => setSettings({ ...settings, openaiModel: e.target.value })}
+                      className="h-9 w-full rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
+                    />
+                  )}
+                  <p className="text-[11.5px] text-muted">
+                    If left empty, LayoutLingua automatically selects the optimal model for your Base URL (DeepSeek $\rightarrow$ <code>deepseek-chat</code>, Groq $\rightarrow$ <code>llama-3.3-70b</code>, OpenAI $\rightarrow$ <code>gpt-4o-mini</code>).
+                  </p>
+                </div>
               </div>
             )}
 

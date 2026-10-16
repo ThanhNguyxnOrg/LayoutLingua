@@ -481,12 +481,17 @@ class TypesetEngine:
                     cell_geom,
                 ) in fitting_plan:
                     rect = pymupdf.Rect(*target_layout_box)
+                    fontfile_arg = (
+                        None
+                        if self.options.font_name in ("china-s", "china-t", "japan", "korea")
+                        else str(self.font_manager.font_path)
+                    )
                     scratch_page.insert_textbox(
                         rect,
                         text,
                         fontsize=final_size,
                         fontname=self.options.font_name,
-                        fontfile=str(self.font_manager.font_path),
+                        fontfile=fontfile_arg,
                         color=color,
                         lineheight=lineheight,
                     )
