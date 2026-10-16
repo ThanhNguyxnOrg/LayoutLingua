@@ -1,0 +1,33 @@
+version: 2
+updates:
+  # Python core engine dependencies (PyMuPDF, platformdirs)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "safe-update"
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+
+  # GitHub Actions workflow actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "safe-update"
+    open-pull-requests-limit: 10
+
+  # Node / Electron UI dependencies (once package.json is initialized)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "safe-update"
+    open-pull-requests-limit: 10
+    versioning-strategy: increase

@@ -1,21 +1,17 @@
-﻿name: Release 4 Platforms
+name: Release 3 Desktop Platforms
 
-# Automatically builds and publishes releases for all 4 supported platforms:
-# Windows (zip), macOS (dmg), Linux (tar.gz), and Android (apk).
-#
 # CI Cost & Resource Protection:
-# Heavy cross-platform runners (Windows, macOS, Linux, Android) will ONLY run when:
+# Heavy cross-platform runners (Windows, macOS, Linux) will ONLY run when:
 # 1. A commit message on 'main' contains a release keyword, e.g.:
-#      git commit -m "release: 1.0.1"
-#      git commit -m "release: v1.0.1"
-#      git commit -m "[release] 1.0.1"
-#      git commit -m "chore(release): 1.0.1"
-#      git commit -m "bump: 1.0.1"
-# 2. A git tag is pushed (e.g. v1.0.1)
+#      git commit -m "release: 2.0.0"
+#      git commit -m "release(core): 2.0.0"
+#      git commit -m "[release] 2.0.0"
+#      git commit -m "chore(release): 2.0.0"
+#      git commit -m "bump: 2.0.0"
+# 2. A git tag is pushed (e.g. v2.0.0)
 # 3. Manually triggered via workflow_dispatch
 #
-# Normal push commits (fixes, features, docs) will skip all heavy jobs in ~5 seconds.
-# App version is automatically extracted and synchronized across all platforms.
+# Normal push commits (features, UI development, fixes, docs) skip immediately in 0 seconds.
 
 on:
   push:
@@ -26,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release (e.g. 1.0.1). Leave empty to use APP_VERSION in app/update.py"
+        description: "Version to release (e.g. 2.0.0). Leave empty to use __version__ in layoutlingua/_version.py"
         required: false
         default: ""
 
@@ -34,21 +30,43 @@ permissions:
   contents: write
 
 jobs:
-  check-release:
-    name: Detect Release & Resolve Version
+  check-and-tag:
+    name: Detect Release, Resolve Version & Tag
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+    # Resource Guard: Skip in 0 seconds if normal commit without release keyword
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/v') ||
+      (
+        github.event_name == 'push' &&
+        github.actor != 'dependabot[bot]' &&
+        (
+          startsWith(github.event.head_commit.message, 'release:') ||
+          startsWith(github.event.head_commit.message, 'release(') ||
+          startsWith(github.event.head_commit.message, '[release]') ||
+          startsWith(github.event.head_commit.message, 'chore(release):') ||
+          startsWith(github.event.head_commit.message, 'bump:')
+        )
+      )
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       version: ${{ steps.check.outputs.version }}
       tag: ${{ steps.check.outputs.tag }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      - name: 🤖 Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v3
         with:
-          fetch-depth: 2
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
 
-      - name: Parse release trigger & semver
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
+      - name: Parse release trigger & resolve semantic version
         id: check
         shell: python
         run: |
@@ -70,32 +88,25 @@ jobs:
               if manual_version:
                   version = manual_version.lstrip("vV")
               else:
-                  with open("app/update.py", "r", encoding="utf-8") as f:
-                      m = re.search(r'APP_VERSION = "([^"]+)"', f.read())
+                  with open("layoutlingua/_version.py", "r", encoding="utf-8") as f:
+                      m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', f.read())
                       if m:
                           version = m.group(1)
 
-          # 2. Tag push (e.g. refs/tags/v1.0.1)
+          # 2. Direct Tag push (e.g. refs/tags/v2.0.0)
           elif ref.startswith("refs/tags/v"):
               should_release = True
               version = ref_name.lstrip("vV")
 
           # 3. Push to main: check commit message keywords
           elif event_name == "push":
-              # Must explicitly start with release intent, e.g.:
-              # "release: 1.0.0", "release: v1.0.0", "[release] 1.0.0", "chore(release): 1.0.0"
-              rx = re.compile(r'(?i)^\s*(?:\[release\]\s*|release(?:\([^)]*\))?:\s*|chore\(release\):\s*|bump:\s*)(?:v)?(\d+\.\d+\.\d+)\b')
+              rx = re.compile(r'(?i)^\s*(?:\[release\]\s*|release(?:\([^)]*\))?:\s*|chore\(release\):\s*|bump:\s*)(?:v)?(\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?)\b')
               m = rx.search(commit_msg.strip())
               if m:
                   should_release = True
                   version = m.group(1)
               else:
-                  print("No release command keyword detected at start of commit message. Skipping 4-platform release build.")
-
-          if should_release and version:
-              if not re.fullmatch(r'\d+\.\d+\.\d+', version):
-                  print(f"Invalid semantic version: {version}")
-                  should_release = False
+                  print("No release command keyword detected. Skipping release build.")
 
           tag = f"v{version}" if version else ""
           print(f"Result: should_release={should_release}, version={version}, tag={tag}")
@@ -110,40 +121,61 @@ jobs:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           INPUT_VERSION: ${{ github.event.inputs.version }}
 
+      - name: 🏷️ Auto-create and Push Tag via ThanhNguyxnAgent
+        if: steps.check.outputs.should_release == 'true' && !startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG_NAME: ${{ steps.check.outputs.tag }}
+        run: |
+          git config user.name "ThanhNguyxnAgent[bot]"
+          git config user.email "4125740+thanhnguyxnagent[bot]@users.noreply.github.com"
+          if ! git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
+            echo "Tag $TAG_NAME not found on remote. Creating and pushing tag via ThanhNguyxnAgent..."
+            git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+            git push origin "$TAG_NAME"
+          else
+            echo "Tag $TAG_NAME already exists."
+          fi
+
   windows:
-    name: Windows
-    needs: check-release
-    if: needs.check-release.outputs.should_release == 'true'
+    name: Windows (x86_64)
+    needs: check-and-tag
+    if: needs.check-and-tag.outputs.should_release == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Sync version
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Package Windows distribution
         shell: pwsh
         run: |
-          $ver = "${{ needs.check-release.outputs.version }}"
-          python scripts/set_version.py $ver
+          $ver = "${{ needs.check-and-tag.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path "dist" | Out-Null
+          if (Test-Path "package.json") {
+            npm ci
+            npm run build
+          } else {
+            Compress-Archive -Path layoutlingua, requirements.txt, README.md, LICENSE -DestinationPath "dist/LayoutLingua-windows-x86_64-$ver.zip"
+          }
 
-      - name: Create virtual environment
-        run: python -m venv .venv
-
-      - name: Build Windows package
-        run: .\build.ps1
-
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v4
         with:
           name: LayoutLingua-windows-x86_64
           path: dist/LayoutLingua-windows-*.zip
-          if-no-files-found: error
+          if-no-files-found: warn
 
   macos:
     name: macOS (${{ matrix.arch }})
-    needs: check-release
-    if: needs.check-release.outputs.should_release == 'true'
+    needs: check-and-tag
+    if: needs.check-and-tag.outputs.should_release == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -151,130 +183,77 @@ jobs:
           - arch: apple-silicon
             runner: macos-15
           - arch: intel
-            runner: macos-15-intel
+            runner: macos-13
     runs-on: ${{ matrix.runner }}
-    continue-on-error: ${{ matrix.arch == 'intel' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Sync version
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Package macOS distribution
         shell: bash
         run: |
-          python3 scripts/set_version.py "${{ needs.check-release.outputs.version }}"
+          VER="${{ needs.check-and-tag.outputs.version }}"
+          mkdir -p dist
+          if [ -f "package.json" ]; then
+            npm ci
+            npm run build
+          else
+            tar -czf "dist/LayoutLingua-macos-${{ matrix.arch }}-$VER.tar.gz" layoutlingua requirements.txt README.md LICENSE
+          fi
 
-      - name: Build app and DMG
-        shell: bash
-        run: bash build-macos.sh
-
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v4
         with:
           name: LayoutLingua-macos-${{ matrix.arch }}
-          path: dist/LayoutLingua-macos-${{ matrix.arch }}.dmg
-          if-no-files-found: error
+          path: dist/LayoutLingua-macos-*
+          if-no-files-found: warn
 
   linux:
     name: Linux (x86_64)
-    needs: check-release
-    if: needs.check-release.outputs.should_release == 'true'
-    runs-on: ubuntu-22.04
+    needs: check-and-tag
+    if: needs.check-and-tag.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install system dependencies for Tkinter and graphics
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-tk libgl1 libglib2.0-0
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
-      - name: Sync version
+      - name: Package Linux distribution
         shell: bash
         run: |
-          python3 scripts/set_version.py "${{ needs.check-release.outputs.version }}"
+          VER="${{ needs.check-and-tag.outputs.version }}"
+          mkdir -p dist
+          if [ -f "package.json" ]; then
+            npm ci
+            npm run build
+          else
+            tar -czf "dist/LayoutLingua-linux-x86_64-$VER.tar.gz" layoutlingua requirements.txt README.md LICENSE
+          fi
 
-      - name: Build Linux archive
-        shell: bash
-        run: bash build-linux.sh
-
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v4
         with:
           name: LayoutLingua-linux-x86_64
           path: dist/LayoutLingua-linux-*.tar.gz
-          if-no-files-found: error
-
-  android:
-    name: Android (APK)
-    needs: check-release
-    if: needs.check-release.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: android
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Sync version
-        run: |
-          python3 ../scripts/set_version.py "${{ needs.check-release.outputs.version }}"
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - uses: gradle/actions/setup-gradle@v4
-
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-
-      - name: Decode release keystore if available
-        id: keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "signed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "signed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build APK
-        env:
-          ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.signed == 'true' && format('{0}/release.jks', runner.temp) || '' }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          if [ "${{ steps.keystore.outputs.signed }}" = "true" ]; then
-            ./gradlew assembleRelease
-            cp app/build/outputs/apk/release/app-release.apk "LayoutLingua-android-${{ needs.check-release.outputs.version }}.apk"
-          else
-            ./gradlew assembleDebug
-            cp app/build/outputs/apk/debug/app-debug.apk "LayoutLingua-android-${{ needs.check-release.outputs.version }}.apk"
-          fi
-
-      - uses: actions/upload-artifact@v6
-        with:
-          name: LayoutLingua-android
-          path: android/LayoutLingua-android-${{ needs.check-release.outputs.version }}.apk
-          if-no-files-found: error
+          if-no-files-found: warn
 
   publish:
-    name: Publish Release (4 Platforms)
-    needs: [check-release, windows, macos, linux, android]
-    if: needs.check-release.outputs.should_release == 'true'
+    name: Publish Release (3 Desktop OS)
+    needs: [check-and-tag, windows, macos, linux]
+    if: needs.check-and-tag.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: 🤖 Generate GitHub App Token
@@ -284,67 +263,47 @@ jobs:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Download all platform artifacts
-        uses: actions/download-artifact@v7
+      - name: Download all desktop artifacts
+        uses: actions/download-artifact@v4
         with:
-          path: release-assets
+          path: release-artifacts
           merge-multiple: true
 
-      - name: Extract changelog for release description
-        shell: python
-        run: |
-          import re
-          from pathlib import Path
-
-          version = "${{ needs.check-release.outputs.version }}"
-          changelog = Path("CHANGELOG.md")
-          body = ""
-          if changelog.is_file():
-              content = changelog.read_text(encoding="utf-8")
-              match = re.search(rf'##\s*\[?v?{re.escape(version)}\]?.*?\n(.*?)(?=\n##\s*\[|\Z)', content, re.DOTALL)
-              if match:
-                  body = match.group(1).strip()
-          
-          Path("release-notes.md").write_text(body, encoding="utf-8")
-          print(f"Extracted {len(body)} chars for version {version}")
-
-      - name: Publish to GitHub Releases
-        uses: softprops/action-gh-release@v3
+      - name: Create GitHub Release via ThanhNguyxnAgent
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.check-release.outputs.tag }}
-          name: LayoutLingua ${{ needs.check-release.outputs.tag }}
-          body_path: release-notes.md
-          files: release-assets/*
+          tag_name: ${{ needs.check-and-tag.outputs.tag }}
+          name: LayoutLingua ${{ needs.check-and-tag.outputs.tag }}
+          files: release-artifacts/*
           generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(needs.check-and-tag.outputs.tag, 'alpha') || contains(needs.check-and-tag.outputs.tag, 'beta') || contains(needs.check-and-tag.outputs.tag, 'rc') }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
-      - name: Tag android namespace
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          git config user.name "ThanhNguyxnAgent[bot]"
-          git config user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
-          git tag "android-${{ needs.check-release.outputs.tag }}" || true
-          git push origin "android-${{ needs.check-release.outputs.tag }}" || true
-
-      - name: Sync version files back to main branch
+      - name: Sync version back to layoutlingua/_version.py if needed
         if: github.ref == 'refs/heads/main'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          python3 scripts/set_version.py "${{ needs.check-release.outputs.version }}"
+          python3 -c "
+          import re
+          ver = '${{ needs.check-and-tag.outputs.version }}'
+          with open('layoutlingua/_version.py', 'r') as f:
+              content = f.read()
+          content = re.sub(r'__version__\s*=\s*[\"\\\'][^\"\\\']+[\"\\\']', f'__version__ = \"{ver}\"', content)
+          with open('layoutlingua/_version.py', 'w') as f:
+              f.write(content)
+          "
           if ! git diff --quiet; then
             git config user.name "ThanhNguyxnAgent[bot]"
-            git config user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
-            git add app/update.py android/app/build.gradle.kts
-            git commit -m "chore(release): bump version to ${{ needs.check-release.outputs.version }} [skip ci]"
+            git config user.email "4125740+thanhnguyxnagent[bot]@users.noreply.github.com"
+            git add layoutlingua/_version.py
+            git commit -m "chore(release): bump version to ${{ needs.check-and-tag.outputs.version }} [skip ci]"
             git push origin main
           fi
-

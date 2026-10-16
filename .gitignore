@@ -1,57 +1,61 @@
+# Python & Virtual Environments
 .venv/
 .venv*/
-node_modules/
-**/node_modules/
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
 .pytest_cache/
-output/
-tmp/
-dist/
-build/
-scratch/
-app/assets/*.onnx
-app/assets/*.ttf
-app/assets/*.optimized
-
-# Tool caches. .ruff_cache only stayed out of commits because of a global
-# excludes file, which no fresh clone has.
 .ruff_cache/
 
-# What the app itself writes next to the PDFs it is given.
+# Node, Electron & UI Build Artifacts
+node_modules/
+**/node_modules/
+dist/
+dist-electron/
+build/
+out/
+release/
+.vite/
+.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Application Runtime Output
+output/
+tmp/
+scratch/
 translated/
+*.log
 pdf-translate.log
+*.zip
 
-# onnxruntime serialises a 71 MB hardware-specific graph beside any model it
-# loads, and it is only valid on the machine that built it.
-*.optimized
-
-# Editor and OS droppings.
+# Editor & OS Artifacts
 .vscode/
 .idea/
-.gradle/
-.kotlin/
-android/.gradle/
-android/.kotlin/
-android/.idea/
-android/build/
-android/app/build/
-# Machine-specific SDK path; a committed one breaks every other checkout.
-android/local.properties
-# Signing material never belongs in the repository.
-android/keystore.properties
-*.jks
-*.keystore
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Personal agent overrides stay local. Shared Codex/Claude instructions are
-# tracked in AGENTS.md, CLAUDE.md, .claude/skills/, and agent-knowledge/.
+# Agent & Local Overrides
 /CLAUDE.local.md
 /.claude/settings.local.json
 .agents/
 skills-lock.json
-CapCut_*.png
 
+# Desktop Application Builds
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+*.exe
+*.msi
+test_*.pdf
+translated_*.png
+hard_testcase_*.pdf
+hard_testcase_*.png
 

@@ -36,14 +36,16 @@ class OpenAITranslationProvider(BaseTranslationProvider):
         timeout: float = 60.0,
         client: Any | None = None,
     ) -> None:
-        if not api_key:
-            raise ValueError("api_key must be provided for OpenAITranslationProvider.")
+        key = (api_key or "").strip()
+        if not key:
+            # Local endpoints (Ollama, LM Studio, vLLM) do not require authentication
+            key = "ollama"
         if not model_id or not model_id.strip():
             raise ValueError("model_id must not be empty.")
 
-        self._api_key = api_key.strip()
+        self._api_key = key
         self._model_id = model_id.strip()
-        self._base_url = base_url.rstrip("/")
+        self._base_url = (base_url or "https://api.openai.com/v1").rstrip("/")
         # User constraint: supports_structured_json defaults to False for custom endpoints
         self._supports_structured_json = supports_structured_json
         self._timeout = timeout

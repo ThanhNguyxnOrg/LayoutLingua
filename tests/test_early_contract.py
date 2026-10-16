@@ -199,6 +199,27 @@ class TestPDFParser(unittest.TestCase):
         self.assertEqual(p2.page_number, 2)
         self.assertEqual(p2.geometry.rotation, 90)
 
+    def test_parse_line_break_word_spacing(self) -> None:
+        """Verify that multi-line paragraph text blocks preserve spaces across line breaks."""
+        pdf_path = self.dir_path / "multiline_para.pdf"
+        doc = pymupdf.open()
+        page = doc.new_page(width=300, height=300)
+        # Narrow textbox forces wrapping across multiple lines
+        page.insert_textbox(
+            pymupdf.Rect(50, 50, 200, 200),
+            "Scientific literature is inherently multi-modal. Unlike continuous unstructured prose.",
+            fontsize=12,
+        )
+        doc.save(pdf_path)
+        doc.close()
+
+        doc_ir = parse_pdf(pdf_path)
+        self.assertEqual(len(doc_ir.pages), 1)
+        full_text = " ".join(b.text for b in doc_ir.pages[0].blocks)
+        # Ensure words across wrapped lines are separated by spaces, not mashed together
+        self.assertIn("continuous unstructured", full_text)
+        self.assertNotIn("continuousunstructured", full_text)
+
     def test_parse_textless_pdf(self) -> None:
         pdf_path = self.dir_path / "textless.pdf"
         self._create_textless_pdf(pdf_path)

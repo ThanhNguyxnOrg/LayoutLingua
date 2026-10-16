@@ -20,6 +20,7 @@ from layoutlingua.translation.errors import (
     TranslationError,
 )
 from layoutlingua.translation.gemini import GeminiTranslationProvider
+from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider
 from layoutlingua.translation.mock import MockTranslationProvider
 from layoutlingua.translation.models import (
     BatchTranslationRequest,

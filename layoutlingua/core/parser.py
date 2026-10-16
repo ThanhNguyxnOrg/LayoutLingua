@@ -103,12 +103,32 @@ def parse_pdf(
                     lines = b.get("lines", [])
 
                     for line_idx, line in enumerate(lines):
-                        for span_idx, s in enumerate(line.get("spans", [])):
+                        line_spans = line.get("spans", [])
+                        for span_idx, s in enumerate(line_spans):
                             s_text = s.get("text")
                             if s_text is None and "chars" in s:
                                 s_text = "".join(c.get("c", "") for c in s["chars"])
                             if s_text is None:
                                 s_text = ""
+
+                            # Preserve word separation across line breaks within a block
+                            is_last_span_in_line = (span_idx == len(line_spans) - 1)
+                            is_last_line_in_block = (line_idx == len(lines) - 1)
+                            if is_last_span_in_line and not is_last_line_in_block:
+                                next_starts_with_space = False
+                                for ns in lines[line_idx + 1].get("spans", []):
+                                    nst = ns.get("text")
+                                    if nst is None and "chars" in ns:
+                                        nst = "".join(c.get("c", "") for c in ns["chars"])
+                                    if nst:
+                                        if nst.startswith((" ", "\t", "\n", "\xa0")):
+                                            next_starts_with_space = True
+                                        break
+                                if not next_starts_with_space and not s_text.endswith(
+                                    (" ", "\t", "\n", "\xa0", "-", "\u2010", "\u2011", "\u00ad")
+                                ):
+                                    s_text += " "
+
                             s_bbox = _sanitize_bbox(s.get("bbox", b_bbox))
                             s_origin = (float(s.get("origin", (0.0, 0.0))[0]), float(s.get("origin", (0.0, 0.0))[1]))
 
@@ -126,6 +146,14 @@ def parse_pdf(
                                             char=str(c.get("c", "")),
                                             bbox=c_bbox,
                                             origin=c_origin,
+                                        )
+                                    )
+                                if len(chars) < len(s_text):
+                                    chars.append(
+                                        CharInfo(
+                                            char=" ",
+                                            bbox=(s_bbox[2], s_bbox[1], s_bbox[2], s_bbox[3]),
+                                            origin=s_origin,
                                         )
                                     )
 

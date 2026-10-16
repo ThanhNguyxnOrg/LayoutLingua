@@ -1,38 +1,27 @@
 name: Test Suite
 
-# Lightweight, fast CI workflow to verify core logic on code commits.
-# Automatically skips when commits only modify markdown files (*.md, docs/),
-# frontend redesign mockups, or repo documentation to save GitHub Actions minutes.
+# Multi-platform CI test runner across all 3 supported desktop OS (Ubuntu, Windows, macOS).
+# Runs unit and integration regression suites to protect engine invariants.
 
 on:
   push:
     branches:
       - main
     paths:
-      - "pdf2zh/**"
-      - "app/**"
-      - "scripts/**"
+      - "layoutlingua/**"
       - "tests/**"
       - "requirements*.txt"
       - ".github/workflows/test.yml"
       - "*.py"
-      - "*.spec"
-      - "*.sh"
-      - "*.ps1"
   pull_request:
     branches:
       - main
     paths:
-      - "pdf2zh/**"
-      - "app/**"
-      - "scripts/**"
+      - "layoutlingua/**"
       - "tests/**"
       - "requirements*.txt"
       - ".github/workflows/test.yml"
       - "*.py"
-      - "*.spec"
-      - "*.sh"
-      - "*.ps1"
   workflow_dispatch:
 
 permissions:
@@ -40,8 +29,12 @@ permissions:
 
 jobs:
   test:
-    name: Unit Tests (Python 3.12)
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout repository
@@ -53,21 +46,11 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-tk libgl1 libglib2.0-0 xvfb
-
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          python -m pip install -r requirements-app.txt
-
-      - name: Fetch bundled assets for tests
-        run: |
-          python scripts/fetch_assets.py
 
       - name: Run test suite
         run: |
-          xvfb-run -a python -m unittest discover -s tests -p "test_*.py" -v
+          python -m unittest discover -s tests -p "test_*.py" -v

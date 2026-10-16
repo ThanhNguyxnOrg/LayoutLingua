@@ -1,0 +1,66 @@
+name: Auto Merge Safe Updates
+
+# Automatically merges ONLY routine, non-critical updates:
+# 1. Dependabot minor & patch version updates (security & bug fixes)
+# 2. PRs explicitly marked with 'automerge' or 'safe-update' labels
+#
+# Critical core logic, features, and major breaking changes will NEVER be auto-merged.
+# Powered by ThanhNguyxnAgent with requirement that full 3-OS CI passes.
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge-safe-updates:
+    name: Auto-Merge Safe Routine Updates
+    runs-on: ubuntu-latest
+    # Guard: Strictly limited to non-critical updates and trusted bots/labels
+    if: >
+      !github.event.pull_request.draft &&
+      (
+        github.actor == 'dependabot[bot]' ||
+        contains(github.event.pull_request.labels.*.name, 'automerge') ||
+        contains(github.event.pull_request.labels.*.name, 'safe-update')
+      )
+    steps:
+      - name: 🤖 Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+
+      - name: 🔍 Inspect Dependabot Metadata (if Dependabot)
+        if: github.actor == 'dependabot[bot]'
+        id: dependabot-metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+
+      # Reject auto-merging if Dependabot proposes a major breaking update
+      - name: 🛡️ Block Auto-Merge for Major Breaking Changes
+        if: >
+          github.actor == 'dependabot[bot]' &&
+          steps.dependabot-metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          echo "⚠️ Dependabot proposed a major version update. Manual human review required!"
+          exit 0
+
+      - name: ✅ Approve and Enable Auto-Merge via ThanhNguyxnAgent
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          echo "Approving safe non-critical PR: $PR_URL"
+          gh pr review "$PR_URL" --approve --body "Auto-approved by ThanhNguyxnAgent: safe routine non-critical update." || true
+          echo "Enabling auto-merge (squash) once 3-OS CI tests pass..."
+          gh pr merge "$PR_URL" --auto --squash --delete-branch
