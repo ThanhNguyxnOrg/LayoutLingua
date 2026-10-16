@@ -204,7 +204,33 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 const selectCls = 'h-9 rounded-md border border-line-strong bg-white px-2.5 text-[13.5px] font-medium disabled:bg-canvas disabled:text-muted'
 
-function ProcessingPanel({ done, total, stage, onCancel }: { done: number; total: number; stage: number; onCancel: () => void }) {
+function ProcessingPanel({
+  done,
+  total,
+  stage,
+  onCancel,
+  eta,
+  speed,
+  message,
+}: {
+  done: number
+  total: number
+  stage: number
+  onCancel: () => void
+  eta?: number
+  speed?: number
+  message?: string
+}) {
+  const formatEta = (sec?: number) => {
+    if (sec === undefined || sec === null || sec <= 0) return null
+    if (sec < 60) return `~${sec}s remaining`
+    const mins = Math.floor(sec / 60)
+    const rem = sec % 60
+    return rem > 0 ? `~${mins}m ${rem}s remaining` : `~${mins}m remaining`
+  }
+
+  const etaStr = formatEta(eta)
+
   return (
     <div className="space-y-4">
       <div>
@@ -213,7 +239,14 @@ function ProcessingPanel({ done, total, stage, onCancel }: { done: number; total
           <span className="font-mono text-[12.5px] text-muted">page {Math.min(done + 1, total)} of {total}</span>
         </div>
         <div className="mt-2"><ProgressBar value={done} max={total} label="Pages processed" /></div>
-        <p className="mt-1.5 text-[12px] text-muted">Pages processed atomically with layout preservation telemetry.</p>
+        <div className="mt-2 flex items-center justify-between text-[12px] text-muted">
+          <span className="truncate pr-2 font-medium text-ink">{message || 'Processing pages with layout preservation telemetry...'}</span>
+          {(etaStr || (speed && speed > 0)) && (
+            <span className="shrink-0 font-mono text-[11.5px] text-teal font-semibold">
+              {etaStr}{etaStr && speed ? ' • ' : ''}{speed && speed > 0 ? `${speed} p/s` : ''}
+            </span>
+          )}
+        </div>
       </div>
       <ol className="space-y-0">
         {stages.map((s, i) => {
@@ -241,6 +274,7 @@ function Inspector(p: {
   settings: AppSettings; onUpdateProvider: (pr: ProviderType) => void; onOpenSettings?: () => void
   visibleIssues: Issue[]; activeIssue?: string; openIssue: (i: Issue) => void; start: () => void; cancel: () => void
   onExport: () => void; retryPage: () => void; retrying: boolean
+  telemetry?: { eta?: number; speed?: number; message?: string }
 }) {
   const tabs: [Tab, string][] = [['translation', 'Translation'], ['quality', 'Quality checks'], ['page', 'Page details']]
   const locked = p.phase === 'processing'
@@ -324,7 +358,17 @@ function Inspector(p: {
                 <Button variant="primary" className="h-10 w-full" onClick={p.start}>Translate PDF</Button>
               </section>
             )}
-            {p.phase === 'processing' && <ProcessingPanel done={p.done} total={p.total} stage={p.stage} onCancel={p.cancel} />}
+            {p.phase === 'processing' && (
+              <ProcessingPanel
+                done={p.done}
+                total={p.total}
+                stage={p.stage}
+                onCancel={p.cancel}
+                eta={p.telemetry?.eta}
+                speed={p.telemetry?.speed}
+                message={p.telemetry?.message}
+              />
+            )}
             {p.phase === 'cancelled' && (
               <StateNotice tone="neutral" icon={<IconX className="size-5" />} title="Translation cancelled" actions={<Button size="sm" variant="primary" onClick={p.start}>Resume from page {p.done + 1}</Button>}>
                 <span className="font-mono">{p.done}</span> of {p.total} pages were translated and kept.
@@ -435,6 +479,7 @@ export default function Workspace({
   const [highlight, setHighlight] = useState<string>()
   const [activeIssue, setActiveIssue] = useState<string>()
   const [tab, setTab] = useState<Tab>('translation')
+  const [telemetry, setTelemetry] = useState<{ eta?: number; speed?: number; message?: string }>({})
 
   const docPages: Page[] = useMemo(() => {
     if (!docInfo?.pages) return pages
@@ -495,6 +540,13 @@ export default function Workspace({
             const pData = await pRes.json()
             if (pData.current_page > 0 && active) {
               setDone(pData.current_page)
+            }
+            if (active) {
+              setTelemetry({
+                eta: pData.eta_seconds,
+                speed: pData.speed,
+                message: pData.message,
+              })
             }
           }
         } catch {}
@@ -607,7 +659,7 @@ export default function Workspace({
           height={height}
           busy={true}
           title={`Translating document (Page ${Math.min(done + 1, totalPages)} of ${totalPages})`}
-          body="Extracting equations, translating prose with neural MT, and typesetting layout..."
+          body={telemetry.message || "Extracting equations, translating prose with neural MT, and typesetting layout..."}
         />
       )
     }
@@ -729,6 +781,7 @@ export default function Workspace({
             onExport={() => setExportOpen(true)}
             retryPage={retryPage}
             retrying={retrying}
+            telemetry={telemetry}
           />
         )}
       </div>
