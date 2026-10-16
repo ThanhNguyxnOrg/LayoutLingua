@@ -34,11 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Universal Multi-Language Font Preservation**:
   - Language-aware font dispatch: automatically routes CJK targets (Chinese, Japanese, Korean) to PyMuPDF's built-in fonts (`china-s`, `china-t`, `japan`, `korea`) and Latin/Cyrillic/Vietnamese targets to version-pinned `DejaVuSans.ttf`.
   - Guarantees zero mojibake, zero missing box glyphs, and zero character corruption regardless of source/target language pairing.
-- **Universal OpenAI-Compatible Model Discovery & Auto-Inference**:
-  - Renamed and generalized the provider to **OpenAI-Compatible** supporting any standard inference server (DeepSeek, Groq, OpenRouter, Qwen DashScope, Ollama, vLLM, LM Studio).
-  - Added live model discovery endpoint (`/api/models` / `/api/fetch-models`) to scan hosted models from the server with 1 click.
-  - Added one-click configuration presets for DeepSeek, Groq Cloud, OpenAI Official, OpenRouter, Ollama, and Qwen.
-  - Zero-friction model resolution: if the user leaves Model ID empty, the backend automatically infers the correct model based on the Base URL domain (e.g., DeepSeek $\rightarrow$ `deepseek-chat`, Groq $\rightarrow$ `llama-3.3-70b-versatile`, OpenAI $\rightarrow$ `gpt-4o-mini`).
+- **Universal OpenAI-Compatible Model Discovery & Cloud/Local LLM Unification**:
+  - Unified all cloud and local LLMs (OpenAI, Claude via OpenRouter, DeepSeek, Groq, Ollama, LM Studio, vLLM) into a single, standardized **OpenAI-Compatible** provider (`OpenAITranslationProvider`).
+  - Removed brittle domain substring guessing; model resolution now prioritizes explicit user input and dynamically queries `{base_url}/models` to discover installed models automatically.
+  - Added live model auto-discovery via `🔍 Fetch Available Models` button with datalist suggestions and selectable model chips.
+  - Streamlined provider configuration across settings and workspace into 4 clean, synchronized options: Google Translate RPC (Zero Setup), OpenAI-Compatible (Universal LLM), Google AI Studio (Gemini), and Argos Translate (Offline).
+  - Documented protocol analysis and open-source benchmarks in `docs/research_openai_compatible_and_local_llm_unification.md`.
 - **Open-Source Architectural Research**:
   - In-depth comparative research documenting patterns from `pdf2zh`, `BabelDOC`, `MinerU`, and `BilingualBookMaker` in `docs/research_opensource_pdf_translation_patterns.md`.
 

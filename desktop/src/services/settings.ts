@@ -1,6 +1,6 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 
-export type ProviderType = 'ollama' | 'openai' | 'gemini' | 'argos' | 'google'
+export type ProviderType = 'google' | 'openai' | 'gemini' | 'argos' | 'ollama'
 
 export interface AppSettings {
   provider: ProviderType
@@ -9,22 +9,20 @@ export interface AppSettings {
   openaiKey: string
   openaiEndpoint: string
   openaiModel: string
-  ollamaEndpoint: string
-  ollamaModel: string
+  ollamaEndpoint?: string
+  ollamaModel?: string
   targetLang: string
   preserveFormulas: boolean
   minFontShrink: number
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  provider: 'ollama',
+  provider: 'google',
   geminiKey: '',
   geminiModel: 'gemini-2.5-flash',
   openaiKey: '',
   openaiEndpoint: 'https://api.openai.com/v1',
   openaiModel: 'gpt-4o-mini',
-  ollamaEndpoint: 'http://localhost:11434/v1',
-  ollamaModel: 'llama3',
   targetLang: 'vi',
   preserveFormulas: true,
   minFontShrink: 0.7,
@@ -36,7 +34,17 @@ const EVENT_NAME = 'layoutlingua:settings_updated'
 export function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      const merged = { ...DEFAULT_SETTINGS, ...parsed }
+      // Transparent migration: convert legacy 'ollama' provider to unified 'openai'
+      if (merged.provider === 'ollama') {
+        merged.provider = 'openai'
+        if (parsed.ollamaEndpoint) merged.openaiEndpoint = parsed.ollamaEndpoint
+        if (parsed.ollamaModel) merged.openaiModel = parsed.ollamaModel
+      }
+      return merged
+    }
   } catch {}
   return DEFAULT_SETTINGS
 }

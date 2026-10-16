@@ -52,14 +52,6 @@ export default function SettingsModal({
     }
   }
 
-  const applyPreset = (preset: { endpoint: string; model: string }) => {
-    setSettings((prev) => ({
-      ...prev,
-      openaiEndpoint: preset.endpoint,
-      openaiModel: preset.model,
-    }))
-  }
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -152,22 +144,16 @@ export default function SettingsModal({
                     badge: 'Zero Setup',
                   },
                   {
+                    id: 'openai',
+                    name: 'OpenAI-Compatible API',
+                    sub: 'Cloud & Local: OpenAI, Claude, DeepSeek, Ollama, LM Studio',
+                    badge: 'Universal LLM',
+                  },
+                  {
                     id: 'gemini',
                     name: 'Google AI Studio (Gemini)',
                     sub: 'Top mathematical reasoning & accuracy with API key',
                     badge: 'Free Tier',
-                  },
-                  {
-                    id: 'ollama',
-                    name: 'Ollama (Local LLM)',
-                    sub: 'Zero-key, 100% private, llama3 / qwen2.5',
-                    badge: 'Local Private',
-                  },
-                  {
-                    id: 'openai',
-                    name: 'OpenAI-Compatible (Any Endpoint)',
-                    sub: 'DeepSeek, Qwen, Groq, OpenRouter, vLLM, LM Studio',
-                    badge: 'OpenAI API',
                   },
                   {
                     id: 'argos',
@@ -263,47 +249,12 @@ export default function SettingsModal({
               </div>
             )}
 
-            {settings.provider === 'ollama' && (
-              <div className="rounded-lg border border-line bg-canvas/30 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-bold text-ink">Local Ollama Server</span>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('guide')}
-                    className="text-[12px] text-teal hover:underline cursor-pointer font-semibold"
-                  >
-                    Ollama setup instructions →
-                  </button>
-                </div>
-                <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
-                  Ollama Endpoint (Base URL)
-                  <input
-                    type="text"
-                    value={settings.ollamaEndpoint}
-                    placeholder="http://localhost:11434/v1"
-                    onChange={(e) => setSettings({ ...settings, ollamaEndpoint: e.target.value })}
-                    className="h-9 rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
-                  Model Name
-                  <input
-                    type="text"
-                    value={settings.ollamaModel}
-                    placeholder="llama3 or qwen2.5"
-                    onChange={(e) => setSettings({ ...settings, ollamaModel: e.target.value })}
-                    className="h-9 rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
-                  />
-                </label>
-              </div>
-            )}
-
             {settings.provider === 'openai' && (
               <div className="rounded-lg border border-line bg-canvas/30 p-4 space-y-3.5">
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-[13px] font-bold text-ink">OpenAI-Compatible Endpoint Configuration</span>
-                    <p className="text-[11.5px] text-muted">Supports any inference server implementing the OpenAI /v1 API standard.</p>
+                    <p className="text-[11.5px] text-muted">Supports any inference server implementing the OpenAI /v1 API standard (Cloud & Local).</p>
                   </div>
                   <button
                     type="button"
@@ -314,41 +265,18 @@ export default function SettingsModal({
                   </button>
                 </div>
 
-                {/* Quick Presets */}
-                <div>
-                  <span className="text-[11px] font-bold tracking-wider uppercase text-muted block mb-1.5">
-                    Quick Provider Presets
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { label: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-                      { label: 'Groq Cloud', endpoint: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
-                      { label: 'OpenAI Official', endpoint: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-                      { label: 'OpenRouter', endpoint: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
-                      { label: 'Ollama Local', endpoint: 'http://localhost:11434/v1', model: 'llama3.2' },
-                      { label: 'Qwen / DashScope', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
-                    ].map((ps) => (
-                      <button
-                        key={ps.label}
-                        type="button"
-                        onClick={() => applyPreset(ps)}
-                        className="rounded-md border border-line bg-white px-2.5 py-1 text-[11.5px] font-medium text-ink hover:border-teal hover:text-teal transition-colors cursor-pointer"
-                      >
-                        {ps.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
-                  API Base URL
+                  API Base URL (Endpoint)
                   <input
                     type="text"
                     value={settings.openaiEndpoint}
-                    placeholder="https://api.deepseek.com/v1"
+                    placeholder="https://api.openai.com/v1 or http://localhost:11434/v1"
                     onChange={(e) => setSettings({ ...settings, openaiEndpoint: e.target.value })}
                     className="h-9 rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
                   />
+                  <span className="text-[11px] text-muted">
+                    Examples: <code>https://api.openai.com/v1</code>, <code>https://openrouter.ai/api/v1</code>, <code>https://api.deepseek.com/v1</code>, <code>http://localhost:11434/v1</code> (Ollama)
+                  </span>
                 </label>
 
                 <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
@@ -356,7 +284,7 @@ export default function SettingsModal({
                   <input
                     type="password"
                     value={settings.openaiKey}
-                    placeholder="sk-... (leave blank if local server without auth)"
+                    placeholder="sk-... (leave blank or type 'ollama' for local servers)"
                     onChange={(e) => setSettings({ ...settings, openaiKey: e.target.value })}
                     className="h-9 rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
                   />
@@ -365,38 +293,60 @@ export default function SettingsModal({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-[12.5px] font-semibold text-ink">
-                      Model ID <span className="font-normal text-muted">(Optional — auto-detected if empty)</span>
+                      Model ID
                     </label>
                     <button
                       type="button"
                       disabled={fetchingModels || !settings.openaiEndpoint}
                       onClick={fetchModels}
-                      className="text-[12px] font-semibold text-teal hover:underline disabled:opacity-50 cursor-pointer"
+                      className="text-[12px] font-semibold text-teal hover:underline disabled:opacity-50 cursor-pointer flex items-center gap-1"
                     >
-                      {fetchingModels ? 'Scanning models...' : '🔍 Fetch Available Models'}
+                      {fetchingModels ? 'Scanning server...' : '🔍 Fetch Available Models'}
                     </button>
                   </div>
-                  {discoveredModels.length > 0 ? (
-                    <select
-                      value={settings.openaiModel}
-                      onChange={(e) => setSettings({ ...settings, openaiModel: e.target.value })}
-                      className="h-9 w-full rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
-                    >
-                      {discoveredModels.map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      value={settings.openaiModel}
-                      placeholder="e.g. deepseek-chat, gpt-4o-mini (leave empty for auto-detect)"
-                      onChange={(e) => setSettings({ ...settings, openaiModel: e.target.value })}
-                      className="h-9 w-full rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
-                    />
+                  
+                  <input
+                    type="text"
+                    list="discovered-models-list"
+                    value={settings.openaiModel}
+                    placeholder="e.g. gpt-4o-mini, anthropic/claude-3.5-sonnet, deepseek-chat, llama3.2"
+                    onChange={(e) => setSettings({ ...settings, openaiModel: e.target.value })}
+                    className="h-9 w-full rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
+                  />
+
+                  {discoveredModels.length > 0 && (
+                    <>
+                      <datalist id="discovered-models-list">
+                        {discoveredModels.map((m) => (
+                          <option key={m} value={m} />
+                        ))}
+                      </datalist>
+                      <div className="pt-1">
+                        <span className="text-[11px] font-semibold text-muted block mb-1">
+                          Found {discoveredModels.length} models on server (click to choose):
+                        </span>
+                        <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1 border border-line rounded bg-white">
+                          {discoveredModels.map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setSettings((prev) => ({ ...prev, openaiModel: m }))}
+                              className={`px-2 py-0.5 rounded text-[11px] font-mono border transition-colors cursor-pointer ${
+                                settings.openaiModel === m
+                                  ? 'bg-teal text-white border-teal'
+                                  : 'bg-canvas text-ink border-line hover:border-teal'
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
                   )}
+
                   <p className="text-[11.5px] text-muted">
-                    If left empty, LayoutLingua automatically selects the optimal model for your Base URL (DeepSeek $\rightarrow$ <code>deepseek-chat</code>, Groq $\rightarrow$ <code>llama-3.3-70b</code>, OpenAI $\rightarrow$ <code>gpt-4o-mini</code>).
+                    Type any custom model ID, or click <strong>Fetch Available Models</strong> to auto-load models directly from your server.
                   </p>
                 </div>
               </div>
@@ -461,7 +411,54 @@ export default function SettingsModal({
               </ul>
             </div>
 
-            {/* Guide 2: Google AI Studio (Gemini) */}
+            {/* Guide 2: OpenAI-Compatible (Cloud & Local) */}
+            <div className="rounded-xl border border-line p-5 space-y-3 bg-canvas/30">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[15px] font-bold text-ink flex items-center gap-2">
+                  <span>🌐 OpenAI-Compatible API (Cloud & Local LLMs)</span>
+                  <span className="text-[11px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full uppercase">
+                    Universal Protocol
+                  </span>
+                </h4>
+              </div>
+              <p className="text-[13px] text-ink leading-relaxed">
+                Connects to any inference backend implementing the standard OpenAI <code>/v1</code> REST API. You can freely specify any Base URL, API Key, and Model ID, or click <strong>Fetch Available Models</strong> to auto-load models.
+              </p>
+              
+              <div className="space-y-2 text-[12.5px] text-ink">
+                <div className="p-2.5 rounded-lg bg-white border border-line space-y-1">
+                  <div className="font-bold text-teal flex items-center gap-1.5">🦙 Local Ollama (100% Private, Zero-Cost)</div>
+                  <div className="text-muted leading-relaxed">
+                    1. Download and install from <code>https://ollama.com</code>.<br />
+                    2. In terminal, run: <code className="font-mono bg-canvas px-1 py-0.5 rounded text-ink">ollama run llama3.2</code> (or <code>ollama run qwen2.5</code>).<br />
+                    3. In LayoutLingua Settings: Set <strong>Base URL</strong> to <code className="font-mono text-ink">http://localhost:11434/v1</code>, leave API Key blank (or type <code>ollama</code>), and click <strong>Fetch Available Models</strong>.
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-white border border-line space-y-1">
+                  <div className="font-bold text-teal flex items-center gap-1.5">🧠 OpenAI Official (GPT-4o, GPT-4o-mini)</div>
+                  <div className="text-muted leading-relaxed">
+                    Set Base URL to <code className="font-mono text-ink">https://api.openai.com/v1</code>, enter your OpenAI API key, and specify Model ID (e.g. <code>gpt-4o-mini</code>).
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-white border border-line space-y-1">
+                  <div className="font-bold text-teal flex items-center gap-1.5">🔀 OpenRouter (Claude 3.5 Sonnet, Llama 3.3, DeepSeek)</div>
+                  <div className="text-muted leading-relaxed">
+                    Set Base URL to <code className="font-mono text-ink">https://openrouter.ai/api/v1</code>, enter your OpenRouter key, and set Model ID (e.g. <code>anthropic/claude-3.5-sonnet</code>).
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-white border border-line space-y-1">
+                  <div className="font-bold text-teal flex items-center gap-1.5">🐋 DeepSeek API</div>
+                  <div className="text-muted leading-relaxed">
+                    Set Base URL to <code className="font-mono text-ink">https://api.deepseek.com/v1</code>, enter your DeepSeek key, and set Model ID to <code>deepseek-chat</code>.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Guide 3: Google AI Studio (Gemini) */}
             <div className="rounded-xl border border-line p-5 space-y-2.5 bg-canvas/30">
               <div className="flex items-center justify-between">
                 <h4 className="text-[15px] font-bold text-ink flex items-center gap-2">
@@ -472,62 +469,16 @@ export default function SettingsModal({
                 </h4>
               </div>
               <p className="text-[13px] text-ink leading-relaxed">
-                Delivers the highest academic translation quality and understands complex scientific contexts.
+                Delivers high academic translation quality with free tier API keys directly from Google.
               </p>
               <ol className="text-[12.5px] text-ink space-y-1.5 list-decimal list-inside pl-1">
-                <li>Open your browser and navigate to: <code className="bg-white px-1.5 py-0.5 rounded border border-line text-teal font-mono">https://aistudio.google.com/</code></li>
-                <li>Log in with your Google account.</li>
-                <li>Click <strong>"Get API key"</strong> on the left sidebar, then click <strong>"Create API key"</strong>.</li>
-                <li>Copy the key (starts with <code className="font-mono text-muted">AIzaSy...</code>).</li>
-                <li>Switch to the <strong>Configure Providers</strong> tab, select <strong>Google AI Studio</strong>, and paste your key.</li>
-                <li>Recommended model ID: <code className="font-mono">gemini-2.5-flash</code>.</li>
+                <li>Navigate to <code className="bg-white px-1.5 py-0.5 rounded border border-line text-teal font-mono">https://aistudio.google.com/</code>.</li>
+                <li>Log in and click <strong>"Get API key"</strong> $\rightarrow$ <strong>"Create API key"</strong>.</li>
+                <li>Paste your key into the <strong>Google AI Studio</strong> settings tab (Model ID: <code className="font-mono">gemini-2.5-flash</code>).</li>
               </ol>
             </div>
 
-            {/* Guide 3: Ollama */}
-            <div className="rounded-xl border border-line p-5 space-y-2.5 bg-canvas/30">
-              <div className="flex items-center justify-between">
-                <h4 className="text-[15px] font-bold text-ink flex items-center gap-2">
-                  <span>🦙 Ollama (100% Offline Local LLM)</span>
-                  <span className="text-[11px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full uppercase">
-                    100% Private
-                  </span>
-                </h4>
-              </div>
-              <p className="text-[13px] text-ink leading-relaxed">
-                Runs completely on your local machine GPU/CPU. Zero data ever leaves your computer.
-              </p>
-              <ol className="text-[12.5px] text-ink space-y-1.5 list-decimal list-inside pl-1">
-                <li>Download Ollama from <code className="bg-white px-1.5 py-0.5 rounded border border-line text-teal font-mono">https://ollama.com</code> and install it.</li>
-                <li>Open PowerShell or Terminal and pull your model:
-                  <div className="mt-1 bg-ink text-white p-2 rounded-md font-mono text-[12px]">ollama run llama3</div>
-                  <span className="text-[11.5px] text-muted">Or for multilingual strength: <code>ollama run qwen2.5</code></span>
-                </li>
-                <li>Ensure Ollama is running in background (accessible at <code>http://localhost:11434</code>).</li>
-                <li>Select <strong>Ollama (Local LLM)</strong> in settings with Model Name set to <code>llama3</code> or <code>qwen2.5</code>.</li>
-              </ol>
-            </div>
-
-            {/* Guide 4: DeepSeek / OpenAI */}
-            <div className="rounded-xl border border-line p-5 space-y-2.5 bg-canvas/30">
-              <div className="flex items-center justify-between">
-                <h4 className="text-[15px] font-bold text-ink flex items-center gap-2">
-                  <span>🌐 DeepSeek / OpenAI Compatible</span>
-                  <span className="text-[11px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full uppercase">
-                    Custom Endpoint
-                  </span>
-                </h4>
-              </div>
-              <p className="text-[13px] text-ink leading-relaxed">
-                Supports DeepSeek, Groq, OpenRouter, or official OpenAI models.
-              </p>
-              <ul className="text-[12.5px] text-ink space-y-1.5 list-disc list-inside pl-1">
-                <li><strong>For DeepSeek:</strong> Set Endpoint to <code className="font-mono text-xs">https://api.deepseek.com/v1</code>, Model Name to <code className="font-mono text-xs">deepseek-chat</code>, and enter your DeepSeek API key.</li>
-                <li><strong>For OpenAI:</strong> Set Endpoint to <code className="font-mono text-xs">https://api.openai.com/v1</code>, Model Name to <code className="font-mono text-xs">gpt-4o-mini</code>, and enter your OpenAI key.</li>
-              </ul>
-            </div>
-
-            {/* Guide 5: Argos Translate */}
+            {/* Guide 4: Argos Translate */}
             <div className="rounded-xl border border-line p-5 space-y-2.5 bg-canvas/30">
               <div className="flex items-center justify-between">
                 <h4 className="text-[15px] font-bold text-ink flex items-center gap-2">
@@ -538,7 +489,7 @@ export default function SettingsModal({
                 </h4>
               </div>
               <p className="text-[13px] text-ink leading-relaxed">
-                Zero-key offline neural translation using CTranslate2.
+                Zero-key offline neural translation using CTranslate2 for systems without dedicated GPUs.
               </p>
               <ul className="text-[12.5px] text-ink space-y-1 list-disc list-inside">
                 <li>Run in terminal: <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-line">pip install argostranslate</code></li>

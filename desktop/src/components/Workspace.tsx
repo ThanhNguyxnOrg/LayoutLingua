@@ -287,9 +287,8 @@ function Inspector(p: {
                     className={`${selectCls} flex-1 truncate`}
                   >
                     <option value="google">Google Translate RPC (Zero Setup)</option>
-                    <option value="openai">OpenAI-Compatible ({p.settings.openaiModel || 'Auto'})</option>
+                    <option value="openai">OpenAI-Compatible ({p.settings.openaiModel || 'Cloud & Local LLM'})</option>
                     <option value="gemini">Google Gemini ({p.settings.geminiModel})</option>
-                    <option value="ollama">Ollama Local ({p.settings.ollamaModel})</option>
                     <option value="argos">Argos Translate (Offline)</option>
                   </select>
                   <IconButton
@@ -303,11 +302,10 @@ function Inspector(p: {
               </Field>
               <div className="flex items-center justify-between text-[12px] pt-0.5">
                 <span className="text-muted leading-relaxed truncate">
-                  {p.settings.provider === 'ollama' && `Local Ollama (${p.settings.ollamaModel}).`}
-                  {p.settings.provider === 'gemini' && (p.settings.geminiKey ? `Gemini Key OK (${p.settings.geminiModel}).` : `Gemini selected. Key needed.`)}
-                  {p.settings.provider === 'openai' && `Endpoint: ${p.settings.openaiEndpoint || 'OpenAI'}.`}
+                  {p.settings.provider === 'google' && `Zero setup required, ready to translate.`}
+                  {p.settings.provider === 'openai' && `OpenAI-Compatible (${p.settings.openaiModel || 'Model'}). ${p.settings.openaiEndpoint || 'https://api.openai.com/v1'}`}
+                  {p.settings.provider === 'gemini' && (p.settings.geminiKey ? `Gemini Key OK (${p.settings.geminiModel}).` : `Gemini selected. API key needed in Settings.`)}
                   {p.settings.provider === 'argos' && `Offline CTranslate2 model.`}
-                  {p.settings.provider === 'google' && `Zero setup, ready to translate.`}
                 </span>
                 <button
                   type="button"
@@ -333,7 +331,7 @@ function Inspector(p: {
               </StateNotice>
             )}
             {p.phase === 'provider-error' && (
-              <StateNotice tone="error" icon={<IconError className="size-5" />} title={`${p.settings.provider.toUpperCase()} stopped responding`} actions={<><Button size="sm" variant="primary" onClick={p.start}>Retry from page {p.done + 1}</Button><Button size="sm" onClick={() => p.onUpdateProvider('ollama')}>Switch to Ollama</Button></>}>
+              <StateNotice tone="error" icon={<IconError className="size-5" />} title={`${p.settings.provider.toUpperCase()} stopped responding`} actions={<><Button size="sm" variant="primary" onClick={p.start}>Retry from page {p.done + 1}</Button><Button size="sm" onClick={() => p.onUpdateProvider('google')}>Switch to Google (Free)</Button></>}>
                 The provider returned an error on page {p.done + 1}. Pages 1–{p.done} are kept; nothing needs to be redone.
               </StateNotice>
             )}
@@ -510,8 +508,8 @@ export default function Workspace({
           target_lang: tgt === 'Vietnamese' ? 'vi' : 'en',
           provider: settings.provider,
           api_key: settings.provider === 'gemini' ? settings.geminiKey : settings.provider === 'openai' ? settings.openaiKey : '',
-          base_url: settings.provider === 'ollama' ? settings.ollamaEndpoint : settings.provider === 'openai' ? settings.openaiEndpoint : '',
-          model: settings.provider === 'ollama' ? settings.ollamaModel : settings.provider === 'gemini' ? settings.geminiModel : settings.openaiModel,
+          base_url: settings.provider === 'openai' ? settings.openaiEndpoint : '',
+          model: settings.provider === 'gemini' ? settings.geminiModel : settings.openaiModel,
         }),
       })
         .then(async (res) => {

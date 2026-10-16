@@ -182,21 +182,11 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                     self._send_json({"models": models, "status": "ok"})
                     return
             except Exception as e:
-                # Intelligent fallbacks based on base_url domain
-                b_low = base_url.lower()
-                if "deepseek" in b_low:
-                    defaults = ["deepseek-chat", "deepseek-reasoner"]
-                elif "groq" in b_low:
-                    defaults = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
-                elif "openrouter" in b_low:
-                    defaults = ["openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet", "deepseek/deepseek-chat"]
-                elif "ollama" in b_low or ":11434" in b_low:
-                    defaults = ["llama3.2", "qwen2.5", "mistral"]
-                elif "dashscope" in b_low or "aliyun" in b_low:
-                    defaults = ["qwen-plus", "qwen-max", "qwen-turbo"]
-                else:
-                    defaults = ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"]
-                self._send_json({"models": defaults, "status": "fallback", "notice": str(e)})
+                self._send_json({
+                    "models": [],
+                    "status": "error",
+                    "error": f"Failed to fetch models from {models_url}: {e}",
+                })
                 return
 
         self._send_json({"error": f"Path not found: {path}"}, status=404)
@@ -335,25 +325,34 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
 
                 provider_inst = None
                 try:
-                    if provider_type in ("openai", "ollama") or (base_url and "api.openai.com" not in base_url):
+                    if provider_type in ("openai", "ollama") or base_url:
                         from layoutlingua.translation.openai_compat import OpenAITranslationProvider
 
                         b_url = base_url if base_url else ("http://localhost:11434/v1" if provider_type == "ollama" else "https://api.openai.com/v1")
                         m_id = (model_name or "").strip()
                         if not m_id:
-                            b_low = b_url.lower()
-                            if "deepseek" in b_low:
-                                m_id = "deepseek-chat"
-                            elif "groq" in b_low:
-                                m_id = "llama-3.3-70b-versatile"
-                            elif "openrouter" in b_low:
-                                m_id = "openai/gpt-4o-mini"
-                            elif "ollama" in b_low or ":11434" in b_low:
-                                m_id = "llama3.2"
-                            elif "dashscope" in b_low or "aliyun" in b_low:
-                                m_id = "qwen-plus"
-                            else:
+                            # Dynamic model discovery from server
+                            try:
+                                headers = {"User-Agent": "LayoutLingua/2.0"}
+                                if api_key and api_key != "ollama":
+                                    headers["Authorization"] = f"Bearer {api_key}"
+                                req_m = urllib.request.Request(f"{b_url.rstrip('/')}/models", headers=headers)
+                                with urllib.request.urlopen(req_m, timeout=2.5) as r_m:
+                                    data_m = json.loads(r_m.read().decode("utf-8"))
+                                    fetched = [m.get("id") for m in data_m.get("data", []) if m.get("id")]
+                                    if fetched:
+                                        m_id = fetched[0]
+                            except Exception:
+                                pass
+
+                        if not m_id:
+                            if "api.openai.com" in b_url:
                                 m_id = "gpt-4o-mini"
+                            else:
+                                raise ValueError(
+                                    f"No model specified and could not auto-discover models from {b_url}. "
+                                    f"Please specify a Model ID in Settings."
+                                )
 
                         provider_inst = OpenAITranslationProvider(
                             api_key=api_key or "ollama",
