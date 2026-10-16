@@ -13,6 +13,7 @@ import io
 import json
 import os
 import sys
+import re
 import tempfile
 import threading
 import time
@@ -36,21 +37,41 @@ from layoutlingua.translation.service import (
 from layoutlingua.typesetting.engine import TypesetEngine
 from layoutlingua.typesetting.models import TypesetOptions
 
-# In-memory document session cache
+# In-memory document session cache with bounded capacity
 _SESSIONS: dict[str, dict[str, Any]] = {}
 _LOCK = threading.Lock()
+MAX_SESSIONS = 15
 
 
 class LayoutLinguaHandler(BaseHTTPRequestHandler):
     """HTTP request handler for LayoutLingua desktop client API."""
 
     def _send_cors_headers(self) -> None:
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header(
-            "Access-Control-Allow-Headers",
-            "*",
-        )
+        origin = self.headers.get("Origin", "")
+        allowed = False
+        if not origin:
+            allowed = True
+        else:
+            o_low = origin.lower()
+            if (
+                o_low.startswith("http://localhost:")
+                or o_low.startswith("http://127.0.0.1:")
+                or o_low.startswith("https://localhost:")
+                or o_low.startswith("https://127.0.0.1:")
+                or o_low in ("http://localhost", "http://127.0.0.1")
+                or o_low.startswith("tauri://")
+                or "tauri.localhost" in o_low
+            ):
+                allowed = True
+
+        if allowed:
+            self.send_header("Access-Control-Allow-Origin", origin if origin else "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "Content-Type, Authorization, X-Filename",
+            )
+            self.send_header("Access-Control-Max-Age", "86400")
 
     def do_OPTIONS(self) -> None:
         self.send_response(204)
@@ -155,11 +176,12 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
             file_name = session.get("filename", "document.pdf")
             if not file_name.endswith(".vi.pdf") and not file_name.endswith(".en.pdf"):
                 file_name = file_name.replace(".pdf", "") + ".translated.pdf"
+            clean_filename = re.sub(r'[\r\n"\\]', '_', file_name)
 
             self.send_response(200)
             self._send_cors_headers()
             self.send_header("Content-Type", "application/pdf")
-            self.send_header("Content-Disposition", f'attachment; filename="{file_name}"')
+            self.send_header("Content-Disposition", f'attachment; filename="{clean_filename}"')
             self.send_header("Content-Length", str(len(pdf_bytes)))
             self.end_headers()
             self.wfile.write(pdf_bytes)
@@ -169,6 +191,13 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
         if path in ("/api/models", "/api/fetch-models"):
             base_url = query.get("base_url", ["https://api.openai.com/v1"])[0].rstrip("/")
             api_key = query.get("api_key", [""])[0].strip()
+
+            if not (base_url.startswith("http://") or base_url.startswith("https://")):
+                self._send_json(
+                    {"models": [], "status": "error", "error": "Invalid URL scheme. Only HTTP and HTTPS endpoints are permitted."},
+                    status=400,
+                )
+                return
 
             models_url = f"{base_url}/models"
             try:
@@ -195,7 +224,16 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 
-        content_length = int(self.headers.get("Content-Length", 0))
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except (ValueError, TypeError):
+            self._send_json({"error": "Invalid Content-Length header"}, status=400)
+            return
+
+        if content_length < 0:
+            self._send_json({"error": "Negative Content-Length header"}, status=400)
+            return
+
         post_body = self.rfile.read(content_length)
 
         # 1. Upload & parse document
@@ -266,6 +304,10 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         pass
 
                 with _LOCK:
+                    while len(_SESSIONS) >= MAX_SESSIONS:
+                        oldest_k = next(iter(_SESSIONS))
+                        del _SESSIONS[oldest_k]
+
                     _SESSIONS[doc_id] = {
                         "doc_id": doc_id,
                         "filename": filename,
