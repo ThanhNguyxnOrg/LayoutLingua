@@ -167,8 +167,8 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
 
         # 5. Query models from any OpenAI-compatible provider
         if path in ("/api/models", "/api/fetch-models"):
-            base_url = params.get("base_url", ["https://api.openai.com/v1"])[0].rstrip("/")
-            api_key = params.get("api_key", [""])[0].strip()
+            base_url = query.get("base_url", ["https://api.openai.com/v1"])[0].rstrip("/")
+            api_key = query.get("api_key", [""])[0].strip()
 
             models_url = f"{base_url}/models"
             try:
