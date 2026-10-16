@@ -435,6 +435,9 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                     provider_inst = MockTranslationProvider()
 
                 translated_segments: dict[str, str] = {}
+                start_time = time.time()
+                total_p = len(src_doc) if 'src_doc' in locals() else len(doc_ir.pages)
+
                 if isinstance(provider_inst, MockTranslationProvider):
                     for seg in segments:
                         translated_segments[seg.segment_id] = provider_inst.translate_segment(
@@ -445,9 +448,27 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 else:
                     from layoutlingua.translation.models import BatchTranslationRequest
 
-                    batch_sz = 20
-                    for b_idx in range(0, len(segments), batch_sz):
+                    batch_sz = 35
+                    total_segs = len(segments)
+                    for b_idx in range(0, total_segs, batch_sz):
                         chunk = segments[b_idx : b_idx + batch_sz]
+                        done_segs = min(b_idx + len(chunk), total_segs)
+                        approx_p = max(1, int((done_segs / max(1, total_segs)) * total_p))
+                        elapsed = max(0.2, time.time() - start_time)
+                        curr_speed = round(approx_p / elapsed, 1)
+                        rem_p = max(0, total_p - approx_p)
+                        calc_eta = int(rem_p / max(curr_speed, 0.1)) if curr_speed > 0 else 30
+
+                        with _LOCK:
+                            session["progress"] = {
+                                "current_page": approx_p,
+                                "total_pages": total_p,
+                                "status": "processing",
+                                "speed": curr_speed,
+                                "eta_seconds": calc_eta,
+                                "message": f"Translating text ({done_segs}/{total_segs} segments)...",
+                            }
+
                         req = BatchTranslationRequest(
                             batch_id=f"batch-{b_idx}",
                             source_language=session.get("detected_lang", "auto"),
@@ -465,7 +486,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                                     segment_id=seg.segment_id,
                                     text=seg.masked_text,
                                     target_lang=target_lang,
-                                    )
+                                )
 
                 # Run TypesetEngine with language-aware font selection
                 src_doc = pymupdf.open(stream=src_bytes, filetype="pdf")
@@ -487,12 +508,22 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 total_p = len(src_doc)
 
                 for page_idx in range(total_p):
+                    pages_done = page_idx + 1
+                    elapsed = max(0.2, time.time() - start_time)
+                    curr_speed = round(pages_done / elapsed, 1)
+                    rem_p = max(0, total_p - pages_done)
+                    calc_eta = int(rem_p / max(curr_speed, 0.1)) if curr_speed > 0 else 0
+
                     with _LOCK:
                         session["progress"] = {
-                            "current_page": page_idx + 1,
+                            "current_page": pages_done,
                             "total_pages": total_p,
                             "status": "processing",
+                            "speed": curr_speed,
+                            "eta_seconds": calc_eta,
+                            "message": f"Typesetting layout for page {pages_done} of {total_p}...",
                         }
+
                     p_ir = doc_ir.pages[page_idx] if page_idx < len(doc_ir.pages) else None
                     if p_ir:
                         tx = engine.stage_page_transaction(
@@ -515,6 +546,9 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         "current_page": total_p,
                         "total_pages": total_p,
                         "status": "done",
+                        "speed": round(total_p / max(0.2, time.time() - start_time), 1),
+                        "eta_seconds": 0,
+                        "message": "Translation complete!",
                     }
 
                 self._send_json({

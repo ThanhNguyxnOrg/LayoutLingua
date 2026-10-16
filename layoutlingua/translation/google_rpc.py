@@ -139,19 +139,59 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
 
     def translate_batch(self, request: BatchTranslationRequest) -> BatchTranslationResult:
         translations: Dict[str, str] = {}
+        s_lang = "auto" if request.source_language in ("auto", "") else request.source_language
+        t_lang = "vi" if request.target_language in ("vi", "vietnamese") else request.target_language
+        if s_lang == "english":
+            s_lang = "en"
+
+        # Pack multiple segments with delimiter to minimize HTTP round-trips and avoid rate limits
+        DELIMITER = "\n⟦SPLIT_SEP⟧\n"
+        MAX_PACK_CHARS = 2800
+
+        current_pack: list[tuple[str, str]] = []
+        current_len = 0
+
+        def _flush_pack(pack: list[tuple[str, str]]) -> None:
+            if not pack:
+                return
+            if len(pack) == 1:
+                seg_id, raw_t = pack[0]
+                try:
+                    translations[seg_id] = self._translate_single(raw_t, s_lang, t_lang)
+                except Exception:
+                    translations[seg_id] = raw_t
+                return
+
+            joined_text = DELIMITER.join(item[1] for item in pack)
+            try:
+                translated_joined = self._translate_single(joined_text, s_lang, t_lang)
+                split_parts = translated_joined.split("⟦SPLIT_SEP⟧")
+                if len(split_parts) == len(pack):
+                    for (seg_id, _), part in zip(pack, split_parts):
+                        translations[seg_id] = _sanitize_translated_tokens(part.strip())
+                    return
+            except Exception:
+                pass
+
+            # Fallback: if delimiter split count differs or error, translate individually
+            for seg_id, raw_t in pack:
+                try:
+                    translations[seg_id] = self._translate_single(raw_t, s_lang, t_lang)
+                except Exception:
+                    translations[seg_id] = raw_t
+
         for seg in request.segments:
             raw_text = seg.masked_text
-            try:
-                translated = self._translate_single(
-                    text=raw_text,
-                    src_lang=request.source_language,
-                    tgt_lang=request.target_language,
-                )
-                translations[seg.segment_id] = translated
-            except Exception:
-                # If a single segment fails or network drops, fallback to segment text
-                translations[seg.segment_id] = raw_text
+            seg_len = len(raw_text)
+            if current_len + seg_len + len(DELIMITER) > MAX_PACK_CHARS and current_pack:
+                _flush_pack(current_pack)
+                current_pack = [(seg.segment_id, raw_text)]
+                current_len = seg_len
+            else:
+                current_pack.append((seg.segment_id, raw_text))
+                current_len += seg_len + len(DELIMITER)
 
-        return BatchTranslationResult(
-            translations=translations,
-        )
+        if current_pack:
+            _flush_pack(current_pack)
+
+        return BatchTranslationResult(translations=translations)
