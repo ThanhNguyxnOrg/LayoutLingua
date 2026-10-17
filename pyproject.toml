@@ -31,7 +31,7 @@ dependencies = [
 vision = [
     "onnxruntime>=1.24.3",
     "opencv-python-headless>=5.0.0.93",
-    "shapely>=2.0.0",
+    "shapely>=2.1.2",
 ]
 ocr = [
     "rapidocr-onnxruntime>=1.4.4",
@@ -39,7 +39,7 @@ ocr = [
 all = [
     "onnxruntime>=1.24.3",
     "opencv-python-headless>=5.0.0.93",
-    "shapely>=2.0.0",
+    "shapely>=2.1.2",
     "rapidocr-onnxruntime>=1.4.4",
 ]
 dev = [
