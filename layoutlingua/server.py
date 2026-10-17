@@ -432,11 +432,13 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
             curr_speed = round(done_segs / elapsed, 1)
             rem_segs = max(0, total_segs - done_segs)
             calc_eta = int(rem_segs / max(curr_speed, 0.1)) + int(total_p * 0.25)
+            # Estimate current page from segment completion ratio
+            est_page = max(1, min(total_p, int((done_segs / max(1, total_segs)) * total_p)))
             with _LOCK:
                 session["progress"] = {
                     "stage_index": 2,
                     "stage_name": "Translating text blocks",
-                    "current_page": 0,
+                    "current_page": est_page,
                     "total_pages": total_p,
                     "segments_done": done_segs,
                     "segments_total": total_segs,
@@ -502,17 +504,20 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                 session["is_translating"] = False
             return
 
+        elapsed_after_trans = max(0.2, time.time() - start_time)
+        trans_speed = round(total_segs / elapsed_after_trans, 1)
+
         with _LOCK:
             session["progress"] = {
                 "stage_index": 2,
                 "stage_name": "Translating text blocks",
-                "current_page": 0,
+                "current_page": total_p,
                 "total_pages": total_p,
                 "segments_done": total_segs,
                 "segments_total": total_segs,
                 "overall_pct": 52,
                 "status": "processing",
-                "speed": curr_speed,
+                "speed": trans_speed,
                 "speed_unit": "seg/s",
                 "eta_seconds": int(total_p * 0.25),
                 "message": "Applying academic terminology glossaries...",
