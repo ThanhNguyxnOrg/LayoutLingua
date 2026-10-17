@@ -35,12 +35,12 @@ function PageNavigator({
   }, [current])
 
   return (
-    <aside aria-label="Pages" className="flex h-full max-h-full w-[132px] min-h-0 shrink-0 flex-col border-r border-line bg-white select-none overflow-hidden">
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-line px-3">
+    <aside aria-label="Pages" className="flex h-full max-h-full w-[138px] min-h-0 shrink-0 flex-col border-r border-line bg-white select-none overflow-hidden">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-line px-3 bg-canvas/30">
         <h2 className="text-[13px] font-bold">Pages</h2>
         <span className="font-mono text-[12px] text-muted">{current} / {total}</span>
       </div>
-      <ol className="flex-1 min-h-0 space-y-3 overflow-y-auto px-3 py-4 select-none">
+      <ol className="flex-1 min-h-0 space-y-3 px-2 py-4 select-none custom-scrollbar">
         {pageList.map((p) => {
           const s = known(p)
           const active = p.n === current
@@ -823,7 +823,7 @@ export default function Workspace({
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <AppHeader
         center={<div className="flex min-w-0 items-center gap-3 overflow-hidden">
           <IconFile className="size-4 shrink-0 text-teal" />
