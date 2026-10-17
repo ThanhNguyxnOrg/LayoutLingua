@@ -5,6 +5,33 @@ All notable changes to the LayoutLingua project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-10-17
+
+### Added
+- **TOC & Sibling List Font Harmonization (pdf2zh & BabelDOC Pattern)**:
+  - Harmonizes font sizes across sibling Table of Contents entries and numbered list items to prevent ragged font disparity (alternating between 12pt and 8pt).
+  - Dynamically adapts dot leaders (`.....`) using the LaTeX `\dotfill` algorithm to ensure page numbers align cleanly to the right margin.
+- **True Bold Font Typography & Heading Casing Preservation**:
+  - Bundled version-pinned `DejaVuSans-Bold.ttf` asset with complete Unicode glyph coverage for mathematical symbols and composite Vietnamese diacritics.
+  - Implemented `resolve_block_font` in `TypesetEngine` to dynamically map bold spans to actual bold font files.
+  - Automatically preserves uppercase heading casing (`V. LƯỢNG GIÁC` -> `V. TRIGONOMETRY`) to maintain document hierarchy.
+- **One-Click Quality Diagnostic Export ("Copy log")**:
+  - Added dedicated copy button in the Quality checks tab with copy-to-clipboard state feedback to export complete structured warning logs for LLM triage.
+- **Dual Number Page Range Selector**:
+  - Direct numeric page inputs ("From page" and "To page") with automatic boundary clamping and bidirectional validation.
+- **Autonomous CI/CD & Core Team Triage Pipeline**:
+  - Fixed multi-platform CI test suite (`test.yml`) running 245 unit and integration tests across Ubuntu, Windows, and macOS with `pytest`.
+  - Standardized automated merge and triage workflow (`auto-merge.yml`) powered by `ThanhNguyxnAgent` with 100% English messaging.
+  - Automatic tagging and review assignment to `@ThanhNguyxnOrg/core` (`@RealThanhNguyxn`, `@ThanhNguyxn07`) for critical PRs.
+
+### Fixed
+- **False Formula Collision Rejections**:
+  - Resolved false collision warnings on compound blocks (e.g. Page 21) by inspecting span-level `tight_line_rects` rather than layout-wide bounding boxes.
+- **Single-Line Math Label Truncation**:
+  - Enabled elastic font scaling down to 0.58x (5.5pt) for single-line math labels (e.g. Page 23) to eliminate multi-line wrapping overflow warnings.
+- **Repository Auto-Merge Capability**:
+  - Enabled native GitHub pull request auto-merge on repository settings and cleanly merged all open Dependabot PRs.
+
 ## [2.0.0] - 2026-10-16
 
 ### Added
