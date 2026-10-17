@@ -246,7 +246,7 @@ function ProcessingPanel({
       <div>
         <div className="flex items-baseline justify-between">
           <p className="text-[14px] font-bold">Translating</p>
-          <span className="font-mono text-[12.5px] text-muted">{subtitle || `page ${Math.min(done + 1, total)} of ${total}`}</span>
+          <span className="font-mono text-[12.5px] text-muted">{subtitle || `page ${Math.max(1, Math.min(done || 1, total))} of ${total}`}</span>
         </div>
         <div className="mt-2">
           <ProgressBar
@@ -842,7 +842,7 @@ export default function Workspace({
           width={width}
           height={height}
           busy={true}
-          title={`Translating document (Page ${Math.min(done + 1, totalPages)} of ${totalPages})`}
+          title={`Translating document (Page ${Math.max(1, Math.min(done || 1, totalPages))} of ${totalPages})`}
           body={telemetry.message || "Extracting equations, translating prose with neural MT, and typesetting layout..."}
         />
       )
