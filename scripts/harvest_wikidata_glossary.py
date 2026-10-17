@@ -41,6 +41,13 @@ DOMAIN_ROOTS: dict[str, list[str]] = {
         "wd:Q28865",    # algebraic topology
         "wd:Q131476",   # graph theory
         "wd:Q25261",    # calculus
+        "wd:Q1414",     # combinatorics (permutations, combinations, k-permutations...)
+        "wd:Q8084",     # trigonometry (trigonometric functions, identities...)
+        "wd:Q11205",    # arithmetic (divisibility, average, powers...)
+        "wd:Q12479",    # number theory (primes, factors...)
+        "wd:Q36161",    # analytic geometry (power of a point, conics...)
+        "wd:Q41171",    # progression / sequence (arithmetic progression, geometric progression)
+        "wd:Q3175599",  # mathematical identity / formula
     ],
     "cs": [
         "wd:Q21198",    # computer science
