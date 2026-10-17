@@ -70,6 +70,9 @@ def resolve_block_font(base_font: str, block: TextBlock) -> str:
             return "hebo"
         if base_lower in ("couri", "courier"):
             return "cobo"
+        if "dejavu" in base_lower:
+            return "DejaVuSans-Bold"
+        return f"{base_font}-Bold"
     return base_font
 
 
@@ -260,6 +263,7 @@ class TypesetEngine:
             staging_doc.insert_pdf(source_doc, from_page=source_page_index, to_page=source_page_index)
             scratch_page = staging_doc[0]
             self.font_manager.register_on_page(scratch_page, font_name=self.options.font_name)
+            self.font_manager.register_on_page(scratch_page, font_name=f"{self.options.font_name}-Bold")
 
             page_summary = PageFittingSummary(page_number=page_number)
             page_replaced_ratios: list[float] = []
@@ -444,6 +448,12 @@ class TypesetEngine:
                     )
                     continue
 
+                # Preserve uppercase heading casing (e.g. "V. LƯỢNG GIÁC" -> "V. TRIGONOMETRY")
+                source_clean = block.text.strip()
+                source_letters = "".join(c for c in source_clean if c.isalpha())
+                if source_letters and source_letters.isupper() and len(source_letters) >= 2:
+                    translated_text = translated_text.upper()
+
                 if translated_text.strip() == block.text.strip():
                     page_summary.skipped_blocks += 1
                     if is_cell:
@@ -518,14 +528,7 @@ class TypesetEngine:
                         scratch_page=scratch_page,
                     )
 
-                # Adapt Table of Contents dot leaders so both test_fit and page insertion use the compacted text
                 target_w = max(10.0, target_layout_box[2] - target_layout_box[0])
-                translated_text = self._fit_tester.adapt_dot_leader_if_needed(
-                    text=translated_text,
-                    target_width=target_w,
-                    font_size=orig_font_size,
-                    font_name=block_font,
-                )
 
                 fits, final_font_size, overflow_cause, line_count, effective_lineheight = self._fit_tester.test_fit(
                     rect=target_layout_box,
@@ -609,6 +612,50 @@ class TypesetEngine:
                         )
                     )
 
+            # 7b. SOTA Font Harmonization (pdf2zh / BabelDOC pattern):
+            # Harmonize sibling items in Table of Contents or numbered lists on the same page
+            # so adjacent lines do not suffer from ragged font size disparity (e.g. 12pt alternating with 8pt).
+            if fitting_plan:
+                from layoutlingua.typesetting.fitting import TOC_LEADER_PATTERN
+
+                toc_indices = [
+                    idx for idx, item in enumerate(fitting_plan)
+                    if TOC_LEADER_PATTERN.match(item[2].strip())
+                ]
+                if len(toc_indices) >= 2:
+                    toc_sizes = [fitting_plan[i][5] for i in toc_indices]
+                    min_sz = min(toc_sizes)
+                    max_sz = max(toc_sizes)
+                    if (max_sz - min_sz) > 1.2:
+                        harmonized_sz = max(min_sz, 7.5)
+                        new_plan = list(fitting_plan)
+                        for i in toc_indices:
+                            item = new_plan[i]
+                            t_box = item[8]
+                            t_w = max(10.0, t_box[2] - t_box[0])
+                            re_adapted_text = self._fit_tester.adapt_dot_leader_if_needed(
+                                text=item[2],
+                                target_width=t_w,
+                                font_size=harmonized_sz,
+                                font_name=item[12],
+                            )
+                            new_plan[i] = (
+                                item[0],
+                                item[1],
+                                re_adapted_text,
+                                item[3],
+                                item[4],
+                                harmonized_sz,
+                                item[6],
+                                item[7],
+                                item[8],
+                                item[9],
+                                item[10],
+                                item[11],
+                                item[12],
+                            )
+                        fitting_plan = new_plan
+
             # 8. Apply selective redaction ONLY on approved, fitting candidates
             if fitting_plan:
                 for block, tight_line_rects, *rest in fitting_plan:
@@ -643,7 +690,7 @@ class TypesetEngine:
                     fontfile_arg = (
                         None
                         if block_font.lower() in BUILTIN_OR_CJK_FONTS
-                        else str(self.font_manager.font_path)
+                        else str(self.font_manager.get_font_path(block_font))
                     )
                     rc = scratch_page.insert_textbox(
                         rect,

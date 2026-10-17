@@ -254,7 +254,7 @@ class TestAcademicE2EPipeline(unittest.TestCase):
         # --- Assertions on Page 2 ---
         p2_text = res_doc[1].get_text()
         # Heading must be translated
-        self.assertIn("2. Trigonometric Formulas", p2_text)
+        self.assertTrue("2. Trigonometric Formulas" in p2_text or "2. TRIGONOMETRIC FORMULAS" in p2_text)
         # Display formulas must be intact
         self.assertIn("sin(-α) = -sin α", p2_text)
         self.assertIn("cos(-α) = cos α", p2_text)
@@ -266,7 +266,7 @@ class TestAcademicE2EPipeline(unittest.TestCase):
 
         # --- Assertions on Page 3 ---
         p3_text = res_doc[2].get_text()
-        self.assertIn("3. Analytic Geometry", p3_text)
+        self.assertTrue("3. Analytic Geometry" in p3_text or "3. ANALYTIC GEOMETRY" in p3_text)
         self.assertIn("vec{a}", p3_text)
 
         # --- Global Invariants across ALL pages ---

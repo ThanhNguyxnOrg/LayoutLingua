@@ -9,8 +9,8 @@ import pymupdf
 from layoutlingua.typesetting.fonts import BUILTIN_OR_CJK_FONTS, FontManager
 from layoutlingua.typesetting.models import OverflowCause, TypesetOptions
 
-# Standard Table of Contents dot leader pattern: Title + at least 3 dots/dashes + page number
-TOC_LEADER_PATTERN = re.compile(r"^(.*?)(\s*[\.\:\-_–—…]{3,}\s*)(\d+)$")
+# Standard Table of Contents dot leader pattern: Title + at least 2 dots/dashes + page number
+TOC_LEADER_PATTERN = re.compile(r"^(.*?)(\s*[\.\:\-_–—…]{2,}\s*)(\d+)$")
 
 
 class TextFitTester:
@@ -22,6 +22,7 @@ class TextFitTester:
         self._doc = pymupdf.open()
         self._page = self._doc.new_page(width=1000, height=1000)
         self.font_manager.register_on_page(self._page, font_name=self.font_name)
+        self.font_manager.register_on_page(self._page, font_name=f"{self.font_name}-Bold")
 
     def adapt_dot_leader_if_needed(
         self,
@@ -45,18 +46,18 @@ class TextFitTester:
         suffix = match.group(3).lstrip()
 
         active_font = font_name or self.font_name
-        prefix_len = self.font_manager.measure_text_length(prefix, font_size)
-        suffix_len = self.font_manager.measure_text_length(suffix, font_size)
-        space_len = self.font_manager.measure_text_length(" ", font_size)
-        dot_len = max(1.0, self.font_manager.measure_text_length(".", font_size))
+        prefix_len = self.font_manager.measure_text_length(prefix, font_size, active_font)
+        suffix_len = self.font_manager.measure_text_length(suffix, font_size, active_font)
+        space_len = self.font_manager.measure_text_length(" ", font_size, active_font)
+        dot_len = max(1.0, self.font_manager.measure_text_length(".", font_size, active_font))
 
         # Available width for dot leader with a safety cushion of 8.0pt
         avail_width = target_width - prefix_len - suffix_len - (2 * space_len) - 8.0
         if avail_width <= dot_len * 2:
-            return f"{prefix} .. {suffix}"
+            return f"{prefix} ... {suffix}"
 
         num_dots = int(avail_width / dot_len)
-        num_dots = max(2, min(num_dots, 120))
+        num_dots = max(3, min(num_dots, 120))
         dots_str = "." * num_dots
         return f"{prefix} {dots_str} {suffix}"
 
@@ -88,18 +89,23 @@ class TextFitTester:
         active_font = font_name or self.font_name
 
         is_toc = bool(TOC_LEADER_PATTERN.match(text.strip()))
+        is_single_line = (height <= 1.8 * orig_font_size) or is_toc
 
-        # For Table of Contents dot-leader lines, allow flexible font floor (down to 0.58x or 5.5pt)
+        # For Table of Contents dot-leader lines and single-line labels, allow flexible font floor (down to 0.58x or 5.5pt)
         # to prevent catastrophic 2-line wrapping in a 1-line bounding box.
-        effective_min_scale = min(options.min_font_scale, 0.58) if is_toc else options.min_font_scale
-        effective_min_pt = min(options.min_font_pt, 5.5) if is_toc else options.min_font_pt
+        effective_min_scale = min(options.min_font_scale, 0.58) if (is_single_line or is_toc) else options.min_font_scale
+        effective_min_pt = (
+            min(options.min_font_pt, 5.5)
+            if (is_single_line or is_toc) and options.min_font_pt <= 6.0
+            else options.min_font_pt
+        )
         min_font_size = max(effective_min_pt, effective_min_scale * orig_font_size)
         test_rect = pymupdf.Rect(x0, y0, x1, y1)
 
         fontfile_arg = (
             None
             if active_font.lower() in BUILTIN_OR_CJK_FONTS
-            else str(self.font_manager.font_path)
+            else str(self.font_manager.get_font_path(active_font))
         )
 
         def get_text_for_size(sz: float) -> str:
@@ -123,7 +129,7 @@ class TextFitTester:
 
         # 1b. Single-line ink-height accommodation:
         # If text fits horizontally on a single line and the overflow is purely vertical padding deficit (within 60% of font size):
-        text_advance = self.font_manager.measure_text_length(text_orig, orig_font_size)
+        text_advance = self.font_manager.measure_text_length(text_orig, orig_font_size, active_font)
         if text_advance <= (width * 1.02) and abs(rc_orig) <= (orig_font_size * 0.60):
             return True, orig_font_size, OverflowCause.NONE, 1, effective_lineheight
 

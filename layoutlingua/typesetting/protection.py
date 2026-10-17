@@ -560,7 +560,9 @@ class ClearancePlanner:
                     return (x_ov > 2.5) and (y_ov > 2.5)
 
                 intersects_line = any(has_destructive_formula_overlap(line_rect, zone.bbox) for line_rect in tight_line_rects)
-                intersects_box = has_destructive_formula_overlap(layout_box, zone.bbox)
+                # When tight_line_rects are available, they accurately represent the actual text glyphs.
+                # Only check layout_box if tight_line_rects is empty (fallback).
+                intersects_box = has_destructive_formula_overlap(layout_box, zone.bbox) if not tight_line_rects else False
                 if intersects_line or intersects_box:
                     return CollisionDetail(
                         collision_type=ExclusionZoneType.FORMULA.value,

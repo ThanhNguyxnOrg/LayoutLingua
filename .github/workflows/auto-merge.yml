@@ -18,12 +18,12 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 jobs:
   auto-merge-safe-updates:
-    name: Auto-Merge Safe Routine Updates
+    name: Auto-Merge and Triage
     runs-on: ubuntu-latest
-    # Guard: Strictly limited to non-critical updates and trusted bots/labels
     if: >
       !github.event.pull_request.draft &&
       (
@@ -34,6 +34,7 @@ jobs:
     steps:
       - name: 🤖 Generate GitHub App Token
         id: app-token
+        continue-on-error: true
         uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.BOT_APP_ID }}
@@ -42,25 +43,47 @@ jobs:
       - name: 🔍 Inspect Dependabot Metadata (if Dependabot)
         if: github.actor == 'dependabot[bot]'
         id: dependabot-metadata
-        uses: dependabot/fetch-metadata@v2
+        continue-on-error: true
+        uses: dependabot/fetch-metadata@v3
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      # Reject auto-merging if Dependabot proposes a major breaking update
-      - name: 🛡️ Block Auto-Merge for Major Breaking Changes
-        if: >
-          github.actor == 'dependabot[bot]' &&
-          steps.dependabot-metadata.outputs.update-type == 'version-update:semver-major'
+      # Check if this PR is marked or classified as critical / requiring manual review
+      - name: 🛡️ Check Review Requirement
+        id: review-gate
         run: |
-          echo "⚠️ Dependabot proposed a major version update. Manual human review required!"
-          exit 0
+          IS_CRITICAL="false"
+          LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
+          
+          # Check if explicitly labeled with review tags
+          if echo "$LABELS" | grep -Ei 'needs-review|critical|breaking-change|manual-review|do-not-merge'; then
+            IS_CRITICAL="true"
+          fi
+          
+          echo "is_critical=$IS_CRITICAL" >> $GITHUB_OUTPUT
 
-      - name: ✅ Approve and Enable Auto-Merge via ThanhNguyxnAgent
+      # If marked critical/needs-review: assign and tag core team, disable auto-merge
+      - name: 👥 Assign & Tag Core Team for Critical PR
+        if: steps.review-gate.outputs.is_critical == 'true'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
-          echo "Approving safe non-critical PR: $PR_URL"
-          gh pr review "$PR_URL" --approve --body "Auto-approved by ThanhNguyxnAgent: safe routine non-critical update." || true
+          echo "⚠️ Critical PR detected. Tagging core team for triage & review..."
+          gh pr edit "$PR_URL" --add-label "needs-review,task" || true
+          gh pr edit "$PR_URL" --add-assignee "RealThanhNguyxn,ThanhNguyxn07" || true
+          gh pr edit "$PR_URL" --add-reviewer "RealThanhNguyxn,ThanhNguyxn07" || true
+          gh pr comment "$PR_URL" --body "🔔 **Giao việc / Cần Review:** @ThanhNguyxnOrg/core (@RealThanhNguyxn @ThanhNguyxn07) PR này được đánh dấu quan trọng/cần review thủ công. Tính năng auto-merge đã tạm dừng trên PR này để chờ core team duyệt." || true
+          exit 0
+
+      # Routine safe updates: approve and enable auto-merge once 3-OS CI passes
+      - name: ✅ Approve and Enable Auto-Merge via ThanhNguyxnAgent
+        if: steps.review-gate.outputs.is_critical != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          echo "Approving routine update: $PR_URL"
+          gh pr review "$PR_URL" --approve --body "Auto-approved: safe routine update." || true
           echo "Enabling auto-merge (squash) once 3-OS CI tests pass..."
-          gh pr merge "$PR_URL" --auto --squash --delete-branch
+          gh pr merge "$PR_URL" --auto --squash --delete-branch || true

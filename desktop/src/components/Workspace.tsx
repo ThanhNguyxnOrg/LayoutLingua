@@ -4,7 +4,7 @@ import PdfPage, { PAGE_W } from './PdfPage'
 import { AppHeader } from './shell'
 import ExportDialog from './ExportDialog'
 import { Button, IconButton, IssueRow, ProgressBar, StateNotice, StatusIndicator, sevMeta, type DocState } from './ui'
-import { IconAlert, IconCheck, IconChevL, IconChevR, IconColumns, IconDownload, IconError, IconFit, IconLayers, IconMinus, IconPanelR, IconPlus, IconSwap, IconX, IconFile, IconSettings } from './icons'
+import { IconAlert, IconCheck, IconChevL, IconChevR, IconColumns, IconDownload, IconError, IconFit, IconLayers, IconMinus, IconPanelR, IconPlus, IconSwap, IconX, IconFile, IconSettings, IconCopy } from './icons'
 import { useSettings, type AppSettings, type ProviderType } from '../services/settings'
 import { apiUrl } from '../services/api'
 import { updateHistoryStatus } from '../services/history'
@@ -374,6 +374,35 @@ function Inspector(p: {
     p.setPageRange(validF === 1 && validT === p.total ? 'all' : `${validF}-${validT}`)
   }
 
+  const [copiedIssues, setCopiedIssues] = useState(false)
+  const handleCopyIssues = () => {
+    if (p.visibleIssues.length === 0) return
+    const failures = p.visibleIssues.filter((i) => i.severity === 'failure').length
+    const warnings = p.visibleIssues.filter((i) => i.severity === 'warning').length
+    const notices = p.visibleIssues.filter((i) => i.severity === 'info').length
+
+    const lines: string[] = [
+      `=== LayoutLingua Quality Checks Report ===`,
+      `Total items: ${p.visibleIssues.length} (${failures} failures, ${warnings} warnings, ${notices} notices)`,
+      `Generated at: ${new Date().toLocaleString()}`,
+      `------------------------------------------`,
+      '',
+    ]
+
+    p.visibleIssues.forEach((iss, idx) => {
+      lines.push(`#${idx + 1} [Page ${iss.page}] ${iss.severity.toUpperCase()} - ${iss.code || 'ISSUE'}`)
+      lines.push(`Title: ${iss.title}`)
+      if (iss.detail) lines.push(`Detail: ${iss.detail}`)
+      if (iss.region) lines.push(`Region / ID: ${iss.region}`)
+      lines.push('')
+    })
+
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      setCopiedIssues(true)
+      setTimeout(() => setCopiedIssues(false), 2500)
+    }).catch(() => {})
+  }
+
   const selectedCount = Math.max(1, toPage - fromPage + 1)
   const isAllPages = fromPage === 1 && toPage === p.total
   return (
@@ -655,11 +684,21 @@ function Inspector(p: {
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-4 border-b border-line px-4 py-3 text-[12px]">
-                {(['failure', 'warning', 'info'] as const).map((s) => {
-                  const m = sevMeta[s]; const n = p.visibleIssues.filter((i) => i.severity === s).length
-                  return <span key={s} className={`flex items-center gap-1 font-semibold ${m.text}`}><m.Icon className="size-3.5" />{n} {s === 'failure' ? 'failure' : s === 'warning' ? (n === 1 ? 'warning' : 'warnings') : 'notice'}</span>
-                })}
+              <div className="flex items-center justify-between border-b border-line px-4 py-2.5 text-[12px]">
+                <div className="flex items-center gap-3">
+                  {(['failure', 'warning', 'info'] as const).map((s) => {
+                    const m = sevMeta[s]; const n = p.visibleIssues.filter((i) => i.severity === s).length
+                    return <span key={s} className={`flex items-center gap-1 font-semibold ${m.text}`}><m.Icon className="size-3.5" />{n} {s === 'failure' ? 'failure' : s === 'warning' ? (n === 1 ? 'warning' : 'warnings') : 'notice'}</span>
+                  })}
+                </div>
+                <button
+                  onClick={handleCopyIssues}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-ink bg-white hover:bg-canvas border border-line-strong rounded-md transition-colors shadow-2xs"
+                  title="Copy full issues report to clipboard"
+                >
+                  {copiedIssues ? <IconCheck className="size-3.5 text-teal" /> : <IconCopy className="size-3.5 text-muted" />}
+                  <span>{copiedIssues ? 'Copied log!' : 'Copy log'}</span>
+                </button>
               </div>
               {p.visibleIssues.map((i) => <IssueRow key={i.id} index={issues.indexOf(i) + 1} issue={i} active={p.activeIssue === i.id} onOpen={() => p.openIssue(i)} />)}
               <p className="px-4 py-3 text-[12px] text-faint">Items stay listed until the underlying page changes. Opening an item does not resolve it.</p>

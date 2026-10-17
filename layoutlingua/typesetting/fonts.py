@@ -48,21 +48,44 @@ class FontManager:
                 f"Bundled Unicode font asset not found at: {self._font_path}"
             )
 
+        self._bold_font_path = (
+            self._font_path.parent / "DejaVuSans-Bold.ttf"
+        ).resolve()
+
         self._font_buffer: bytes | None = None
         self._font_obj: pymupdf.Font | None = None
+        self._bold_font_buffer: bytes | None = None
+        self._bold_font_obj: pymupdf.Font | None = None
 
     @property
     def font_path(self) -> Path:
         return self._font_path
 
-    def get_font_buffer(self) -> bytes:
-        """Return raw font bytes, cached in memory."""
+    def get_font_path(self, font_name: str | None = None) -> Path:
+        """Return the filesystem path for the requested font variant (regular or bold)."""
+        if font_name and ("bold" in font_name.lower() or "hebo" in font_name.lower()):
+            if self._bold_font_path.is_file():
+                return self._bold_font_path
+        return self._font_path
+
+    def get_font_buffer(self, font_name: str | None = None) -> bytes:
+        """Return raw font bytes for regular or bold variant, cached in memory."""
+        if font_name and ("bold" in font_name.lower() or "hebo" in font_name.lower()):
+            if self._bold_font_path.is_file():
+                if self._bold_font_buffer is None:
+                    self._bold_font_buffer = self._bold_font_path.read_bytes()
+                return self._bold_font_buffer
         if self._font_buffer is None:
             self._font_buffer = self._font_path.read_bytes()
         return self._font_buffer
 
-    def get_font(self) -> pymupdf.Font:
-        """Return cached PyMuPDF Font instance."""
+    def get_font(self, font_name: str | None = None) -> pymupdf.Font:
+        """Return cached PyMuPDF Font instance for regular or bold variant."""
+        if font_name and ("bold" in font_name.lower() or "hebo" in font_name.lower()):
+            if self._bold_font_path.is_file():
+                if self._bold_font_obj is None:
+                    self._bold_font_obj = pymupdf.Font(fontbuffer=self.get_font_buffer(font_name))
+                return self._bold_font_obj
         if self._font_obj is None:
             self._font_obj = pymupdf.Font(fontbuffer=self.get_font_buffer())
         return self._font_obj
@@ -93,9 +116,9 @@ class FontManager:
 
         return configured_ratio
 
-    def measure_text_length(self, text: str, fontsize: float) -> float:
+    def measure_text_length(self, text: str, fontsize: float, font_name: str | None = None) -> float:
         """Measure horizontal advance width of a string in points."""
-        return float(self.get_font().text_length(text, fontsize=fontsize))
+        return float(self.get_font(font_name).text_length(text, fontsize=fontsize))
 
     def verify_checksum(self, expected_sha256: str = EXPECTED_DEJAVU_SHA256) -> bool:
         """Verify font file integrity against expected SHA-256 hash."""
@@ -128,6 +151,11 @@ class FontManager:
     def register_on_page(self, page: Any, font_name: str = "DejaVuSans") -> str:
         """Register the font asset into the given PyMuPDF page resource dictionary."""
         if font_name.lower() in BUILTIN_OR_CJK_FONTS:
+            return font_name
+        is_bold = "bold" in font_name.lower()
+        if is_bold and self._bold_font_path.is_file():
+            buf = self.get_font_buffer(font_name)
+            page.insert_font(fontname=font_name, fontbuffer=buf)
             return font_name
         buf = self.get_font_buffer()
         page.insert_font(fontname=font_name, fontbuffer=buf)
