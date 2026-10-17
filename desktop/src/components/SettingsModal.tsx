@@ -26,6 +26,19 @@ export default function SettingsModal({
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([])
   const [fetchingModels, setFetchingModels] = useState(false)
 
+  // Keep modal provider in perfect two-way sync if changed externally
+  useEffect(() => {
+    setSettings((prev) => (prev.provider !== globalSettings.provider ? { ...prev, provider: globalSettings.provider } : prev))
+  }, [globalSettings.provider])
+
+  const handleSelectProvider = (newProvider: ProviderType) => {
+    setSettings((prev) => {
+      const next = { ...prev, provider: newProvider }
+      updateGlobalSettings(next)
+      return next
+    })
+  }
+
   const fetchModels = async () => {
     setFetchingModels(true)
     try {
@@ -177,7 +190,7 @@ export default function SettingsModal({
                         name="provider"
                         value={p.id}
                         checked={settings.provider === p.id}
-                        onChange={() => setSettings({ ...settings, provider: p.id as ProviderType })}
+                        onChange={() => handleSelectProvider(p.id as ProviderType)}
                         className="accent-teal size-4"
                       />
                     </div>
