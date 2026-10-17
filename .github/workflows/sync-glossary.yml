@@ -1,0 +1,94 @@
+name: Sync Multilingual STEM Glossaries
+
+# Automated ontology harvester powered by ThanhNguyxnAgent.
+# Crawls Wikidata and Wikimedia Open Knowledge Graph on a scheduled basis
+# to synchronize standardized academic and scientific terminology across all 17 languages.
+
+on:
+  schedule:
+    # Run bi-weekly on the 1st and 15th of each month at 03:00 UTC
+    - cron: '0 3 1,15 * *'
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: 'STEM domain to harvest (all, math, cs, physics, chemistry, biology, statistics)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - math
+          - cs
+          - physics
+          - chemistry
+          - biology
+          - statistics
+      limit_per_root:
+        description: 'Maximum terms to harvest per ontology root'
+        required: true
+        default: '120'
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  harvest-and-sync:
+    name: Harvest Wikidata STEM Ontologies
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🤖 Generate GitHub App Token (ThanhNguyxnAgent)
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.BOT_APP_ID || secrets.THANHNGUYXNAGENT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY || secrets.THANHNGUYXNAGENT_PRIVATE_KEY }}
+
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
+      - name: 🐍 Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: 📦 Install Test Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: 🌐 Run Automated Wikidata Glossary Crawler
+        run: |
+          DOMAIN="${{ github.event.inputs.domain || 'all' }}"
+          LIMIT="${{ github.event.inputs.limit_per_root || '120' }}"
+          echo "Starting automated web crawl for domain: $DOMAIN (limit: $LIMIT)"
+          python scripts/harvest_wikidata_glossary.py --domain "$DOMAIN" --limit-per-root "$LIMIT"
+
+      - name: 🧪 Validate Integrity & Glossary Unit Tests
+        run: |
+          pytest -v tests/test_glossary.py
+
+      - name: 🚀 Commit and Push Updates via ThanhNguyxnAgent
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          # Check for changes in glossary resources
+          if git status --porcelain layoutlingua/resources/glossary/ | grep -q .; then
+            echo "New terminology detected! Preparing commit..."
+            git config user.name "ThanhNguyxnAgent[bot]"
+            git config user.email "thanhnguyxnagent[bot]@users.noreply.github.com"
+            git add layoutlingua/resources/glossary/
+            
+            DATE_STR=$(date -u +"%Y-%m-%d")
+            git commit -m "chore(glossary): automated bi-weekly terminology sync from Wikidata [skip ci] ($DATE_STR)"
+            git push origin HEAD:main
+            echo "✅ Successfully synced and pushed new terminology to main branch."
+          else
+            echo "✨ No new terminology updates found on Wikidata. Repository is already up to date."
+          fi
