@@ -168,7 +168,7 @@ function IntegrityStrip({
       <div className="w-[220px] shrink-0">
         <div className="mb-1.5 flex items-center justify-between text-[12px]">
           <span className="font-bold">Document integrity</span>
-          <span className="font-mono text-muted">{phase === 'idle' ? 'not started' : `${done}/${total} pages`}</span>
+          <span className="font-mono text-muted">{phase === 'idle' ? 'not started' : `${done}/${total} verified`}</span>
         </div>
         {isLarge ? (
           <div className="h-2.5 w-full overflow-hidden rounded-[2px] bg-line flex">
@@ -235,7 +235,16 @@ function ProcessingPanel({
 
   useEffect(() => {
     if (eta != null && eta > 0) {
-      setCountdownSec(eta)
+      setCountdownSec((prev) => {
+        if (prev == null) return eta
+        // Hysteresis: only update countdownSec if delta > 3 seconds, avoiding jitter from polling
+        if (Math.abs(prev - eta) > 3) {
+          return Math.round(0.35 * eta + 0.65 * prev)
+        }
+        return prev
+      })
+    } else if (eta === 0) {
+      setCountdownSec(0)
     }
   }, [eta])
 
@@ -262,7 +271,9 @@ function ProcessingPanel({
       <div>
         <div className="flex items-baseline justify-between">
           <p className="text-[14px] font-bold">Translating</p>
-          <span className="font-mono text-[12.5px] text-muted">{subtitle || `page ${Math.max(1, Math.min(done || 1, total))} of ${total}`}</span>
+          <span className="font-mono text-[12.5px] text-muted">
+            {subtitle || (overallPct != null ? `${overallPct}%` : `page ${Math.max(1, Math.min(done || 1, total))} of ${total}`)}
+          </span>
         </div>
         <div className="mt-2">
           <ProgressBar
@@ -721,7 +732,9 @@ export default function Workspace({
               if (pData.integrity) {
                 setIntegrity(pData.integrity)
               }
-              if (pData.stage_index === 2 && pData.segments_total) {
+              if (pData.subtitle) {
+                setProgressSubtitle(pData.subtitle)
+              } else if (pData.stage_index === 2 && pData.segments_total) {
                 setProgressSubtitle(`segment ${pData.segments_done || 0} of ${pData.segments_total}`)
               } else if (pData.current_page > 0) {
                 setProgressSubtitle(`page ${pData.current_page} of ${pData.total_pages}`)
@@ -909,12 +922,15 @@ export default function Workspace({
       )
     }
     if (phase === 'processing') {
+      const placeholderTitle = progressSubtitle
+        ? `Translating document (${progressSubtitle})`
+        : `Translating document (${overallPct != null ? `${overallPct}%` : `Page ${Math.max(1, Math.min(done || 1, totalPages))} of ${totalPages}`})`
       return (
         <OutputPlaceholder
           width={width}
           height={height}
           busy={true}
-          title={`Translating document (Page ${Math.max(1, Math.min(done || 1, totalPages))} of ${totalPages})`}
+          title={placeholderTitle}
           body={telemetry.message || "Extracting equations, translating prose with neural MT, and typesetting layout..."}
         />
       )

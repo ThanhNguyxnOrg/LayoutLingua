@@ -430,31 +430,14 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
             shielded_chunks.append(shielded_chunk)
 
         from layoutlingua.translation.concurrent_pool import concurrent_batch_translate
+        from layoutlingua.processing.telemetry import PipelineProgressTracker
+
+        tracker = PipelineProgressTracker(total_pages=total_p, total_segments=total_segs)
+        tracker.set_stage(2)
 
         def _on_chunk_progress(c_idx: int, done_segs: int, chunk_res: dict[str, str]):
-            # Stage 2: Translating text blocks (5% -> 55% overall)
-            overall_pct = 5 + int((done_segs / max(1, total_segs)) * 50)
-            elapsed = max(0.2, time.time() - start_time)
-            curr_speed = round(done_segs / elapsed, 1)
-            rem_segs = max(0, total_segs - done_segs)
-            calc_eta = int(rem_segs / max(curr_speed, 0.1)) + int(total_p * 0.25)
-            # Estimate current page from segment completion ratio
-            est_page = max(1, min(total_p, int((done_segs / max(1, total_segs)) * total_p)))
             with _LOCK:
-                session["progress"] = {
-                    "stage_index": 2,
-                    "stage_name": "Translating text blocks",
-                    "current_page": est_page,
-                    "total_pages": total_p,
-                    "segments_done": done_segs,
-                    "segments_total": total_segs,
-                    "overall_pct": overall_pct,
-                    "status": "processing",
-                    "speed": curr_speed,
-                    "speed_unit": "seg/s",
-                    "eta_seconds": calc_eta,
-                    "message": f"Translating text blocks ({done_segs}/{total_segs} segments)...",
-                }
+                session["progress"] = tracker.update_translation(done_segs, total_segs)
 
         try:
             raw_batch_res = concurrent_batch_translate(
@@ -510,24 +493,8 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                 session["is_translating"] = False
             return
 
-        elapsed_after_trans = max(0.2, time.time() - start_time)
-        trans_speed = round(total_segs / elapsed_after_trans, 1)
-
         with _LOCK:
-            session["progress"] = {
-                "stage_index": 2,
-                "stage_name": "Translating text blocks",
-                "current_page": total_p,
-                "total_pages": total_p,
-                "segments_done": total_segs,
-                "segments_total": total_segs,
-                "overall_pct": 52,
-                "status": "processing",
-                "speed": trans_speed,
-                "speed_unit": "seg/s",
-                "eta_seconds": int(total_p * 0.25),
-                "message": "Applying academic terminology glossaries...",
-            }
+            session["progress"] = tracker.snapshot(message="Applying academic terminology glossaries...")
 
         # Apply domain glossary & custom user overrides with source text normalization
         try:
@@ -581,34 +548,15 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
         page_block_counts: dict[int, int] = {}
         collected_issues: list[dict[str, Any]] = []
 
-        stage3_start_time = time.time()
+        tracker.set_stage(3)
         for page_idx in range(total_p):
             pages_done = page_idx + 1
-            # Stage 3: Fitting text & typesetting layout (55% -> 95% overall)
-            overall_pct = 55 + int((pages_done / max(1, total_p)) * 40)
-            stage3_elapsed = max(0.1, time.time() - stage3_start_time)
-            raw_speed = pages_done / stage3_elapsed
-            curr_speed = round(raw_speed, 1)
-            rem_p = max(0, total_p - pages_done)
-            calc_eta = int(rem_p / max(raw_speed, 0.05)) if raw_speed > 0 else 0
-
             with _LOCK:
-                session["progress"] = {
-                    "stage_index": 3,
-                    "stage_name": "Fitting text to layout",
-                    "current_page": pages_done,
-                    "total_pages": total_p,
-                    "overall_pct": overall_pct,
-                    "status": "processing",
-                    "speed": curr_speed,
-                    "speed_unit": "p/s",
-                    "eta_seconds": calc_eta,
-                    "message": f"Fitting text to layout for page {pages_done} of {total_p}...",
-                    "integrity": {
-                        "blocks_translated": total_replaced_blocks,
-                        "needs_review": total_review_blocks,
-                        "preserved_pages": total_preserved_pages,
-                    },
+                session["progress"] = tracker.update_typesetting(pages_done)
+                session["progress"]["integrity"] = {
+                    "blocks_translated": total_replaced_blocks,
+                    "needs_review": total_review_blocks,
+                    "preserved_pages": total_preserved_pages,
                 }
 
             p_ir = doc_ir.pages[page_idx] if page_idx < len(doc_ir.pages) else None
@@ -654,23 +602,15 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
 
         # Stage 4: Table of Contents & Writing final PDF
         with _LOCK:
-            session["progress"] = {
-                "stage_index": 4,
-                "stage_name": "Writing output PDF",
-                "current_page": total_p,
-                "total_pages": total_p,
-                "overall_pct": 97,
-                "status": "processing",
-                "speed": curr_speed,
-                "speed_unit": "p/s",
-                "eta_seconds": 1,
-                "message": "Writing final vector output PDF...",
-                "integrity": {
+            tracker.set_stage(4)
+            session["progress"] = tracker.snapshot(
+                message="Writing final vector output PDF...",
+                integrity={
                     "blocks_translated": total_replaced_blocks,
                     "needs_review": total_review_blocks,
                     "preserved_pages": total_preserved_pages,
                 },
-            }
+            )
 
         translated_toc = None
         try:
