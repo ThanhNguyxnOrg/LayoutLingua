@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from dataclasses import dataclass
 from typing import Any, Sequence
 
 import pymupdf
@@ -180,6 +181,15 @@ def _compute_edge_coverage(
     return coverage, avg_width
 
 
+@dataclass(frozen=True)
+class TableValidatorConfig:
+    """Configurable table validation parameters and stroke tolerances."""
+
+    tolerance_pt: float = 2.0
+    min_edge_coverage: float = 0.90
+    orthogonal_snap_pt: float = 1.0
+
+
 class TableGridValidator:
     """Validates PyMuPDF table candidates against vector drawing stroke primitives.
 
@@ -191,11 +201,13 @@ class TableGridValidator:
 
     def __init__(
         self,
-        tolerance_pt: float = 2.0,
-        min_edge_coverage: float = 0.90,
+        config: TableValidatorConfig | None = None,
+        tolerance_pt: float | None = None,
+        min_edge_coverage: float | None = None,
     ) -> None:
-        self.tolerance_pt = tolerance_pt
-        self.min_edge_coverage = min_edge_coverage
+        self.config = config or TableValidatorConfig()
+        self.tolerance_pt = tolerance_pt if tolerance_pt is not None else self.config.tolerance_pt
+        self.min_edge_coverage = min_edge_coverage if min_edge_coverage is not None else self.config.min_edge_coverage
 
     def validate_page_tables(
         self,

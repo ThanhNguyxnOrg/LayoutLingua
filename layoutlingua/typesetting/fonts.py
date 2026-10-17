@@ -18,6 +18,16 @@ VIETNAMESE_TEST_CHARACTERS = (
 )
 
 
+BUILTIN_OR_CJK_FONTS = frozenset({
+    "china-s", "china-t", "japan", "korea",
+    "tiro", "tibo", "tiit", "tibi",
+    "helv", "hebo", "heit", "hebi",
+    "couri", "cobo", "coit", "cobi",
+    "times-roman", "times-bold", "times-italic", "times-bolditalic",
+    "helvetica", "courier",
+})
+
+
 class FontValidationError(Exception):
     """Raised when bundled font asset is missing, corrupted, or lacks required glyphs."""
 
@@ -117,7 +127,7 @@ class FontManager:
 
     def register_on_page(self, page: Any, font_name: str = "DejaVuSans") -> str:
         """Register the font asset into the given PyMuPDF page resource dictionary."""
-        if font_name in ("china-s", "china-t", "japan", "korea"):
+        if font_name.lower() in BUILTIN_OR_CJK_FONTS:
             return font_name
         buf = self.get_font_buffer()
         page.insert_font(fontname=font_name, fontbuffer=buf)

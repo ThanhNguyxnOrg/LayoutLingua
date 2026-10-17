@@ -169,7 +169,7 @@ class TestSlice4BFittingAndMetrics(unittest.TestCase):
         translations = {
             doc_ir.pages[0].blocks[0].block_id: "Tiêu đề Trang Một",
             doc_ir.pages[0].blocks[1].block_id: (
-                "Đoạn văn bản trang một được mở rộng đáng kể với nhiều phân tích chuyên sâu về thuật toán."
+                "Đoạn văn bản trang một được mở rộng đáng kể với nhiều phân tích chuyên sâu về thuật toán xử lý ngôn ngữ tự nhiên và thị giác máy tính hiện đại."
             ),
             doc_ir.pages[1].blocks[0].block_id: "Tiêu đề Trang Hai",
             doc_ir.pages[1].blocks[1].block_id: "Đoạn văn bản cực kỳ dài " * 25,

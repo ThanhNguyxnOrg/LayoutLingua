@@ -6,6 +6,7 @@ import re
 from typing import Sequence
 
 from layoutlingua.core.ir import GlyphSpan, TextBlock
+from layoutlingua.core.parser import _extract_prose_tokens
 from layoutlingua.processing.formula.models import (
     FormulaToken,
     TextSegment,
@@ -17,17 +18,23 @@ _PLACEHOLDER_REGEX = re.compile(r"<b(\d+)></b\1>")
 
 # Common mathematical symbol set and TeX operators
 _MATH_OPERATOR_CHARS = set(
-    "∫∑∏√∝∞∠∧∨∩∪≈≠≡≤≥⊂⊃⊆⊇⊕⊗⊥⋅∂∇±×÷"
+    "∫∑∏√∝∞∠∧∨∩∪≈≠≡≤≥⊂⊃⊆⊇⊕⊗⊥⋅∂∇±∓×÷°′″"
     "αβγδεζηθικλμνξπρστυφχψω"
     "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΠΡΣΤΥΦΧΨΩ"
     "∈∉∋∌"
+    "²³¹⁰⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾₀₁₂₃₄₅₆₇₈₉"
 )
 
 # Math font substrings
 _MATH_FONTS = (
     "math", "symbol", "cmmi", "cmsy", "cmex", "msam", "msbm", "mt2",
-    "mathtype", "eufm", "euex", "wasy",
+    "mathtype", "eufm", "euex", "wasy", "rsfs", "txsy", "stmary",
 )
+
+_MATH_FUNCTIONS = {
+    "sin", "cos", "tan", "cot", "sec", "csc", "log", "ln", "exp", "lim",
+    "max", "min", "det", "deg", "rad", "gcd", "lcm", "sinh", "cosh", "tanh",
+}
 
 
 class FormulaIsolator:
@@ -38,6 +45,10 @@ class FormulaIsolator:
 
     def is_math_span(self, span: GlyphSpan) -> bool:
         """Heuristic to determine if an individual span is a formula or symbol."""
+        text = span.text.strip()
+        if not text:
+            return False
+
         if span.is_math_or_symbol:
             return True
 
@@ -45,40 +56,99 @@ class FormulaIsolator:
         if any(mf in font_lower for mf in _MATH_FONTS):
             return True
 
-        text = span.text.strip()
-        if not text:
+        # Standard math function names (e.g. sin, cos, tan)
+        if text.lower() in _MATH_FUNCTIONS:
+            return True
+
+        # Natural language prose safeguard:
+        # If the span contains multi-character prose words in any language
+        prose_tokens = _extract_prose_tokens(text)
+        if len(prose_tokens) > 0:
             return False
 
-        # If span consists predominantly of mathematical symbols
-        math_count = sum(1 for ch in text if ch in _MATH_OPERATOR_CHARS)
-        if math_count > 0 and (math_count / len(text)) >= 0.4:
+        # Italic variables or short math notation (e.g. x, y, x², a_1)
+        if "ital" in font_lower and len(text) <= 3:
+            return True
+
+        # Subscript or superscript font size (<= 9.5 pt) with short alphanumeric tokens without prose
+        if span.font_size <= 9.5 and len(text) <= 4:
+            return True
+
+        # If span consists predominantly of mathematical symbols or degree marks (e.g. 60°, 360°, ±, α, x², ≤, ≥)
+        math_count = sum(1 for ch in text if ch in _MATH_OPERATOR_CHARS or ch in "+-=/*^<>()[]{}≤≥±≠≈")
+        if math_count > 0 and (math_count / len(text)) >= 0.3:
             return True
 
         return False
 
     def isolate_block(self, block: TextBlock) -> TextSegment:
-        """Convert a TextBlock into a TextSegment with structured formula placeholders."""
+        """Convert a TextBlock into a TextSegment with structured formula placeholders.
+        
+        Sorts spans left-to-right and groups consecutive/connected math spans into a single
+        cohesive formula token, preventing neural MT models from fragmenting expressions.
+        """
+        # Sort spans by left-to-right x-coordinate to restore visual order
+        sorted_spans = sorted(block.spans, key=lambda s: s.bbox[0])
+
         tokens: list[FormulaToken] = []
         masked_parts: list[str] = []
-        span_ids: list[str] = []
+        span_ids: list[str] = [s.span_id for s in sorted_spans]
         token_id_counter = 0
 
-        for span in block.spans:
-            span_ids.append(span.span_id)
-            if self.is_math_span(span):
+        is_math_list = [self.is_math_span(s) for s in sorted_spans]
+        n = len(sorted_spans)
+        i = 0
+
+        while i < n:
+            span = sorted_spans[i]
+            # Check if this span is math or starts a math expression
+            # A leading number/operator can start a math group if directly followed by a math span
+            starts_math = is_math_list[i]
+            if not starts_math and i + 1 < n and is_math_list[i + 1]:
+                txt_strip = span.text.strip()
+                if txt_strip and re.match(r"^[\d.,:;+=\-*/_~^…≤≥()\[\]{}]+$", txt_strip) and len(txt_strip) <= 6:
+                    starts_math = True
+
+            if starts_math:
+                j = i
+                group: list[GlyphSpan] = []
+                while j < n:
+                    if is_math_list[j]:
+                        group.append(sorted_spans[j])
+                        j += 1
+                    elif not sorted_spans[j].text.strip() and j + 1 < n and is_math_list[j + 1]:
+                        group.append(sorted_spans[j])
+                        j += 1
+                    elif (
+                        j + 1 < n and is_math_list[j + 1] and
+                        re.match(r"^[\d\s.,:;+=\-*/_~^…≤≥()\[\]{}]+$", sorted_spans[j].text) and
+                        len(sorted_spans[j].text.strip()) <= 6
+                    ):
+                        group.append(sorted_spans[j])
+                        j += 1
+                    else:
+                        break
+
+                raw_content = "".join(s.text for s in group).strip()
                 placeholder = f"<b{token_id_counter}></b{token_id_counter}>"
+                min_x0 = min(s.bbox[0] for s in group)
+                min_y0 = min(s.bbox[1] for s in group)
+                max_x1 = max(s.bbox[2] for s in group)
+                max_y1 = max(s.bbox[3] for s in group)
                 token = FormulaToken(
                     token_id=token_id_counter,
                     placeholder=placeholder,
-                    raw_content=span.text,
-                    bbox=span.bbox,
-                    font_name=span.font_name,
+                    raw_content=raw_content,
+                    bbox=(min_x0, min_y0, max_x1, max_y1),
+                    font_name=group[0].font_name,
                 )
                 tokens.append(token)
                 masked_parts.append(f" {placeholder} ")
                 token_id_counter += 1
+                i = j
             else:
                 masked_parts.append(span.text)
+                i += 1
 
         raw_text = block.text
         masked_text = "".join(masked_parts)
@@ -102,11 +172,29 @@ class FormulaIsolator:
             span_ids=span_ids,
         )
 
+    @staticmethod
+    def normalize_placeholders(text: str) -> str:
+        """Fix any spaces or distortions introduced by translation engines into placeholders."""
+        t = re.sub(r"<\s*b\s*(\d+)\s*>\s*<\s*/\s*b\s*\1\s*>", r"<b\1></b\1>", text, flags=re.IGNORECASE)
+        t = re.sub(r"<\s*b\s*>\s*(\d+)\s*>\s*<\s*/\s*b\s*>", r"<b\1></b\1>", t, flags=re.IGNORECASE)
+        t = re.sub(r"<\s*b\s*(\d+)\s*>\s*<\s*/\s*>", r"<b\1></b\1>", t, flags=re.IGNORECASE)
+        t = re.sub(r"<\s*b\s*(\d+)\s*/>", r"<b\1></b\1>", t, flags=re.IGNORECASE)
+        # Protect well-formed <bN></bN> with a unique sentinel
+        t = re.sub(r"<b(\d+)></b\1>", r"⟦VT_\1⟧", t, flags=re.IGNORECASE)
+        # Any remaining stray <bN> or </bN> is converted to sentinel
+        t = re.sub(r"<\s*/?\s*b\s*(\d+)\s*>", r"⟦VT_\1⟧", t, flags=re.IGNORECASE)
+        # Restore sentinels to canonical <bN></bN>
+        t = re.sub(r"⟦VT_(\d+)⟧", r"<b\1></b\1>", t)
+        # Deduplicate adjacent identical placeholders
+        t = re.sub(r"(<b\d+></b\d+>)(?:\s*\1)+", r"\1", t)
+        return t
+
     def verify_tokens(self, segment: TextSegment, translated_text: str) -> TokenVerificationResult:
         """Verify that translated text preserves all formula tokens without loss, duplication, or reordering."""
+        clean_text = self.normalize_placeholders(translated_text)
         if not segment.tokens:
             # Segment had no formula tokens: check if any unexpected token appeared
-            found_alien = _PLACEHOLDER_REGEX.findall(translated_text)
+            found_alien = _PLACEHOLDER_REGEX.findall(clean_text)
             if found_alien:
                 return TokenVerificationResult(
                     is_valid=False,
@@ -115,7 +203,7 @@ class FormulaIsolator:
                 )
             return TokenVerificationResult(is_valid=True)
 
-        found_matches = [m.group(0) for m in _PLACEHOLDER_REGEX.finditer(translated_text)]
+        found_matches = [m.group(0) for m in _PLACEHOLDER_REGEX.finditer(clean_text)]
         expected_tokens = [t.placeholder for t in segment.tokens]
 
         # 1. Check for duplicates
@@ -168,15 +256,33 @@ class FormulaIsolator:
 
         return TokenVerificationResult(is_valid=True)
 
-    def restore_translation(self, segment: TextSegment, translated_text: str) -> str:
+    def restore_translation(
+        self,
+        segment: TextSegment,
+        translated_text: str,
+        allow_reorder: bool = True,
+    ) -> str:
         """Restore formula tokens into translated text; fall back to raw_text if verification fails."""
-        verification = self.verify_tokens(segment, translated_text)
+        clean_text = self.normalize_placeholders(translated_text)
+        verification = self.verify_tokens(segment, clean_text)
         if not verification.is_valid:
-            # Fail-closed invariant: retain original source text
-            return segment.raw_text
+            # If the only issue was out_of_order and allow_reorder is True, we can safely proceed
+            if (
+                allow_reorder
+                and verification.out_of_order
+                and not verification.missing_tokens
+                and not verification.duplicate_tokens
+                and not verification.alien_tokens
+            ):
+                pass
+            else:
+                # Fail-closed invariant: retain original source text
+                return segment.raw_text
 
-        result = translated_text
+        result = clean_text
         for token in segment.tokens:
             result = result.replace(token.placeholder, token.raw_content)
 
+        # Final safety cleanup: remove any leftover deformed XML tag artifacts
+        result = re.sub(r"<\s*/?\s*b\d*[^>]*>", "", result)
         return result

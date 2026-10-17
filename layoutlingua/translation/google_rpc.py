@@ -24,9 +24,23 @@ _MAX_CHUNK_CHARS = 3000
 
 
 def _sanitize_translated_tokens(text: str) -> str:
-    """Fix any accidental spaces inserted into formula preservation tokens by MT engines."""
-    res = _TOKEN_CLEANUP.sub(r"⟦LL_FORMULA_\1⟧", text)
-    res = _XML_CLEANUP.sub(r"<b\1></b\1>", res)
+    """Fix any accidental spaces or malformations inserted into formula preservation tokens by MT engines."""
+    # 1. ⟦LL_FORMULA_0⟧
+    res = re.sub(r"⟦\s*LL_FORMULA_(\d+)\s*⟧", r"⟦LL_FORMULA_\1⟧", text)
+    # 2. Complete standard tag pairs: <b0></b0> (case-insensitive)
+    res = re.sub(r"<\s*b\s*(\d+)\s*>\s*<\s*/\s*b\s*\1\s*>", r"<b\1></b\1>", res, flags=re.IGNORECASE)
+    # 3. Google Translate mangled tags like <b>0></b> or <b0></b> or <b0/>
+    res = re.sub(r"<\s*b\s*>\s*(\d+)\s*>\s*<\s*/\s*b\s*>", r"<b\1></b\1>", res, flags=re.IGNORECASE)
+    res = re.sub(r"<\s*b\s*(\d+)\s*>\s*<\s*/\s*>", r"<b\1></b\1>", res, flags=re.IGNORECASE)
+    res = re.sub(r"<\s*b\s*(\d+)\s*/>", r"<b\1></b\1>", res, flags=re.IGNORECASE)
+    # Protect well-formed <bN></bN> with a unique sentinel
+    res = re.sub(r"<b(\d+)></b\1>", r"⟦VT_\1⟧", res, flags=re.IGNORECASE)
+    # Any remaining stray <bN> or </bN> is converted to sentinel
+    res = re.sub(r"<\s*/?\s*b\s*(\d+)\s*>", r"⟦VT_\1⟧", res, flags=re.IGNORECASE)
+    # Restore sentinels to canonical <bN></bN>
+    res = re.sub(r"⟦VT_(\d+)⟧", r"<b\1></b\1>", res)
+    # 4. Collapse consecutive duplicate tokens
+    res = re.sub(r"(<b\d+></b\d+>)(?:\s*\1)+", r"\1", res)
     return res
 
 
@@ -141,15 +155,32 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
 
         raise ProviderUnavailableError(f"Google RPC network error after retries: {last_err}")
 
+    def _normalize_lang_code(self, code: str, default: str = "auto") -> str:
+        """Normalize language name or code to standard 2-letter ISO code."""
+        if not code or code in ("auto", ""):
+            return default
+        c = code.lower().strip()
+        lang_map = {
+            "vietnamese": "vi",
+            "chinese": "zh",
+            "zh-cn": "zh",
+            "zh-tw": "zh",
+            "japanese": "ja",
+            "german": "de",
+            "french": "fr",
+            "spanish": "es",
+            "english": "en",
+            "korean": "ko",
+            "russian": "ru",
+        }
+        return lang_map.get(c, c[:2] if len(c) > 2 else c)
+
     def _translate_single(self, text: str, src_lang: str, tgt_lang: str) -> str:
         if not text.strip():
             return text
 
-        # Map language codes
-        s_lang = "auto" if src_lang in ("auto", "") else src_lang
-        t_lang = "vi" if tgt_lang in ("vi", "vietnamese") else tgt_lang
-        if s_lang == "english":
-            s_lang = "en"
+        s_lang = self._normalize_lang_code(src_lang, "auto")
+        t_lang = self._normalize_lang_code(tgt_lang, "vi")
 
         chunks = _split_into_chunks(text)
         translated_chunks: List[str] = []
@@ -163,14 +194,12 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
 
     def translate_batch(self, request: BatchTranslationRequest) -> BatchTranslationResult:
         translations: Dict[str, str] = {}
-        s_lang = "auto" if request.source_language in ("auto", "") else request.source_language
-        t_lang = "vi" if request.target_language in ("vi", "vietnamese") else request.target_language
-        if s_lang == "english":
-            s_lang = "en"
+        s_lang = self._normalize_lang_code(request.source_language, "auto")
+        t_lang = self._normalize_lang_code(request.target_language, "vi")
 
         # Pack multiple segments with delimiter to minimize HTTP round-trips and avoid rate limits
         DELIMITER = "\n⟦SPLIT_SEP⟧\n"
-        MAX_PACK_CHARS = 2800
+        MAX_PACK_CHARS = 2600
 
         current_pack: list[tuple[str, str]] = []
         current_len = 0
@@ -184,14 +213,20 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
                     translations[seg_id] = self._translate_single(raw_t, s_lang, t_lang)
                 except RateLimitError:
                     raise
-                except Exception:
-                    translations[seg_id] = raw_t
+                except Exception as ex:
+                    # One more retry after brief pause
+                    try:
+                        time.sleep(0.5)
+                        translations[seg_id] = self._translate_single(raw_t, s_lang, t_lang)
+                    except Exception:
+                        translations[seg_id] = raw_t
                 return
 
             joined_text = DELIMITER.join(item[1] for item in pack)
             try:
                 translated_joined = self._translate_single(joined_text, s_lang, t_lang)
-                split_parts = translated_joined.split("⟦SPLIT_SEP⟧")
+                # Resilient splitting supporting unicode brackets or standard brackets with whitespace
+                split_parts = re.split(r"⟦\s*SPLIT_SEP\s*⟧|\[\s*SPLIT_SEP\s*\]", translated_joined)
                 if len(split_parts) == len(pack):
                     for (seg_id, _), part in zip(pack, split_parts):
                         translations[seg_id] = _sanitize_translated_tokens(part.strip())
@@ -201,14 +236,10 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
             except Exception:
                 pass
 
-            # Fallback: if delimiter split count differs or transient error, translate individually
-            for seg_id, raw_t in pack:
-                try:
-                    translations[seg_id] = self._translate_single(raw_t, s_lang, t_lang)
-                except RateLimitError:
-                    raise
-                except Exception:
-                    translations[seg_id] = raw_t
+            # Divide and conquer fallback: binary split the pack into smaller sub-packs
+            mid = len(pack) // 2
+            _flush_pack(pack[:mid])
+            _flush_pack(pack[mid:])
 
         for seg in request.segments:
             raw_text = seg.masked_text

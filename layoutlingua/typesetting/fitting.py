@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pymupdf
 
-from layoutlingua.typesetting.fonts import FontManager
+from layoutlingua.typesetting.fonts import BUILTIN_OR_CJK_FONTS, FontManager
 from layoutlingua.typesetting.models import OverflowCause, TypesetOptions
 
 
@@ -24,6 +24,7 @@ class TextFitTester:
         text: str,
         orig_font_size: float,
         options: TypesetOptions,
+        font_name: str | None = None,
     ) -> tuple[bool, float, OverflowCause, int, float]:
         """Determine if text fits within rect using bounded binary search.
 
@@ -42,12 +43,14 @@ class TextFitTester:
         if width <= 0 or height <= 0 or not text.strip():
             return False, orig_font_size, OverflowCause.OVERFLOW_UNDETERMINED, 0, effective_lineheight
 
+        active_font = font_name or self.font_name
+
         min_font_size = max(options.min_font_pt, options.min_font_scale * orig_font_size)
         test_rect = pymupdf.Rect(x0, y0, x1, y1)
 
         fontfile_arg = (
             None
-            if self.font_name in ("china-s", "china-t", "japan", "korea")
+            if active_font.lower() in BUILTIN_OR_CJK_FONTS
             else str(self.font_manager.font_path)
         )
 
@@ -56,20 +59,26 @@ class TextFitTester:
             test_rect,
             text,
             fontsize=orig_font_size,
-            fontname=self.font_name,
+            fontname=active_font,
             fontfile=fontfile_arg,
             lineheight=effective_lineheight,
         )
         if rc_orig >= 0:
             lines = self._estimate_lines(height, rc_orig, orig_font_size, effective_lineheight)
-            return True, orig_font_size, OverflowCause.NONE, lines, effective_lineheight
+            return True, orig_font_size, OverflowCause.NONE, max(1, lines), effective_lineheight
+
+        # 1b. Single-line ink-height accommodation:
+        # If text fits horizontally on a single line and the overflow is purely vertical padding deficit (within 60% of font size):
+        text_advance = self.font_manager.measure_text_length(text, orig_font_size)
+        if text_advance <= (width * 1.02) and abs(rc_orig) <= (orig_font_size * 0.60):
+            return True, orig_font_size, OverflowCause.NONE, 1, effective_lineheight
 
         # 2. Test minimum font size floor
         rc_min = self._page.insert_textbox(
             test_rect,
             text,
             fontsize=min_font_size,
-            fontname=self.font_name,
+            fontname=active_font,
             fontfile=fontfile_arg,
             lineheight=effective_lineheight,
         )
@@ -80,7 +89,7 @@ class TextFitTester:
                 test_rect,
                 text,
                 fontsize=min_font_size,
-                fontname=self.font_name,
+                fontname=active_font,
                 fontfile=fontfile_arg,
                 lineheight=compact_lh,
             )
@@ -98,7 +107,7 @@ class TextFitTester:
                     soft_rect,
                     text,
                     fontsize=min_font_size,
-                    fontname=self.font_name,
+                    fontname=active_font,
                     fontfile=fontfile_arg,
                     lineheight=compact_lh,
                 )
@@ -123,7 +132,7 @@ class TextFitTester:
                 test_rect,
                 text,
                 fontsize=mid,
-                fontname=self.font_name,
+                fontname=active_font,
                 fontfile=fontfile_arg,
                 lineheight=effective_lineheight,
             )
@@ -140,7 +149,7 @@ class TextFitTester:
             test_rect,
             text,
             fontsize=best_size,
-            fontname=self.font_name,
+            fontname=active_font,
             fontfile=fontfile_arg,
             lineheight=effective_lineheight,
         )

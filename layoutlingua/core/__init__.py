@@ -9,6 +9,7 @@ from layoutlingua.core.ir import (
     PageIR,
     TextBlock,
 )
+from layoutlingua.core.parser import ParserConfig, parse_pdf
 
 __all__ = [
     "CharInfo",
@@ -18,4 +19,6 @@ __all__ = [
     "PageGeometry",
     "PageIR",
     "TextBlock",
+    "ParserConfig",
+    "parse_pdf",
 ]

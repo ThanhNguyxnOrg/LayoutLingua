@@ -103,10 +103,186 @@ def get_layout_detector() -> Any:
     return _GLOBAL_DETECTOR
 
 
+def _get_session_cache_dir() -> Path:
+    """Return persistent on-disk cache directory for document sessions."""
+    try:
+        import platformdirs
+
+        base_dir = Path(platformdirs.user_cache_dir("layoutlingua"))
+    except Exception:
+        base_dir = Path.home() / ".layoutlingua" / "cache"
+    session_dir = base_dir / "sessions"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    return session_dir
+
+
+def _persist_session_to_disk(session: dict[str, Any]) -> None:
+    """Save session PDF bytes and metadata to persistent disk cache."""
+    try:
+        doc_id = session.get("doc_id")
+        if not doc_id:
+            return
+        target_dir = _get_session_cache_dir() / doc_id
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        src_bytes = session.get("source_pdf_bytes")
+        if src_bytes:
+            src_file = target_dir / "source.pdf"
+            if not src_file.exists() or src_file.stat().st_size != len(src_bytes):
+                src_file.write_bytes(src_bytes)
+
+        trans_bytes = session.get("translated_pdf_bytes")
+        if trans_bytes:
+            (target_dir / "translated.pdf").write_bytes(trans_bytes)
+
+        meta = {
+            "doc_id": doc_id,
+            "filename": session.get("filename", "document.pdf"),
+            "page_count": session.get("page_count", 0),
+            "detected_lang": session.get("detected_lang", "en"),
+            "target_lang": session.get("target_lang", "vi"),
+            "is_scanned": session.get("is_scanned", False),
+            "scan_warning": session.get("scan_warning", ""),
+            "has_translated": bool(trans_bytes),
+            "selected_pages": session.get("selected_pages", []),
+        }
+        (target_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        print(f"[LayoutLingua] Notice: Could not cache session to disk: {exc}")
+
+
+def _get_or_recover_session(doc_id: str) -> Optional[dict[str, Any]]:
+    """Retrieve session from RAM or transparently recover from persistent disk cache or local files."""
+    if not doc_id:
+        return None
+
+    with _LOCK:
+        if doc_id in _SESSIONS:
+            return _SESSIONS[doc_id]
+
+    cache_root = _get_session_cache_dir()
+
+    # Strategy 1: Check direct disk cache folder: sessions / doc_id
+    target_dir = cache_root / doc_id
+    pdf_bytes: Optional[bytes] = None
+    trans_bytes: Optional[bytes] = None
+    meta_info: dict[str, Any] = {}
+
+    if target_dir.is_dir() and (target_dir / "source.pdf").is_file():
+        try:
+            pdf_bytes = (target_dir / "source.pdf").read_bytes()
+            if (target_dir / "translated.pdf").is_file():
+                trans_bytes = (target_dir / "translated.pdf").read_bytes()
+            if (target_dir / "meta.json").is_file():
+                meta_info = json.loads((target_dir / "meta.json").read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"[LayoutLingua] Error reading session cache for {doc_id}: {e}")
+
+    # Strategy 2: If not found by direct doc_id folder, search all cached sessions in cache_root
+    # in case doc_id was a filename or an older session ID
+    if not pdf_bytes and cache_root.is_dir():
+        for sub in cache_root.iterdir():
+            if sub.is_dir() and (sub / "source.pdf").is_file():
+                meta_file = sub / "meta.json"
+                if meta_file.is_file():
+                    try:
+                        m = json.loads(meta_file.read_text(encoding="utf-8"))
+                        if m.get("doc_id") == doc_id or m.get("filename") == doc_id or sub.name == doc_id:
+                            pdf_bytes = (sub / "source.pdf").read_bytes()
+                            if (sub / "translated.pdf").is_file():
+                                trans_bytes = (sub / "translated.pdf").read_bytes()
+                            meta_info = m
+                            break
+                    except Exception:
+                        pass
+
+    # Strategy 3: Check candidate file paths (Desktop, Downloads, Documents, cwd) if doc_id matches a file
+    if not pdf_bytes:
+        candidate_paths: list[Path] = []
+        p = Path(doc_id)
+        candidate_paths.append(p)
+        candidate_paths.append(Path.cwd() / p.name)
+        if not p.suffix:
+            candidate_paths.append(Path.cwd() / f"{p.name}.pdf")
+        try:
+            folders = get_user_known_folders()
+            for fld in folders.values():
+                candidate_paths.append(Path(fld) / p.name)
+                if not p.suffix:
+                    candidate_paths.append(Path(fld) / f"{p.name}.pdf")
+        except Exception:
+            pass
+
+        for cand in candidate_paths:
+            try:
+                if cand.is_file() and cand.suffix.lower() == ".pdf":
+                    pdf_bytes = cand.read_bytes()
+                    meta_info = {"filename": cand.name, "doc_id": doc_id}
+                    break
+            except Exception:
+                continue
+
+    if not pdf_bytes:
+        return None
+
+    # Reconstruct session and DocumentIR
+    try:
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+        page_count = len(doc)
+        doc.close()
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(pdf_bytes)
+            tmp_path = tmp.name
+
+        try:
+            doc_ir = parse_pdf(tmp_path, layout_detector=get_layout_detector())
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+        with _LOCK:
+            while len(_SESSIONS) >= MAX_SESSIONS:
+                oldest_k = next(iter(_SESSIONS))
+                del _SESSIONS[oldest_k]
+
+            recovered_session = {
+                "doc_id": doc_id,
+                "filename": meta_info.get("filename", "document.pdf"),
+                "source_pdf_bytes": pdf_bytes,
+                "doc_ir": doc_ir,
+                "page_count": page_count,
+                "translated_pdf_bytes": trans_bytes,
+                "issues": [],
+                "detected_lang": meta_info.get("detected_lang", "en"),
+                "is_scanned": meta_info.get("is_scanned", False),
+                "scan_warning": meta_info.get("scan_warning", ""),
+                "selected_pages": meta_info.get("selected_pages", []),
+                "progress": {
+                    "stage_index": 5 if trans_bytes else 0,
+                    "stage_name": "Complete" if trans_bytes else "idle",
+                    "current_page": page_count if trans_bytes else 0,
+                    "total_pages": page_count,
+                    "overall_pct": 100 if trans_bytes else 0,
+                    "status": "done" if trans_bytes else "idle",
+                },
+            }
+            _SESSIONS[doc_id] = recovered_session
+
+        # Ensure it's persisted under doc_id directory as well
+        _persist_session_to_disk(recovered_session)
+        print(f"[LayoutLingua] Transparently recovered session '{doc_id}' ({meta_info.get('filename')})")
+        return recovered_session
+    except Exception as exc:
+        print(f"[LayoutLingua] Failed to rehydrate session '{doc_id}': {exc}")
+        return None
+
+
 def _run_translation_worker(doc_id: str, req_json: dict) -> None:
     """Background worker thread that translates and typesets a document."""
-    with _LOCK:
-        session = _SESSIONS.get(doc_id)
+    session = _get_or_recover_session(doc_id)
     if not session:
         return
 
@@ -114,6 +290,7 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
         doc_ir: DocumentIR = session["doc_ir"]
         src_bytes: bytes = session["source_pdf_bytes"]
         target_lang = req_json.get("target_lang", "vi")
+        source_lang = req_json.get("source_lang") or session.get("detected_lang") or "auto"
 
         # Parse selective page range
         page_range_spec = req_json.get("page_range", "all")
@@ -249,35 +426,52 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
         from layoutlingua.translation.concurrent_pool import concurrent_batch_translate
 
         def _on_chunk_progress(c_idx: int, done_segs: int, chunk_res: dict[str, str]):
-            approx_p = max(1, int((done_segs / max(1, total_segs)) * total_p))
+            # Stage 2: Translating text blocks (5% -> 55% overall)
+            overall_pct = 5 + int((done_segs / max(1, total_segs)) * 50)
             elapsed = max(0.2, time.time() - start_time)
-            curr_speed = round(approx_p / elapsed, 1)
-            rem_p = max(0, total_p - approx_p)
-            calc_eta = int(rem_p / max(curr_speed, 0.1)) if curr_speed > 0 else 30
+            curr_speed = round(done_segs / elapsed, 1)
+            rem_segs = max(0, total_segs - done_segs)
+            calc_eta = int(rem_segs / max(curr_speed, 0.1)) + int(total_p * 0.25)
             with _LOCK:
                 session["progress"] = {
-                    "current_page": approx_p,
+                    "stage_index": 2,
+                    "stage_name": "Translating text blocks",
+                    "current_page": 0,
                     "total_pages": total_p,
+                    "segments_done": done_segs,
+                    "segments_total": total_segs,
+                    "overall_pct": overall_pct,
                     "status": "processing",
                     "speed": curr_speed,
+                    "speed_unit": "seg/s",
                     "eta_seconds": calc_eta,
-                    "message": f"Translating document ({done_segs}/{total_segs} segments)...",
+                    "message": f"Translating text blocks ({done_segs}/{total_segs} segments)...",
                 }
 
         try:
             raw_batch_res = concurrent_batch_translate(
                 provider=provider_inst,
                 chunks=shielded_chunks,
-                source_lang=session.get("detected_lang", "auto"),
+                source_lang=source_lang,
                 target_lang=target_lang,
                 max_workers=concurrency,
                 on_chunk_done=_on_chunk_progress,
             )
+            from layoutlingua.processing.formula.isolator import FormulaIsolator
+
+            isolator = FormulaIsolator()
+            seg_dict = {seg.segment_id: seg for seg in segments}
+
             for s_id, t_text in raw_batch_res.items():
                 if s_id in all_abbr_mappings:
                     t_text = unshield_academic_abbreviations(t_text, all_abbr_mappings[s_id])
                 if s_id in all_ref_mappings:
                     t_text = unshield_citations(t_text, all_ref_mappings[s_id])
+
+                seg = seg_dict.get(s_id)
+                if seg and seg.tokens:
+                    t_text = isolator.restore_translation(seg, t_text)
+
                 translated_segments[s_id] = t_text
         except RateLimitError as rl_err:
             print(f"[LayoutLingua] Rate limit error: {rl_err}")
@@ -308,15 +502,23 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                 session["is_translating"] = False
             return
 
-        # Apply domain glossary & custom user overrides
+        # Apply domain glossary & custom user overrides with source text normalization
         try:
             from layoutlingua.translation.glossary import GlossaryManager
 
-            src_l = session.get("detected_lang", "en")
             for s_id, t_text in list(translated_segments.items()):
+                seg = seg_dict.get(s_id)
+                s_text = seg.raw_text if seg else ""
+                norm_text = GlossaryManager.normalize_translation(
+                    source_text=s_text,
+                    translated_text=t_text,
+                    source_lang=source_lang,
+                    target_lang=target_lang,
+                    custom_glossary=custom_glossary,
+                )
                 translated_segments[s_id] = GlossaryManager.apply_glossary(
-                    text=t_text,
-                    source_lang=src_l,
+                    text=norm_text,
+                    source_lang=source_lang,
                     target_lang=target_lang,
                     custom_glossary=custom_glossary,
                 )
@@ -327,7 +529,9 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
         src_doc = pymupdf.open(stream=src_bytes, filetype="pdf")
         t_lang = (target_lang or "vi").lower().strip()
         typeset_font = "DejaVuSans"
-        if t_lang in ("zh", "chinese", "zh-cn", "zh-tw"):
+        if t_lang in ("zh-tw", "zh-hant", "chinese (traditional)"):
+            typeset_font = "china-t"
+        elif t_lang in ("zh", "chinese", "zh-cn", "zh-hans", "chinese (simplified)"):
             typeset_font = "china-s"
         elif t_lang in ("ja", "japanese"):
             typeset_font = "japan"
@@ -343,6 +547,8 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
 
         for page_idx in range(total_p):
             pages_done = page_idx + 1
+            # Stage 3: Fitting text & typesetting layout (55% -> 95% overall)
+            overall_pct = 55 + int((pages_done / max(1, total_p)) * 40)
             elapsed = max(0.2, time.time() - start_time)
             curr_speed = round(pages_done / elapsed, 1)
             rem_p = max(0, total_p - pages_done)
@@ -350,12 +556,16 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
 
             with _LOCK:
                 session["progress"] = {
+                    "stage_index": 3,
+                    "stage_name": "Fitting text to layout",
                     "current_page": pages_done,
                     "total_pages": total_p,
+                    "overall_pct": overall_pct,
                     "status": "processing",
                     "speed": curr_speed,
+                    "speed_unit": "p/s",
                     "eta_seconds": calc_eta,
-                    "message": f"Typesetting layout for page {pages_done} of {total_p}...",
+                    "message": f"Fitting text to layout for page {pages_done} of {total_p}...",
                 }
 
             p_ir = doc_ir.pages[page_idx] if page_idx < len(doc_ir.pages) else None
@@ -370,7 +580,21 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
             else:
                 accumulator.commit_pristine_source_page(page_idx)
 
-        # Translate Table of Contents
+        # Stage 4: Table of Contents & Writing final PDF
+        with _LOCK:
+            session["progress"] = {
+                "stage_index": 4,
+                "stage_name": "Writing output PDF",
+                "current_page": total_p,
+                "total_pages": total_p,
+                "overall_pct": 97,
+                "status": "processing",
+                "speed": curr_speed,
+                "speed_unit": "p/s",
+                "eta_seconds": 1,
+                "message": "Writing final vector output PDF...",
+            }
+
         translated_toc = None
         try:
             from layoutlingua.processing.toc import translate_toc
@@ -396,15 +620,20 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
             session["custom_glossary"] = custom_glossary
             session["selected_pages"] = sorted(list(selected_pages))
             session["progress"] = {
+                "stage_index": 5,
+                "stage_name": "Complete",
                 "current_page": total_p,
                 "total_pages": total_p,
+                "overall_pct": 100,
                 "selected_pages_count": len(selected_pages),
                 "status": "done",
                 "speed": round(total_p / max(0.2, time.time() - start_time), 1),
+                "speed_unit": "p/s",
                 "eta_seconds": 0,
                 "message": "Translation complete!",
             }
             session["is_translating"] = False
+            _persist_session_to_disk(session)
     except Exception as e:
         import traceback
 
@@ -497,8 +726,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
             except ValueError:
                 page_num = 1
 
-            with _LOCK:
-                session = _SESSIONS.get(doc_id)
+            session = _get_or_recover_session(doc_id)
 
             if not session:
                 self._send_json({"error": f"Session '{doc_id}' not found"}, status=404)
@@ -531,8 +759,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
         # 3. Translation progress tracking
         if path in ("/api/progress", "/progress"):
             doc_id = query.get("id", [""])[0]
-            with _LOCK:
-                session = _SESSIONS.get(doc_id)
+            session = _get_or_recover_session(doc_id)
 
             if not session:
                 self._send_json({"error": "Document session not found"}, status=404)
@@ -549,8 +776,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
         # 4. Download translated PDF file
         if path in ("/api/download", "/download"):
             doc_id = query.get("id", [""])[0]
-            with _LOCK:
-                session = _SESSIONS.get(doc_id)
+            session = _get_or_recover_session(doc_id)
 
             if not session:
                 self._send_json({"error": "Document session not found"}, status=404)
@@ -859,6 +1085,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                             "status": "idle",
                         },
                     }
+                    _persist_session_to_disk(_SESSIONS[doc_id])
 
                 doc.close()
 
@@ -883,8 +1110,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 req_json = json.loads(post_body.decode("utf-8"))
                 doc_id = req_json.get("doc_id", "")
 
-                with _LOCK:
-                    session = _SESSIONS.get(doc_id)
+                session = _get_or_recover_session(doc_id)
 
                 if not session:
                     self._send_json({"error": f"Session '{doc_id}' not found"}, status=404)

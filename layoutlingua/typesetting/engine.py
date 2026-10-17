@@ -11,7 +11,7 @@ import pymupdf
 from layoutlingua.core.ir import DocumentIR, PageIR, TextBlock
 from layoutlingua.typesetting.accumulator import DocumentAccumulator
 from layoutlingua.typesetting.fitting import TextFitTester, parse_color
-from layoutlingua.typesetting.fonts import FontManager
+from layoutlingua.typesetting.fonts import BUILTIN_OR_CJK_FONTS, FontManager
 from layoutlingua.typesetting.models import (
     BlockFittingDetail,
     BlockFittingStatus,
@@ -24,6 +24,79 @@ from layoutlingua.typesetting.models import (
     TypesetResult,
 )
 from layoutlingua.typesetting.protection import ClearancePlanner
+
+
+def extract_weighted_dominant_color(block: TextBlock) -> tuple[float, float, float]:
+    """Extract character-weighted dominant color from a TextBlock's spans.
+    Prevents single colored bullet points, icons, or math markers from poisoning
+    the entire paragraph's font color.
+    """
+    if not block.spans:
+        return (0.0, 0.0, 0.0)
+
+    color_weights: dict[tuple[float, float, float], int] = {}
+    for span in block.spans:
+        c = parse_color(span.color)
+        text_len = len(span.text.strip()) if span.text else 0
+        if text_len == 0:
+            text_len = 1
+        color_weights[c] = color_weights.get(c, 0) + text_len
+
+    if not color_weights:
+        return (0.0, 0.0, 0.0)
+
+    return max(color_weights.items(), key=lambda item: item[1])[0]
+
+
+def resolve_block_font(base_font: str, block: TextBlock) -> str:
+    """Resolve font name for a block, upgrading to bold variant if block spans are majority bold."""
+    if not block.spans:
+        return base_font
+    bold_weight = sum(
+        len(s.text.strip())
+        for s in block.spans
+        if (s.flags & 16) or ("bold" in s.font_name.lower()) or ("black" in s.font_name.lower())
+    )
+    total_weight = sum(len(s.text.strip()) for s in block.spans) or 1
+    is_bold = (bold_weight / total_weight) >= 0.5
+
+    base_lower = base_font.lower()
+    if is_bold:
+        if base_lower in ("tiro", "times-roman", "times"):
+            return "tibo"
+        if base_lower in ("helv", "helvetica"):
+            return "hebo"
+        if base_lower in ("couri", "courier"):
+            return "cobo"
+    return base_font
+
+
+def compute_expanded_layout_box(
+    block_bbox: tuple[float, float, float, float],
+    page_blocks: list[TextBlock],
+    page_width: float,
+    current_block_id: str,
+    margin_padding: float = 40.0,
+) -> tuple[float, float, float, float]:
+    """Dynamically expand block width into available whitespace in writing direction (BabelDOC algorithm).
+    Clamps expansion before right page margin or any adjacent block on the same vertical band.
+    """
+    x0, y0, x1, y1 = block_bbox
+    right_limit = max(x1, page_width - margin_padding)
+
+    for other in page_blocks:
+        if other.block_id == current_block_id:
+            continue
+        ox0, oy0, ox1, oy1 = other.bbox
+        # Vertical overlap check (with 2pt tolerance)
+        v_overlap = max(0.0, min(y1, oy1) - max(y0, oy0))
+        if v_overlap > 2.0:
+            # If other block is to the right of current block
+            if ox0 >= x1 - 2.0:
+                right_limit = min(right_limit, ox0 - 5.0)
+
+    expanded_x1 = max(x1, right_limit)
+    return (x0, y0, expanded_x1, y1)
 
 
 class TypesetEngine:
@@ -372,18 +445,28 @@ class TypesetEngine:
 
                 # 6. Determine metrics and color
                 orig_font_size = max((s.font_size for s in block.spans), default=10.0)
-                dominant_color = (
-                    parse_color(block.spans[0].color) if block.spans else (0.0, 0.0, 0.0)
-                )
+                dominant_color = extract_weighted_dominant_color(block)
+                block_font = resolve_block_font(self.options.font_name, block)
 
                 # 7. Precision Binary Search fitting test
-                target_layout_box = inner_bbox if is_cell and inner_bbox else block.bbox
+                if is_cell and inner_bbox:
+                    target_layout_box = inner_bbox
+                else:
+                    page_w = page_ir.geometry.width if hasattr(page_ir, "geometry") and page_ir.geometry else 595.0
+                    target_layout_box = compute_expanded_layout_box(
+                        block_bbox=block.bbox,
+                        page_blocks=page_ir.blocks,
+                        page_width=page_w,
+                        current_block_id=block.block_id,
+                        margin_padding=self.options.clearance_padding_pt + 30.0,
+                    )
 
                 fits, final_font_size, overflow_cause, line_count, effective_lineheight = self._fit_tester.test_fit(
                     rect=target_layout_box,
                     text=translated_text,
                     orig_font_size=orig_font_size,
                     options=self.options,
+                    font_name=block_font,
                 )
 
                 if is_cell and inner_bbox:
@@ -422,6 +505,7 @@ class TypesetEngine:
                         is_cell,
                         grid,
                         cell_geom,
+                        block_font,
                     ))
                 else:
                     page_summary.overflow_blocks += 1
@@ -454,7 +538,7 @@ class TypesetEngine:
 
             # 8. Apply selective redaction ONLY on approved, fitting candidates
             if fitting_plan:
-                for block, tight_line_rects, _, _, _, _, _, _, _, _, _, _ in fitting_plan:
+                for block, tight_line_rects, *rest in fitting_plan:
                     for line_rect in tight_line_rects:
                         rect = pymupdf.Rect(*line_rect)
                         scratch_page.add_redact_annot(rect, fill=False, cross_out=False)
@@ -479,22 +563,36 @@ class TypesetEngine:
                     is_cell,
                     grid,
                     cell_geom,
+                    block_font,
                 ) in fitting_plan:
-                    rect = pymupdf.Rect(*target_layout_box)
+                    box_h = max(target_layout_box[3] - target_layout_box[1], line_count * final_size * 1.50)
+                    rect = pymupdf.Rect(target_layout_box[0], target_layout_box[1], target_layout_box[2], target_layout_box[1] + box_h)
                     fontfile_arg = (
                         None
-                        if self.options.font_name in ("china-s", "china-t", "japan", "korea")
+                        if block_font.lower() in BUILTIN_OR_CJK_FONTS
                         else str(self.font_manager.font_path)
                     )
-                    scratch_page.insert_textbox(
+                    rc = scratch_page.insert_textbox(
                         rect,
                         text,
                         fontsize=final_size,
-                        fontname=self.options.font_name,
+                        fontname=block_font,
                         fontfile=fontfile_arg,
                         color=color,
                         lineheight=lineheight,
                     )
+                    if rc < 0:
+                        # Accommodate any remaining PyMuPDF line deficit
+                        rect = pymupdf.Rect(target_layout_box[0], target_layout_box[1], target_layout_box[2], target_layout_box[1] + box_h + abs(rc) + 2.0)
+                        scratch_page.insert_textbox(
+                            rect,
+                            text,
+                            fontsize=final_size,
+                            fontname=block_font,
+                            fontfile=fontfile_arg,
+                            color=color,
+                            lineheight=lineheight,
+                        )
                     shrink_ratio = final_size / orig_size if orig_size > 0 else 1.0
                     page_replaced_ratios.append(shrink_ratio)
 

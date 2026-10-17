@@ -23,12 +23,12 @@ def detect_running_headers_footers(
     pages: Sequence[PageIR],
     top_margin_ratio: float = 0.08,
     bottom_margin_ratio: float = 0.08,
-    min_repetition: int = 2,
+    min_repetition: int = 3,
 ) -> set[str]:
     """Identify block IDs of recurring headers, footers, and page numbers.
 
     Blocks located within the top or bottom margin bounds that:
-    1. Repeat across 2 or more pages (e.g. journal title, conference name), OR
+    1. Repeat across 3 or more pages (e.g. journal title, conference name), OR
     2. Match standard standalone page number patterns
 
     are identified so they can be preserved untranslated.
@@ -37,7 +37,7 @@ def detect_running_headers_footers(
         pages: Sequence of PageIR objects from DocumentIR.
         top_margin_ratio: Fraction of page height from top treated as header zone (default 8%).
         bottom_margin_ratio: Fraction of page height from bottom treated as footer zone (default 8%).
-        min_repetition: Minimum number of pages a header/footer text must appear on to be flagged.
+        min_repetition: Minimum number of pages a header/footer text must appear on to be flagged (default 3).
 
     Returns:
         Set of block IDs that should be preserved untranslated.

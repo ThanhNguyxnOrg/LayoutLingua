@@ -131,9 +131,11 @@ def compute_tight_line_clearance_regions(
     for _, spans_in_line in line_groups.items():
         char_boxes: list[tuple[float, float, float, float]] = []
         for span in spans_in_line:
+            if not span.text.strip():
+                continue
             if span.chars:
                 for c in span.chars:
-                    if c.bbox[2] > c.bbox[0] and c.bbox[3] > c.bbox[1]:
+                    if c.char.strip() and c.bbox[2] > c.bbox[0] and c.bbox[3] > c.bbox[1]:
                         char_boxes.append(c.bbox)
             else:
                 if span.bbox[2] > span.bbox[0] and span.bbox[3] > span.bbox[1]:
@@ -274,13 +276,14 @@ class ClearancePlanner:
 
         # Mutual interaction check: ensure approved candidate clearance rects do not overlap
         approved_ids = [b_id for b_id, dec in plan.decisions.items() if dec.is_approved]
+        mutual_tolerance = max(1.5, self.padding_pt * 2.5)
         for i, id_a in enumerate(approved_ids):
             dec_a = plan.decisions[id_a]
             for id_b in approved_ids[i + 1 :]:
                 dec_b = plan.decisions[id_b]
                 # Check if any tight line rect of block A intersects any tight line rect of block B
                 overlap = any(
-                    rects_intersect(ra, rb)
+                    rects_intersect(ra, rb, tolerance=mutual_tolerance)
                     for ra in dec_a.tight_line_rects
                     for rb in dec_b.tight_line_rects
                 )
@@ -328,31 +331,63 @@ class ClearancePlanner:
         candidate_ids = {b.block_id for b in candidate_blocks}
 
         # 1. Formula regions: from IR blocks, IR regions, and math spans
+        block_by_id = {b.block_id: b for b in page_ir.blocks}
         for b in page_ir.blocks:
-            if b.block_type == "formula":
-                zones.append(
-                    ExclusionZone(
-                        zone_id=f"formula_block_{b.block_id}",
-                        zone_type=ExclusionZoneType.FORMULA,
-                        bbox=b.bbox,
-                        source_id=b.block_id,
-                        confidence=1.0,
-                        metadata={"block_type": "formula"},
+            if b.block_type == "formula" and b.text.strip():
+                if b.spans:
+                    f_line_rects = compute_tight_line_clearance_regions(b, padding=self.padding_pt)
+                    for l_idx, l_rect in enumerate(f_line_rects):
+                        zones.append(
+                            ExclusionZone(
+                                zone_id=f"formula_block_{b.block_id}_l{l_idx}",
+                                zone_type=ExclusionZoneType.FORMULA,
+                                bbox=l_rect,
+                                source_id=b.block_id,
+                                confidence=1.0,
+                                metadata={"block_type": "formula"},
+                            )
+                        )
+                else:
+                    zones.append(
+                        ExclusionZone(
+                            zone_id=f"formula_block_{b.block_id}",
+                            zone_type=ExclusionZoneType.FORMULA,
+                            bbox=b.bbox,
+                            source_id=b.block_id,
+                            confidence=1.0,
+                            metadata={"block_type": "formula"},
+                        )
                     )
-                )
 
         for r in page_ir.regions:
             if r.category == "formula":
-                zones.append(
-                    ExclusionZone(
-                        zone_id=f"formula_region_{r.region_id}",
-                        zone_type=ExclusionZoneType.FORMULA,
-                        bbox=r.bbox,
-                        source_id=r.region_id,
-                        confidence=r.confidence,
-                        metadata={"category": "formula"},
-                    )
+                matching_block = block_by_id.get(
+                    r.region_id.replace("_region_", "_block_")
                 )
+                if matching_block and matching_block.spans:
+                    f_line_rects = compute_tight_line_clearance_regions(matching_block, padding=self.padding_pt)
+                    for l_idx, l_rect in enumerate(f_line_rects):
+                        zones.append(
+                            ExclusionZone(
+                                zone_id=f"formula_region_{r.region_id}_l{l_idx}",
+                                zone_type=ExclusionZoneType.FORMULA,
+                                bbox=l_rect,
+                                source_id=r.region_id,
+                                confidence=r.confidence,
+                                metadata={"category": "formula"},
+                            )
+                        )
+                else:
+                    zones.append(
+                        ExclusionZone(
+                            zone_id=f"formula_region_{r.region_id}",
+                            zone_type=ExclusionZoneType.FORMULA,
+                            bbox=r.bbox,
+                            source_id=r.region_id,
+                            confidence=r.confidence,
+                            metadata={"category": "formula"},
+                        )
+                    )
 
         # 1b. Preserved rejected tables and constituent blocks (fail-closed)
         preserved_ids = set()
@@ -391,6 +426,7 @@ class ClearancePlanner:
                 b.block_id not in candidate_ids
                 and b.block_type not in ("formula", "table_rejected")
                 and b.block_id not in preserved_ids
+                and b.text.strip()
             ):
                 line_rects = compute_tight_line_clearance_regions(b, padding=self.padding_pt)
                 for l_idx, l_rect in enumerate(line_rects):
@@ -498,7 +534,10 @@ class ClearancePlanner:
                     continue
 
                 # Not a background container: check if drawing intersects tight clearance lines
-                intersects_clearance = any(rects_intersect(line_rect, zone.bbox) for line_rect in tight_line_rects)
+                dw = zone.bbox[2] - zone.bbox[0]
+                dh = zone.bbox[3] - zone.bbox[1]
+                vector_tol = 1.0 if (dh <= 1.5 or dw <= 1.5) else 0.2
+                intersects_clearance = any(rects_intersect(line_rect, zone.bbox, tolerance=vector_tol) for line_rect in tight_line_rects)
                 if intersects_clearance:
                     return CollisionDetail(
                         collision_type=ExclusionZoneType.VECTOR_ART.value,
@@ -512,8 +551,9 @@ class ClearancePlanner:
             # Check 2: Formula collision
             if zone.zone_type == ExclusionZoneType.FORMULA:
                 # Check both tight clearance lines and replacement layout box
-                intersects_line = any(rects_intersect(line_rect, zone.bbox) for line_rect in tight_line_rects)
-                intersects_box = rects_intersect(layout_box, zone.bbox)
+                formula_tol = max(0.5, self.padding_pt)
+                intersects_line = any(rects_intersect(line_rect, zone.bbox, tolerance=formula_tol) for line_rect in tight_line_rects)
+                intersects_box = rects_intersect(layout_box, zone.bbox, tolerance=0.1)
                 if intersects_line or intersects_box:
                     return CollisionDetail(
                         collision_type=ExclusionZoneType.FORMULA.value,
@@ -541,7 +581,8 @@ class ClearancePlanner:
 
             # Check 4: Adjacent text collision
             if zone.zone_type == ExclusionZoneType.ADJACENT_TEXT:
-                intersects_line = any(rects_intersect(line_rect, zone.bbox) for line_rect in tight_line_rects)
+                adj_tolerance = max(1.0, self.padding_pt * 2.0)
+                intersects_line = any(rects_intersect(line_rect, zone.bbox, tolerance=adj_tolerance) for line_rect in tight_line_rects)
                 if intersects_line:
                     return CollisionDetail(
                         collision_type=ExclusionZoneType.ADJACENT_TEXT.value,
