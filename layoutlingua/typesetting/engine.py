@@ -515,6 +515,15 @@ class TypesetEngine:
                         scratch_page=scratch_page,
                     )
 
+                # Adapt Table of Contents dot leaders so both test_fit and page insertion use the compacted text
+                target_w = max(10.0, target_layout_box[2] - target_layout_box[0])
+                translated_text = self._fit_tester.adapt_dot_leader_if_needed(
+                    text=translated_text,
+                    target_width=target_w,
+                    font_size=orig_font_size,
+                    font_name=block_font,
+                )
+
                 fits, final_font_size, overflow_cause, line_count, effective_lineheight = self._fit_tester.test_fit(
                     rect=target_layout_box,
                     text=translated_text,

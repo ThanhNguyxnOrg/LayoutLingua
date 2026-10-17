@@ -216,6 +216,96 @@ def _is_raw_line_math(line: dict, config: ParserConfig = ParserConfig()) -> bool
     return has_rel or len(words) == 0
 
 
+def _merge_horizontal_baseline_fragments(blocks: list[TextBlock]) -> list[TextBlock]:
+    """Coalesces horizontally adjacent text fragments sharing the exact same baseline into single blocks.
+
+    PyMuPDF splits single lines containing math baseline shifts (such as C_n^k) into disjoint
+    micro-blocks. This module stitches them back into unified semantic sentences before translation,
+    eliminating tiny bounding-box overflows and grammar fragmentation (MinerU/Marker SOTA pattern).
+    Strictly safeguards against merging multi-column layouts or table cells.
+    """
+    if len(blocks) <= 1:
+        return blocks
+
+    merged: list[TextBlock] = []
+    skip_indices: set[int] = set()
+
+    for i in range(len(blocks)):
+        if i in skip_indices:
+            continue
+        curr = blocks[i]
+
+        for j in range(i + 1, len(blocks)):
+            if j in skip_indices:
+                continue
+            cand = blocks[j]
+
+            # Only merge regular text blocks
+            if curr.block_type != "text" or cand.block_type != "text":
+                continue
+
+            c_box = curr.bbox
+            k_box = cand.bbox
+            c_h = c_box[3] - c_box[1]
+            k_h = k_box[3] - k_box[1]
+
+            # Only merge single-line fragments (short height)
+            if c_h > 26.0 or k_h > 26.0:
+                continue
+
+            # Vertical overlap check (must share baseline, overlap >= 65%)
+            overlap_y = min(c_box[3], k_box[3]) - max(c_box[1], k_box[1])
+            min_h = min(c_h, k_h)
+            if min_h <= 0 or (overlap_y / min_h) < 0.65:
+                continue
+
+            # Bottom baseline alignment within 4pt
+            if abs(c_box[3] - k_box[3]) > 4.0:
+                continue
+
+            # Horizontal adjacency check: cand must be strictly to the right of curr
+            gap_x = k_box[0] - c_box[2]
+            # Strict gap: 0 to 18pt (word spacing). Gaps > 20pt are column gutters or table cells!
+            if 0.0 <= gap_x <= 18.0:
+                # Merge cand into curr
+                new_bbox = (
+                    min(c_box[0], k_box[0]),
+                    min(c_box[1], k_box[1]),
+                    max(c_box[2], k_box[2]),
+                    max(c_box[3], k_box[3]),
+                )
+                curr_spans = list(curr.spans)
+                cand_spans = list(cand.spans)
+                if curr_spans and cand_spans and gap_x >= 2.0:
+                    last_text = curr_spans[-1].text or ""
+                    first_text = cand_spans[0].text or ""
+                    if not last_text.endswith((" ", "\t", "\n", "\xa0", "-", "\u2010", "\u2011", "\u00ad")) and not first_text.startswith((" ", "\t", "\n", "\xa0")):
+                        curr_spans[-1] = GlyphSpan(
+                            span_id=curr_spans[-1].span_id,
+                            text=curr_spans[-1].text + " ",
+                            bbox=curr_spans[-1].bbox,
+                            font_name=curr_spans[-1].font_name,
+                            font_size=curr_spans[-1].font_size,
+                            color=curr_spans[-1].color,
+                            flags=curr_spans[-1].flags,
+                            origin=curr_spans[-1].origin,
+                            chars=curr_spans[-1].chars,
+                            is_math_or_symbol=curr_spans[-1].is_math_or_symbol,
+                        )
+
+                curr = TextBlock(
+                    block_id=curr.block_id,
+                    bbox=new_bbox,
+                    spans=curr_spans + cand_spans,
+                    block_type="text",
+                )
+                skip_indices.add(j)
+
+        merged.append(curr)
+
+    return merged
+
+
 class PDFParseError(Exception):
     """Raised when a PDF cannot be opened, decrypted, or parsed."""
 
@@ -525,11 +615,15 @@ def parse_pdf(
                 except Exception as exc:
                     logger.warning("Vision layout detection failed on page %d: %s", page_num, exc)
 
+            # Horizontal Baseline Fragment Merging (MinerU & Marker SOTA pattern)
+            # Reassembles fragmented single-line text spans on the same baseline into coherent sentences
+            merged_blocks = _merge_horizontal_baseline_fragments(blocks)
+
             pages.append(
                 PageIR(
                     page_number=page_num,
                     geometry=geometry,
-                    blocks=blocks,
+                    blocks=merged_blocks,
                     regions=regions,
                 )
             )

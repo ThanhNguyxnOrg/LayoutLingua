@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import re
+
 import pymupdf
 
 from layoutlingua.typesetting.fonts import BUILTIN_OR_CJK_FONTS, FontManager
 from layoutlingua.typesetting.models import OverflowCause, TypesetOptions
+
+# Standard Table of Contents dot leader pattern: Title + at least 3 dots/dashes + page number
+TOC_LEADER_PATTERN = re.compile(r"^(.*?)(\s*[\.\:\-_–—…]{3,}\s*)(\d+)$")
 
 
 class TextFitTester:
@@ -17,6 +22,43 @@ class TextFitTester:
         self._doc = pymupdf.open()
         self._page = self._doc.new_page(width=1000, height=1000)
         self.font_manager.register_on_page(self._page, font_name=self.font_name)
+
+    def adapt_dot_leader_if_needed(
+        self,
+        text: str,
+        target_width: float,
+        font_size: float,
+        font_name: str | None = None,
+    ) -> str:
+        """Dynamically adjust dot leader length for Table of Contents lines (LaTeX \\dotfill pattern).
+
+        Prevents line-wrapping which causes catastrophic single-line OVERFLOW_FALLBACK.
+        """
+        if not text or target_width <= 0:
+            return text
+
+        match = TOC_LEADER_PATTERN.match(text.strip())
+        if not match:
+            return text
+
+        prefix = match.group(1).rstrip()
+        suffix = match.group(3).lstrip()
+
+        active_font = font_name or self.font_name
+        prefix_len = self.font_manager.measure_text_length(prefix, font_size)
+        suffix_len = self.font_manager.measure_text_length(suffix, font_size)
+        space_len = self.font_manager.measure_text_length(" ", font_size)
+        dot_len = max(1.0, self.font_manager.measure_text_length(".", font_size))
+
+        # Available width for dot leader with a safety cushion of 10pt
+        avail_width = target_width - prefix_len - suffix_len - (2 * space_len) - 10.0
+        if avail_width <= dot_len * 3:
+            return f"{prefix} ... {suffix}"
+
+        num_dots = int(avail_width / dot_len)
+        num_dots = max(3, min(num_dots, 120))
+        dots_str = "." * num_dots
+        return f"{prefix} {dots_str} {suffix}"
 
     def test_fit(
         self,
@@ -44,6 +86,9 @@ class TextFitTester:
             return False, orig_font_size, OverflowCause.OVERFLOW_UNDETERMINED, 0, effective_lineheight
 
         active_font = font_name or self.font_name
+
+        # Adapt Table of Contents dot leaders so they fit comfortably on one line
+        text = self.adapt_dot_leader_if_needed(text, width, orig_font_size, active_font)
 
         min_font_size = max(options.min_font_pt, options.min_font_scale * orig_font_size)
         test_rect = pymupdf.Rect(x0, y0, x1, y1)
