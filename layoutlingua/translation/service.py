@@ -62,6 +62,13 @@ def extract_document_segments(
         if isinstance(p_ids, (set, list, tuple)):
             doc_preserved.update(p_ids)
 
+    # De-noise running headers, footers, and page numbers across pages
+    from layoutlingua.processing.header_footer import detect_running_headers_footers
+
+    running_h_f = detect_running_headers_footers(doc_ir.pages)
+    if running_h_f:
+        doc_preserved.update(running_h_f)
+
     segments: list[TextSegment] = []
     for page in doc_ir.pages:
         if page_numbers is not None and page.page_number not in page_numbers:

@@ -545,21 +545,40 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                             t_text = unshield_citations(t_text, ref_map)
                         translated_segments[seg.segment_id] = t_text
                 else:
-                    from layoutlingua.translation.models import BatchTranslationRequest
-
                     batch_sz = 35
                     total_segs = len(segments)
-                    total_cached_so_far = 0
+                    concurrency = 3 if (provider_type in ("openai", "gemini", "ollama") or base_url) else 1
+
+                    all_ref_mappings = {}
+                    shielded_chunks = []
                     for b_idx in range(0, total_segs, batch_sz):
                         chunk = segments[b_idx : b_idx + batch_sz]
-                        done_segs = min(b_idx + len(chunk), total_segs)
+                        shielded_chunk = []
+                        for seg in chunk:
+                            s_text, ref_map = shield_citations(seg.masked_text)
+                            if ref_map:
+                                all_ref_mappings[seg.segment_id] = ref_map
+                                shielded_chunk.append(
+                                    TextSegment(
+                                        segment_id=seg.segment_id,
+                                        raw_text=seg.raw_text,
+                                        masked_text=s_text,
+                                        tokens=seg.tokens,
+                                        span_ids=seg.span_ids,
+                                    )
+                                )
+                            else:
+                                shielded_chunk.append(seg)
+                        shielded_chunks.append(shielded_chunk)
+
+                    from layoutlingua.translation.concurrent_pool import concurrent_batch_translate
+
+                    def _on_chunk_progress(c_idx: int, done_segs: int, chunk_res: dict[str, str]):
                         approx_p = max(1, int((done_segs / max(1, total_segs)) * total_p))
                         elapsed = max(0.2, time.time() - start_time)
                         curr_speed = round(approx_p / elapsed, 1)
                         rem_p = max(0, total_p - approx_p)
                         calc_eta = int(rem_p / max(curr_speed, 0.1)) if curr_speed > 0 else 30
-
-                        cache_prefix = f"⚡ Cached {total_cached_so_far} segs • " if total_cached_so_far > 0 else ""
                         with _LOCK:
                             session["progress"] = {
                                 "current_page": approx_p,
@@ -567,68 +586,50 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                                 "status": "processing",
                                 "speed": curr_speed,
                                 "eta_seconds": calc_eta,
-                                "message": f"{cache_prefix}Translating text ({done_segs}/{total_segs} segments)...",
+                                "message": f"Translating text ({done_segs}/{total_segs} segments)...",
                             }
 
-                        shielded_chunk = []
-                        chunk_ref_mappings = {}
-                        for seg in chunk:
-                            s_text, ref_map = shield_citations(seg.masked_text)
-                            if ref_map:
-                                chunk_ref_mappings[seg.segment_id] = ref_map
-                                shielded_seg = TextSegment(
-                                    segment_id=seg.segment_id,
-                                    raw_text=seg.raw_text,
-                                    masked_text=s_text,
-                                    tokens=seg.tokens,
-                                    span_ids=seg.span_ids,
-                                )
-                                shielded_chunk.append(shielded_seg)
-                            else:
-                                shielded_chunk.append(seg)
-
-                        req = BatchTranslationRequest(
-                            batch_id=f"batch-{b_idx}",
-                            source_language=session.get("detected_lang", "auto"),
-                            target_language=target_lang,
-                            segments=tuple(shielded_chunk),
+                    try:
+                        raw_batch_res = concurrent_batch_translate(
+                            provider=provider_inst,
+                            chunks=shielded_chunks,
+                            source_lang=session.get("detected_lang", "auto"),
+                            target_lang=target_lang,
+                            max_workers=concurrency,
+                            on_chunk_done=_on_chunk_progress,
                         )
-                        try:
-                            b_res = provider_inst.translate_batch(req)
-                            for s_id, t_text in b_res.translations.items():
-                                if s_id in chunk_ref_mappings:
-                                    t_text = unshield_citations(t_text, chunk_ref_mappings[s_id])
-                                translated_segments[s_id] = t_text
-                            if hasattr(provider_inst, "last_cache_hits"):
-                                total_cached_so_far += provider_inst.last_cache_hits
-                        except RateLimitError as rl_err:
-                            print(f"[LayoutLingua] Rate limit error: {rl_err}")
-                            with _LOCK:
-                                session["progress"] = {
-                                    "current_page": approx_p,
-                                    "total_pages": total_p,
-                                    "status": "rate-limited",
-                                    "speed": 0,
-                                    "eta_seconds": 0,
-                                    "message": "Google free quota temporarily blocked (HTTP 429). Please switch provider.",
-                                    "error_type": "rate_limit",
-                                    "provider": "google",
-                                }
-                            self._send_error(429, str(rl_err))
-                            return
-                        except Exception as b_err:
-                            print(f"[LayoutLingua] Live batch error: {b_err}, falling back to mock")
-                            mock_fallback = MockTranslationProvider()
-                            for seg in chunk:
-                                s_text, ref_map = shield_citations(seg.masked_text)
-                                t_text = mock_fallback.translate_segment(
-                                    segment_id=seg.segment_id,
-                                    text=s_text,
-                                    target_lang=target_lang,
-                                )
-                                if ref_map:
-                                    t_text = unshield_citations(t_text, ref_map)
-                                translated_segments[seg.segment_id] = t_text
+                        for s_id, t_text in raw_batch_res.items():
+                            if s_id in all_ref_mappings:
+                                t_text = unshield_citations(t_text, all_ref_mappings[s_id])
+                            translated_segments[s_id] = t_text
+                    except RateLimitError as rl_err:
+                        print(f"[LayoutLingua] Rate limit error: {rl_err}")
+                        with _LOCK:
+                            session["progress"] = {
+                                "current_page": approx_p if 'approx_p' in locals() else 1,
+                                "total_pages": total_p,
+                                "status": "rate-limited",
+                                "speed": 0,
+                                "eta_seconds": 0,
+                                "message": "Google free quota temporarily blocked (HTTP 429). Please switch provider.",
+                                "error_type": "rate_limit",
+                                "provider": "google",
+                            }
+                        self._send_error(429, str(rl_err))
+                        return
+                    except Exception as b_err:
+                        print(f"[LayoutLingua] Live batch error: {b_err}, falling back to mock")
+                        mock_fallback = MockTranslationProvider()
+                        for seg in segments:
+                            s_text, ref_map = shield_citations(seg.masked_text)
+                            t_text = mock_fallback.translate_segment(
+                                segment_id=seg.segment_id,
+                                text=s_text,
+                                target_lang=target_lang,
+                            )
+                            if ref_map:
+                                t_text = unshield_citations(t_text, ref_map)
+                            translated_segments[seg.segment_id] = t_text
 
                 # Apply domain glossary & custom user overrides
                 custom_glossary = req_json.get("custom_glossary", None)
