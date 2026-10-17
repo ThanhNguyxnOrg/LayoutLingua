@@ -27,10 +27,16 @@ class PDFParseError(Exception):
     """Raised when a PDF cannot be opened, decrypted, or parsed."""
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def parse_pdf(
     file_path: str | Path,
     password: str | None = None,
     include_chars: bool = True,
+    layout_detector: Any | None = None,
 ) -> DocumentIR:
     """Parse a PDF document into a decoupled DocumentIR representation.
 
@@ -110,6 +116,10 @@ def parse_pdf(
                                 s_text = "".join(c.get("c", "") for c in s["chars"])
                             if s_text is None:
                                 s_text = ""
+                            else:
+                                from layoutlingua.processing.text_sanitizer import sanitize_extracted_text
+
+                                s_text = sanitize_extracted_text(s_text)
 
                             # Preserve word separation across line breaks within a block
                             is_last_span_in_line = (span_idx == len(line_spans) - 1)
@@ -218,6 +228,33 @@ def parse_pdf(
                             metadata={"image_format": b.get("ext", "unknown")},
                         )
                     )
+
+            if layout_detector is not None and getattr(layout_detector, "is_available", lambda: False)():
+                try:
+                    dpi = 150
+                    pix = page.get_pixmap(dpi=dpi)
+                    vision_regions = layout_detector.detect(pix.tobytes())
+                    if vision_regions:
+                        scale_factor = 72.0 / float(dpi)
+                        from layoutlingua.processing.vision.onnx_detector import LayoutRegion as VisionRegion
+
+                        scaled_regions = [
+                            VisionRegion(
+                                bbox=(
+                                    vr.x0 * scale_factor,
+                                    vr.y0 * scale_factor,
+                                    vr.x1 * scale_factor,
+                                    vr.y1 * scale_factor,
+                                ),
+                                category=vr.category,
+                                score=vr.score,
+                            )
+                            for vr in vision_regions
+                        ]
+                        ir_regions = layout_detector.to_ir_regions(scaled_regions, page_num)
+                        regions.extend(ir_regions)
+                except Exception as exc:
+                    logger.warning("Vision layout detection failed on page %d: %s", page_num, exc)
 
             pages.append(
                 PageIR(

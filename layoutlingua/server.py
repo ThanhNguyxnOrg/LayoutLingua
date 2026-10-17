@@ -43,6 +43,30 @@ _SESSIONS: dict[str, dict[str, Any]] = {}
 _LOCK = threading.Lock()
 MAX_SESSIONS = 15
 
+# Vision ONNX Layout Detector (lazy loaded if model exists)
+_GLOBAL_DETECTOR: Any = None
+_DETECTOR_TRIED: bool = False
+
+
+def get_layout_detector() -> Any:
+    """Retrieve active ONNX vision layout detector if model file is present."""
+    global _GLOBAL_DETECTOR, _DETECTOR_TRIED
+    if not _DETECTOR_TRIED:
+        _DETECTOR_TRIED = True
+        model_env = os.environ.get("LAYOUTLINGUA_ONNX_MODEL", "models/doclayout_yolo.onnx")
+        model_path = Path(model_env)
+        if model_path.is_file():
+            try:
+                from layoutlingua.processing.vision import OnnxLayoutDetector
+
+                det = OnnxLayoutDetector(model_path)
+                if det.is_available():
+                    _GLOBAL_DETECTOR = det
+                    print(f"[LayoutLingua] Loaded ONNX vision layout detector from {model_path}")
+            except Exception as exc:
+                print(f"[LayoutLingua] Failed to initialize ONNX detector: {exc}")
+    return _GLOBAL_DETECTOR
+
 
 class LayoutLinguaHandler(BaseHTTPRequestHandler):
     """HTTP request handler for LayoutLingua desktop client API."""
@@ -375,7 +399,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                     tmp_path = tmp.name
 
                 try:
-                    doc_ir = parse_pdf(tmp_path)
+                    doc_ir = parse_pdf(tmp_path, layout_detector=get_layout_detector())
                 finally:
                     try:
                         os.remove(tmp_path)
@@ -532,15 +556,22 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 total_p = len(src_doc) if 'src_doc' in locals() else len(doc_ir.pages)
 
                 from layoutlingua.processing.citation import shield_citations, unshield_citations
+                from layoutlingua.processing.text_sanitizer import (
+                    shield_academic_abbreviations,
+                    unshield_academic_abbreviations,
+                )
 
                 if isinstance(provider_inst, MockTranslationProvider):
                     for seg in segments:
                         s_text, ref_map = shield_citations(seg.masked_text)
+                        s_text, abbr_map = shield_academic_abbreviations(s_text)
                         t_text = provider_inst.translate_segment(
                             segment_id=seg.segment_id,
                             text=s_text,
                             target_lang=target_lang,
                         )
+                        if abbr_map:
+                            t_text = unshield_academic_abbreviations(t_text, abbr_map)
                         if ref_map:
                             t_text = unshield_citations(t_text, ref_map)
                         translated_segments[seg.segment_id] = t_text
@@ -550,14 +581,19 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                     concurrency = 3 if (provider_type in ("openai", "gemini", "ollama") or base_url) else 1
 
                     all_ref_mappings = {}
+                    all_abbr_mappings = {}
                     shielded_chunks = []
                     for b_idx in range(0, total_segs, batch_sz):
                         chunk = segments[b_idx : b_idx + batch_sz]
                         shielded_chunk = []
                         for seg in chunk:
                             s_text, ref_map = shield_citations(seg.masked_text)
+                            s_text, abbr_map = shield_academic_abbreviations(s_text)
                             if ref_map:
                                 all_ref_mappings[seg.segment_id] = ref_map
+                            if abbr_map:
+                                all_abbr_mappings[seg.segment_id] = abbr_map
+                            if ref_map or abbr_map:
                                 shielded_chunk.append(
                                     TextSegment(
                                         segment_id=seg.segment_id,
@@ -599,6 +635,8 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                             on_chunk_done=_on_chunk_progress,
                         )
                         for s_id, t_text in raw_batch_res.items():
+                            if s_id in all_abbr_mappings:
+                                t_text = unshield_academic_abbreviations(t_text, all_abbr_mappings[s_id])
                             if s_id in all_ref_mappings:
                                 t_text = unshield_citations(t_text, all_ref_mappings[s_id])
                             translated_segments[s_id] = t_text
@@ -622,11 +660,14 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         mock_fallback = MockTranslationProvider()
                         for seg in segments:
                             s_text, ref_map = shield_citations(seg.masked_text)
+                            s_text, abbr_map = shield_academic_abbreviations(s_text)
                             t_text = mock_fallback.translate_segment(
                                 segment_id=seg.segment_id,
                                 text=s_text,
                                 target_lang=target_lang,
                             )
+                            if abbr_map:
+                                t_text = unshield_academic_abbreviations(t_text, abbr_map)
                             if ref_map:
                                 t_text = unshield_citations(t_text, ref_map)
                             translated_segments[seg.segment_id] = t_text
@@ -754,11 +795,17 @@ def start_server(host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServ
     return server
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run the LayoutLingua server as a standalone process."""
+    host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "8765"))
-    server = ThreadingHTTPServer(("127.0.0.1", port), LayoutLinguaHandler)
-    print(f"[LayoutLingua] Local API Server listening on http://127.0.0.1:{port}/")
+    server = ThreadingHTTPServer((host, port), LayoutLinguaHandler)
+    print(f"[LayoutLingua] Local API Server listening on http://{host}:{port}/")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n[LayoutLingua] Server stopped.")
+
+
+if __name__ == "__main__":
+    main()

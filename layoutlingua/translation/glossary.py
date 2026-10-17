@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Mapping
 
 _RESOURCE_DIR = Path(__file__).parent.parent / "resources" / "glossary"
-_FORMULA_OR_TAG_PATTERN = re.compile(r"(⟦LL_FORMULA_\d+⟧|⟦LL_REF_\d+⟧|⟦SPLIT_SEP⟧|</?b\d+>)")
+_FORMULA_OR_TAG_PATTERN = re.compile(r"(⟦LL_FORMULA_\d+⟧|⟦LL_REF_\d+⟧|⟦LL_ABBR_\d+⟧|⟦SPLIT_SEP⟧|</?b\d+>)")
 
 
 class GlossaryManager:
