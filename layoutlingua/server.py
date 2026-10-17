@@ -502,6 +502,22 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                 session["is_translating"] = False
             return
 
+        with _LOCK:
+            session["progress"] = {
+                "stage_index": 2,
+                "stage_name": "Translating text blocks",
+                "current_page": 0,
+                "total_pages": total_p,
+                "segments_done": total_segs,
+                "segments_total": total_segs,
+                "overall_pct": 52,
+                "status": "processing",
+                "speed": curr_speed,
+                "speed_unit": "seg/s",
+                "eta_seconds": int(total_p * 0.25),
+                "message": "Applying academic terminology glossaries...",
+            }
+
         # Apply domain glossary & custom user overrides with source text normalization
         try:
             from layoutlingua.translation.glossary import GlossaryManager

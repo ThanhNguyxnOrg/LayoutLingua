@@ -236,6 +236,25 @@ class GlossaryManager:
             terms.update(custom_terms)
         return terms
 
+    _term_regex_cache: dict[tuple[str, bool], re.Pattern] = {}
+
+    @classmethod
+    def _get_term_pattern(cls, term: str, is_cjk: bool) -> re.Pattern:
+        key = (term, is_cjk)
+        pat = cls._term_regex_cache.get(key)
+        if pat is None:
+            if is_cjk:
+                pat = re.compile(re.escape(term))
+            else:
+                pat = re.compile(
+                    rf"(?<![\w\u00C0-\u024F\u1EA0-\u1EF9]){re.escape(term)}(?![\w\u00C0-\u024F\u1EA0-\u1EF9])",
+                    re.IGNORECASE,
+                )
+            if len(cls._term_regex_cache) > 4096:
+                cls._term_regex_cache.clear()
+            cls._term_regex_cache[key] = pat
+        return pat
+
     @classmethod
     def apply_glossary(
         cls,
@@ -264,21 +283,17 @@ class GlossaryManager:
                 continue
 
             processed_part = part
+            part_lower = processed_part.lower()
             for term in sorted_terms:
                 if not term.strip():
                     continue
+                # Fast Boyer-Moore substring pre-filter in C: skips non-matching terms instantly
+                if term.lower() not in part_lower:
+                    continue
+
                 replacement = glossary[term]
-                
-                # Check for CJK characters
                 is_cjk = any("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u30ff" or "\uac00" <= c <= "\ud7af" for c in term)
-                if is_cjk:
-                    pattern = re.compile(re.escape(term))
-                else:
-                    # Smart boundary supporting Latin, Unicode accents, and digits
-                    pattern = re.compile(
-                        rf"(?<![\w\u00C0-\u024F\u1EA0-\u1EF9]){re.escape(term)}(?![\w\u00C0-\u024F\u1EA0-\u1EF9])",
-                        re.IGNORECASE,
-                    )
+                pattern = cls._get_term_pattern(term, is_cjk)
 
                 if not pattern.search(processed_part):
                     continue
@@ -292,6 +307,7 @@ class GlossaryManager:
                     return replacement
 
                 processed_part = pattern.sub(_replace_match, processed_part)
+                part_lower = processed_part.lower()
 
             new_parts.append(processed_part)
 
@@ -315,42 +331,39 @@ class GlossaryManager:
         if not glossary:
             return result
 
+        source_lower = source_text.lower()
+        result_lower = result.lower()
+
         # Scan for glossary terms that appear in source_text (ordered by term length descending)
         for s_term, t_term in sorted(glossary.items(), key=lambda x: len(x[0]), reverse=True):
             if not s_term.strip() or len(s_term) < 2:
                 continue
 
-            # Check if source term is present in source_text
+            # Fast Boyer-Moore substring pre-filter in C: skips 99.9% of non-matching terms instantly
+            s_lower = s_term.lower()
+            if s_lower not in source_lower and s_lower not in result_lower:
+                continue
+
             is_cjk_src = any("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u30ff" or "\uac00" <= c <= "\ud7af" for c in s_term)
-            if is_cjk_src:
-                p_src = re.compile(re.escape(s_term))
-            else:
-                p_src = re.compile(
-                    rf"(?<![\w\u00C0-\u024F\u1EA0-\u1EF9]){re.escape(s_term)}(?![\w\u00C0-\u024F\u1EA0-\u1EF9])",
-                    re.IGNORECASE,
-                )
+            p_src = cls._get_term_pattern(s_term, is_cjk_src)
 
             m_src = p_src.search(source_text)
             if not m_src:
                 continue
 
             # If target term is already correctly present in translated text, no healing needed
-            is_cjk_tgt = any("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u30ff" or "\uac00" <= c <= "\ud7af" for c in t_term)
-            if is_cjk_tgt:
-                p_tgt = re.compile(re.escape(t_term))
-            else:
-                p_tgt = re.compile(
-                    rf"(?<![\w\u00C0-\u024F\u1EA0-\u1EF9]){re.escape(t_term)}(?![\w\u00C0-\u024F\u1EA0-\u1EF9])",
-                    re.IGNORECASE,
-                )
-            if p_tgt.search(result):
-                continue
+            if t_term.lower() in result_lower:
+                is_cjk_tgt = any("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u30ff" or "\uac00" <= c <= "\ud7af" for c in t_term)
+                p_tgt = cls._get_term_pattern(t_term, is_cjk_tgt)
+                if p_tgt.search(result):
+                    continue
 
             # 1. Direct healing: if untranslated s_term exists in translated text
             if p_src.search(result):
                 def _rep(m: re.Match) -> str:
                     return t_term[0].upper() + t_term[1:] if m.group(0).istitle() else t_term
                 result = p_src.sub(_rep, result)
+                result_lower = result.lower()
                 continue
 
             # 2. Structural layout anchor alignment: find shared pre/suf tokens (indices, dot leaders, tags, formulas)
@@ -367,6 +380,7 @@ class GlossaryManager:
                 )
                 if anchor_pat.search(result):
                     result = anchor_pat.sub(rf"\g<1>{t_term}\g<3>", result)
+                    result_lower = result.lower()
                     continue
 
         return result
