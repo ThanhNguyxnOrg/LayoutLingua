@@ -1,11 +1,9 @@
-name: Auto Merge Safe Updates
+name: Auto Merge and Triage
 
-# Automatically merges ONLY routine, non-critical updates:
-# 1. Dependabot minor & patch version updates (security & bug fixes)
-# 2. PRs explicitly marked with 'automerge' or 'safe-update' labels
-#
-# Critical core logic, features, and major breaking changes will NEVER be auto-merged.
-# Powered by ThanhNguyxnAgent with requirement that full 3-OS CI passes.
+# Automated CI/CD review, triage, and merge system for routine updates.
+# Powered by ThanhNguyxnAgent with 3-OS CI matrix verification (Ubuntu, Windows, macOS).
+# Routine dependency & Actions updates are auto-approved and auto-merged.
+# Critical PRs labeled 'needs-review' or 'critical' are assigned to @ThanhNguyxnOrg/core.
 
 on:
   pull_request_target:
@@ -48,7 +46,7 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      # Check if this PR is marked or classified as critical / requiring manual review
+      # Check if this PR is marked as critical / requiring manual review
       - name: 🛡️ Check Review Requirement
         id: review-gate
         run: |
@@ -69,21 +67,21 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
-          echo "⚠️ Critical PR detected. Tagging core team for triage & review..."
+          echo "Critical PR detected. Assigning core team for manual triage and review..."
           gh pr edit "$PR_URL" --add-label "needs-review,task" || true
           gh pr edit "$PR_URL" --add-assignee "RealThanhNguyxn,ThanhNguyxn07" || true
           gh pr edit "$PR_URL" --add-reviewer "RealThanhNguyxn,ThanhNguyxn07" || true
-          gh pr comment "$PR_URL" --body "🔔 **Giao việc / Cần Review:** @ThanhNguyxnOrg/core (@RealThanhNguyxn @ThanhNguyxn07) PR này được đánh dấu quan trọng/cần review thủ công. Tính năng auto-merge đã tạm dừng trên PR này để chờ core team duyệt." || true
+          gh pr comment "$PR_URL" --body "🔔 **Review Assignment:** @ThanhNguyxnOrg/core (@RealThanhNguyxn @ThanhNguyxn07) — This pull request has been flagged as critical or requiring manual review. Automated merging has been suspended pending core team approval." || true
           exit 0
 
-      # Routine safe updates: approve and enable auto-merge once 3-OS CI passes
-      - name: ✅ Approve and Enable Auto-Merge via ThanhNguyxnAgent
+      # Routine safe updates: approve and enable auto-merge via ThanhNguyxnAgent once 3-OS CI passes
+      - name: ✅ Approve and Auto-Merge via ThanhNguyxnAgent
         if: steps.review-gate.outputs.is_critical != 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
-          echo "Approving routine update: $PR_URL"
-          gh pr review "$PR_URL" --approve --body "Auto-approved: safe routine update." || true
+          echo "Approving safe routine update: $PR_URL"
+          gh pr review "$PR_URL" --approve --body "Auto-approved by ThanhNguyxnAgent: verified routine update with co-authorship." || true
           echo "Enabling auto-merge (squash) once 3-OS CI tests pass..."
           gh pr merge "$PR_URL" --auto --squash --delete-branch || true
