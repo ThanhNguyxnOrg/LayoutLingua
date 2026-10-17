@@ -17,10 +17,14 @@ def export_document_markdown(
     segments = translated_segments or {}
     lines: list[str] = []
 
+    from layoutlingua.processing.reading_order import sort_blocks_reading_order
+
     for page in doc_ir.pages:
         lines.append(f"<!-- Page {page.page_number} -->\n")
+        page_w = page.geometry.width if hasattr(page, "geometry") and page.geometry else 595.0
+        sorted_blocks = sort_blocks_reading_order(page.blocks, page_width=page_w)
 
-        for block in page.blocks:
+        for block in sorted_blocks:
             # Mathematical display equation
             if block.block_type == "formula":
                 eq_text = block.text.strip()

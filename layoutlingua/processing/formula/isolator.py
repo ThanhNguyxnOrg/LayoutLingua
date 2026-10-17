@@ -89,6 +89,11 @@ class FormulaIsolator:
         # Collapse multiple adjacent spaces
         masked_text = re.sub(r" +", " ", masked_text).strip()
 
+        # Dehyphenate soft line breaks within block prose
+        from layoutlingua.processing.dehyphen import dehyphenate_text
+
+        masked_text = dehyphenate_text(masked_text)
+
         return TextSegment(
             segment_id=block.block_id,
             raw_text=raw_text,

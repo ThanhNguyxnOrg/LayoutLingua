@@ -72,7 +72,12 @@ def extract_document_segments(
             if isinstance(p_ids, (set, list, tuple)):
                 page_preserved.update(p_ids)
 
-        for block in page.blocks:
+        page_w = page.geometry.width if hasattr(page, "geometry") and page.geometry else 595.0
+        from layoutlingua.processing.reading_order import sort_blocks_reading_order
+
+        sorted_blocks = sort_blocks_reading_order(page.blocks, page_width=page_w)
+
+        for block in sorted_blocks:
             if (
                 block.block_type in ("formula", "table_rejected")
                 or block.block_id in page_preserved
