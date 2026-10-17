@@ -12,6 +12,8 @@ export default function ExportDialog({
   initialDocName = 'Research-Paper.pdf',
   docId,
   totalPages = 1,
+  targetLang = 'en',
+  translatedCount,
 }: {
   onClose: () => void
   needsReview: number
@@ -19,11 +21,32 @@ export default function ExportDialog({
   initialDocName?: string
   docId?: string
   totalPages?: number
+  targetLang?: string
+  translatedCount?: number
 }) {
   const [step, setStep] = useState<Step>('form')
   const [format, setFormat] = useState<'pdf' | 'md'>('pdf')
   const [layoutMode, setLayoutMode] = useState<'mono' | 'bilingual'>('mono')
-  const defaultExportName = initialDocName.replace(/\.pdf$/i, '') + '.vi.pdf'
+  const [exportScope, setExportScope] = useState<'all' | 'translated'>('all')
+
+  const langExtMap: Record<string, string> = {
+    'Vietnamese': 'vi',
+    'English': 'en',
+    'German': 'de',
+    'French': 'fr',
+    'Japanese': 'ja',
+    'Spanish': 'es',
+    'Chinese (Simplified)': 'zh',
+    'vi': 'vi',
+    'en': 'en',
+    'de': 'de',
+    'fr': 'fr',
+    'ja': 'ja',
+    'es': 'es',
+    'zh': 'zh',
+  }
+  const langExt = langExtMap[targetLang] || (targetLang.toLowerCase().slice(0, 2)) || 'en'
+  const defaultExportName = initialDocName.replace(/\.pdf$/i, '') + `.${langExt}.pdf`
   const [name, setName] = useState(defaultExportName)
   const [dir, setDir] = useState('~/Desktop')
   const [savedPath, setSavedPath] = useState('')
@@ -69,18 +92,26 @@ export default function ExportDialog({
 
   const handlePickFolder = async () => {
     setPickingFolder(true)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 20000)
     try {
-      // 1. Try backend native folder picker
-      const res = await fetch(apiUrl(`/api/pick-folder?initial=${encodeURIComponent(dir)}`))
+      // 1. Try backend native folder picker with safe timeout
+      const res = await fetch(apiUrl(`/api/pick-folder?initial=${encodeURIComponent(dir)}`), {
+        signal: controller.signal,
+      })
       if (res.ok) {
         const data = await res.json()
         if (data.path) {
           setDir(data.path)
-          setPickingFolder(false)
           return
         }
       }
-    } catch {}
+    } catch {
+      // Fallback
+    } finally {
+      clearTimeout(timer)
+      setPickingFolder(false)
+    }
 
     // 2. Fallback to browser showDirectoryPicker if available
     try {
@@ -91,12 +122,13 @@ export default function ExportDialog({
         }
       }
     } catch {}
-    setPickingFolder(false)
   }
 
   const save = async () => {
     setStep('saving')
     setErrorMessage('')
+
+    const scopeParam = exportScope === 'translated' ? 'translated_only' : 'all'
 
     if (docId) {
       // 1. Save directly to filesystem via backend engine
@@ -110,6 +142,7 @@ export default function ExportDialog({
             directory: dir,
             mode: layoutMode,
             format: format,
+            scope: scopeParam,
           }),
         })
 
@@ -119,7 +152,7 @@ export default function ExportDialog({
           setSavedPath(finalPath)
 
           // Secondary: trigger browser download in background so browser download history has it
-          fetch(apiUrl(`/api/download?id=${encodeURIComponent(docId)}&mode=${layoutMode}&format=${format}`))
+          fetch(apiUrl(`/api/download?id=${encodeURIComponent(docId)}&mode=${layoutMode}&format=${format}&scope=${scopeParam}`))
             .then((r) => r.blob())
             .then((blob) => {
               const el = document.createElement('a')
@@ -144,7 +177,7 @@ export default function ExportDialog({
       // 2. Browser direct download fallback
       try {
         const res = await fetch(
-          apiUrl(`/api/download?id=${encodeURIComponent(docId)}&mode=${layoutMode}&format=${format}`)
+          apiUrl(`/api/download?id=${encodeURIComponent(docId)}&mode=${layoutMode}&format=${format}&scope=${scopeParam}`)
         )
         if (res.ok) {
           const blob = await res.blob()
@@ -222,7 +255,7 @@ export default function ExportDialog({
                         ? `${base}.translated.md`
                         : layoutMode === 'bilingual'
                         ? `${base}.bilingual.pdf`
-                        : `${base}.vi.pdf`
+                        : `${base}.${langExt}.pdf`
                     )
                   }}
                   className="h-9 rounded-md border border-line-strong bg-white px-2.5 text-[13px] font-normal focus:border-teal focus:ring-1 focus:ring-teal cursor-pointer"
@@ -242,11 +275,11 @@ export default function ExportDialog({
                     const m = e.target.value as 'mono' | 'bilingual'
                     setLayoutMode(m)
                     const base = initialDocName.replace(/\.pdf$/i, '')
-                    setName(m === 'bilingual' ? `${base}.bilingual.pdf` : `${base}.vi.pdf`)
+                    setName(m === 'bilingual' ? `${base}.bilingual.pdf` : `${base}.${langExt}.pdf`)
                   }}
                   className="h-9 rounded-md border border-line-strong bg-white px-2.5 text-[13px] font-normal focus:border-teal focus:ring-1 focus:ring-teal cursor-pointer"
                 >
-                  <option value="mono">Mono (Translated Pages Only)</option>
+                  <option value="mono">Single Language (Translated Layout)</option>
                   <option value="bilingual">Bilingual (Interleaved Original + Translated)</option>
                 </select>
               </label>
@@ -280,6 +313,20 @@ export default function ExportDialog({
                 )}
               </div>
             </div>
+
+            {translatedCount !== undefined && translatedCount > 0 && translatedCount < totalP && (
+              <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
+                Export Page Range
+                <select
+                  value={exportScope}
+                  onChange={(e) => setExportScope(e.target.value as 'all' | 'translated')}
+                  className="h-9 rounded-md border border-line-strong bg-white px-2.5 text-[13px] font-normal focus:border-teal focus:ring-1 focus:ring-teal cursor-pointer"
+                >
+                  <option value="all">Full Document ({totalP} pages) — with untranslated pages kept pristine</option>
+                  <option value="translated">Translated Pages Only ({translatedCount} pages)</option>
+                </select>
+              </label>
+            )}
 
             {/* Custom Location Path Picker */}
             <div className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">

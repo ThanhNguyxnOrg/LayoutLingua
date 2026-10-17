@@ -1,4 +1,4 @@
-﻿"""Unit tests for selective page range parsing."""
+"""Unit tests for selective page range parsing."""
 
 from layoutlingua.processing.page_range import parse_page_range
 
@@ -24,3 +24,14 @@ def test_parse_page_range_clamping_and_inverted():
     assert parse_page_range("5-2", 10) == {2, 3, 4, 5}
     # Out of range single page
     assert parse_page_range("99", 5) == {1, 2, 3, 4, 5}  # fallback to all
+
+
+def test_parse_page_range_standalone_and_prefixes():
+    # Standalone number represents translating first N pages
+    assert parse_page_range("20", 96) == set(range(1, 21))
+    assert parse_page_range("5", 50) == {1, 2, 3, 4, 5}
+
+    # Explicit page prefix targets only that page
+    assert parse_page_range("p20", 96) == {20}
+    assert parse_page_range("page 20", 96) == {20}
+    assert parse_page_range("p.7", 10) == {7}

@@ -28,19 +28,25 @@ function PageNavigator({
   total: number
   docId?: string
 }) {
+  const itemRefs = useRef<Record<number, HTMLLIElement | null>>({})
+
+  useEffect(() => {
+    itemRefs.current[current]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [current])
+
   return (
-    <aside aria-label="Pages" className="flex w-[132px] shrink-0 flex-col border-r border-line bg-white">
-      <div className="flex h-12 items-center justify-between border-b border-line px-3">
+    <aside aria-label="Pages" className="flex h-full max-h-full w-[132px] min-h-0 shrink-0 flex-col border-r border-line bg-white select-none overflow-hidden">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-line px-3">
         <h2 className="text-[13px] font-bold">Pages</h2>
         <span className="font-mono text-[12px] text-muted">{current} / {total}</span>
       </div>
-      <ol className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
+      <ol className="flex-1 min-h-0 space-y-3 overflow-y-auto px-3 py-4 select-none">
         {pageList.map((p) => {
           const s = known(p)
           const active = p.n === current
           return (
-            <li key={p.n}>
-              <button onClick={() => onSelect(p.n)} aria-current={active ? 'page' : undefined} aria-label={`Page ${p.n}${s === 'warn' ? ', needs review' : s === 'fallback' ? ', preserved from source' : ''}`} className="group flex w-full flex-col items-center gap-1.5">
+            <li key={p.n} ref={(el) => { itemRefs.current[p.n] = el }}>
+              <button onClick={() => onSelect(p.n)} aria-current={active ? 'page' : undefined} aria-label={`Page ${p.n}${s === 'warn' ? ', needs review' : s === 'fallback' ? ', preserved from source' : ''}`} className="group flex w-full flex-col items-center gap-1.5 cursor-pointer">
                 <span className={`relative block rounded-[2px] ring-offset-2 transition ${active ? 'ring-2 ring-teal' : 'ring-1 ring-line-strong group-hover:ring-faint'}`}>
                   <PdfPage page={p} type="source" width={92} showMarks={false} docId={docId} />
                 </span>
@@ -363,7 +369,51 @@ function Inspector(p: {
                     placeholder="e.g. all or 1-5, 8, 10-12"
                     className="h-8 rounded-md border border-line-strong px-2.5 font-mono text-[12.5px] focus:border-teal focus:ring-1 focus:ring-teal"
                   />
-                  <span className="text-[11px] text-muted">Leave as "all" to translate entire document. Untranslated pages remain pristine.</span>
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => p.setPageRange('all')}
+                      className={`rounded px-1.5 py-0.5 text-[11px] font-medium border transition-colors cursor-pointer ${
+                        !p.pageRange || p.pageRange === 'all'
+                          ? 'border-teal bg-teal/10 text-teal'
+                          : 'border-line text-muted hover:border-line-strong'
+                      }`}
+                    >
+                      All ({p.total} pp)
+                    </button>
+                    {p.total > 5 && (
+                      <button
+                        type="button"
+                        onClick={() => p.setPageRange('1-5')}
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium border transition-colors cursor-pointer ${
+                          p.pageRange === '1-5' || p.pageRange === '5'
+                            ? 'border-teal bg-teal/10 text-teal'
+                            : 'border-line text-muted hover:border-line-strong'
+                        }`}
+                      >
+                        First 5 pp (1–5)
+                      </button>
+                    )}
+                    {p.total > 20 && (
+                      <button
+                        type="button"
+                        onClick={() => p.setPageRange('1-20')}
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium border transition-colors cursor-pointer ${
+                          p.pageRange === '1-20' || p.pageRange === '20'
+                            ? 'border-teal bg-teal/10 text-teal'
+                            : 'border-line text-muted hover:border-line-strong'
+                        }`}
+                      >
+                        First 20 pp (1–20)
+                      </button>
+                    )}
+                  </div>
+                  {/^\d+$/.test(p.pageRange.trim()) && Number(p.pageRange.trim()) > 1 && (
+                    <div className="rounded bg-teal-soft/40 px-2 py-1 text-[11px] text-teal-ink">
+                      Translating first {p.pageRange.trim()} pages (1–{p.pageRange.trim()}). For only page {p.pageRange.trim()}, use 'p{p.pageRange.trim()}'.
+                    </div>
+                  )}
+                  <span className="text-[11px] text-muted">Untranslated pages remain pristine in original layout.</span>
                 </Field>
                 <p className="text-[13px] leading-relaxed"><span className="font-mono">{p.total}</span> pages ready for translation from {p.src} to {p.tgt}.</p>
                 <Button variant="primary" className="h-10 w-full" onClick={p.start}>Translate PDF</Button>
@@ -880,6 +930,8 @@ export default function Workspace({
           initialDocName={docInfo?.name}
           docId={docInfo?.id}
           totalPages={totalPages}
+          targetLang={tgt}
+          translatedCount={done}
           onClose={() => setExportOpen(false)}
           needsReview={counts.review}
           preserved={docPages.filter((p) => p.n <= done && p.status === 'fallback').map((p) => p.n)}

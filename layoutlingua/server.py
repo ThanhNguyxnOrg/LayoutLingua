@@ -394,9 +394,11 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
             session["translated_segments"] = translated_segments
             session["target_lang"] = target_lang
             session["custom_glossary"] = custom_glossary
+            session["selected_pages"] = sorted(list(selected_pages))
             session["progress"] = {
                 "current_page": total_p,
                 "total_pages": total_p,
+                "selected_pages_count": len(selected_pages),
                 "status": "done",
                 "speed": round(total_p / max(0.2, time.time() - start_time), 1),
                 "eta_seconds": 0,
@@ -618,12 +620,36 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
             else:
                 pdf_bytes = raw_translated or raw_source
 
+            scope = query.get("scope", ["all"])[0].lower().strip()
+            selected_pages = session.get("selected_pages")
+            total_doc_pages = session.get("page_count", 0)
+            if (
+                scope == "translated_only"
+                and selected_pages
+                and total_doc_pages > 0
+                and len(selected_pages) < total_doc_pages
+            ):
+                try:
+                    full_pdf = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+                    trimmed_pdf = pymupdf.open()
+                    for p_num in sorted(selected_pages):
+                        if 1 <= p_num <= len(full_pdf):
+                            trimmed_pdf.insert_pdf(full_pdf, from_page=p_num - 1, to_page=p_num - 1, annots=True)
+                    if full_pdf.metadata:
+                        trimmed_pdf.set_metadata(full_pdf.metadata)
+                    pdf_bytes = trimmed_pdf.tobytes(deflate=True, garbage=3)
+                    trimmed_pdf.close()
+                    full_pdf.close()
+                except Exception as trim_err:
+                    print(f"[LayoutLingua] Scope trim notice: {trim_err}")
+
             file_name = session.get("filename", "document.pdf")
             base_stem = file_name.rsplit(".pdf", 1)[0]
+            tgt_lang_code = session.get("target_lang", "vi")
             if layout_mode == "bilingual":
                 file_name = f"{base_stem}.bilingual.pdf"
-            elif not file_name.endswith(".vi.pdf") and not file_name.endswith(".en.pdf"):
-                file_name = f"{base_stem}.translated.pdf"
+            else:
+                file_name = f"{base_stem}.{tgt_lang_code}.pdf"
             clean_filename = re.sub(r'[\r\n"\\]', '_', file_name)
 
             self.send_response(200)
@@ -676,15 +702,39 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
         if path in ("/api/pick-folder", "/pick-folder"):
             selected_dir = ""
             try:
-                import tkinter as tk
-                from tkinter import filedialog
-
-                root = tk.Tk()
-                root.withdraw()
-                root.attributes("-topmost", True)
                 initial = query.get("initial", [""])[0] or get_user_known_folders().get("Desktop", "")
-                selected_dir = filedialog.askdirectory(initialdir=initial, title="Select Destination Folder")
-                root.destroy()
+                if sys.platform == "win32":
+                    import subprocess
+
+                    ps_cmd = (
+                        "Add-Type -AssemblyName System.Windows.Forms; "
+                        "$f = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                        f"$f.SelectedPath = '{initial}'; "
+                        "$f.Description = 'Select Destination Folder for LayoutLingua Export'; "
+                        "if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }"
+                    )
+                    res = subprocess.run(
+                        ["powershell", "-STA", "-NoProfile", "-Command", ps_cmd],
+                        capture_output=True,
+                        text=True,
+                        timeout=25,
+                    )
+                    if res.returncode == 0 and res.stdout.strip():
+                        selected_dir = res.stdout.strip().splitlines()[-1].strip()
+                elif sys.platform == "darwin":
+                    import subprocess
+
+                    osa_cmd = (
+                        'POSIX path of (choose folder with prompt "Select Destination Folder for LayoutLingua Export")'
+                    )
+                    res = subprocess.run(
+                        ["osascript", "-e", osa_cmd],
+                        capture_output=True,
+                        text=True,
+                        timeout=25,
+                    )
+                    if res.returncode == 0 and res.stdout.strip():
+                        selected_dir = res.stdout.strip()
             except Exception as e:
                 print(f"[LayoutLingua] Folder dialog error: {e}")
             self._send_json({"path": selected_dir or ""})
@@ -946,6 +996,29 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         tgt_doc.close()
                     else:
                         content_bytes = raw_translated or raw_source
+
+                    scope = req_json.get("scope", "all").lower().strip()
+                    selected_pages = session.get("selected_pages")
+                    total_doc_pages = session.get("page_count", 0)
+                    if (
+                        scope == "translated_only"
+                        and selected_pages
+                        and total_doc_pages > 0
+                        and len(selected_pages) < total_doc_pages
+                    ):
+                        try:
+                            full_pdf = pymupdf.open(stream=content_bytes, filetype="pdf")
+                            trimmed_pdf = pymupdf.open()
+                            for p_num in sorted(selected_pages):
+                                if 1 <= p_num <= len(full_pdf):
+                                    trimmed_pdf.insert_pdf(full_pdf, from_page=p_num - 1, to_page=p_num - 1, annots=True)
+                            if full_pdf.metadata:
+                                trimmed_pdf.set_metadata(full_pdf.metadata)
+                            content_bytes = trimmed_pdf.tobytes(deflate=True, garbage=3)
+                            trimmed_pdf.close()
+                            full_pdf.close()
+                        except Exception as trim_err:
+                            print(f"[LayoutLingua] Save scope trim notice: {trim_err}")
 
                     if not clean_filename.lower().endswith(".pdf"):
                         clean_filename += ".pdf"

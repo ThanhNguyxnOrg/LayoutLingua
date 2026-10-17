@@ -1,4 +1,4 @@
-﻿"""Selective page range parsing and normalization for partial document translation."""
+"""Selective page range parsing and normalization for partial document translation."""
 
 from __future__ import annotations
 
@@ -30,6 +30,24 @@ def parse_page_range(spec: str | None, total_pages: int) -> set[int]:
         return all_pages
 
     result: set[int] = set()
+
+    # If the user specified explicit single-page prefix "p20" or "page 20"
+    p_match = re.fullmatch(r"(?:p\.?|page\s*)(\d+)", cleaned)
+    if p_match:
+        p_num = int(p_match.group(1))
+        if 1 <= p_num <= total_pages:
+            return {p_num}
+        return all_pages
+
+    # If the user typed a single standalone number "20" (common intent: translate first 20 pages)
+    if re.fullmatch(r"\d+", cleaned):
+        num = int(cleaned)
+        if num <= 0:
+            return all_pages
+        if num > total_pages:
+            return all_pages
+        return set(range(1, num + 1))
+
     parts = cleaned.split(",")
 
     for part in parts:
@@ -37,9 +55,10 @@ def parse_page_range(spec: str | None, total_pages: int) -> set[int]:
         if not item:
             continue
 
-        # Single number: "5"
-        if re.fullmatch(r"\d+", item):
-            p = int(item)
+        # Single number in comma list: "7" in "1-3, 7" or "p7"
+        p_item_match = re.fullmatch(r"(?:p\.?|page\s*)?(\d+)", item)
+        if p_item_match:
+            p = int(p_item_match.group(1))
             if 1 <= p <= total_pages:
                 result.add(p)
             continue
