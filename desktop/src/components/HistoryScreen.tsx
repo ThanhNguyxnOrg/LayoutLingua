@@ -111,7 +111,7 @@ export default function HistoryScreen({
                       {item.name}
                     </h3>
                     <p className="mt-0.5 text-[12.5px] text-muted font-mono truncate">
-                      {item.pages} pages · {item.time} · {item.path || '~/Documents'}
+                      {item.pages} pages · {item.time}{item.path && item.path !== '~/Documents' ? ` · ${item.path}` : (item.size ? ` · ${(item.size / (1024 * 1024)).toFixed(1)} MB` : '')}
                     </p>
                   </div>
                 </div>

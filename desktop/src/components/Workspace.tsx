@@ -218,6 +218,8 @@ function ProcessingPanel({
   eta,
   speed,
   message,
+  overallPct,
+  subtitle,
 }: {
   done: number
   total: number
@@ -226,6 +228,8 @@ function ProcessingPanel({
   eta?: number
   speed?: number
   message?: string
+  overallPct?: number | null
+  subtitle?: string | null
 }) {
   const formatEta = (sec?: number) => {
     if (sec === undefined || sec === null || sec <= 0) return null
@@ -242,14 +246,20 @@ function ProcessingPanel({
       <div>
         <div className="flex items-baseline justify-between">
           <p className="text-[14px] font-bold">Translating</p>
-          <span className="font-mono text-[12.5px] text-muted">page {Math.min(done + 1, total)} of {total}</span>
+          <span className="font-mono text-[12.5px] text-muted">{subtitle || `page ${Math.min(done + 1, total)} of ${total}`}</span>
         </div>
-        <div className="mt-2"><ProgressBar value={done} max={total} label="Pages processed" /></div>
+        <div className="mt-2">
+          <ProgressBar
+            value={overallPct != null ? overallPct : done}
+            max={overallPct != null ? 100 : total}
+            label="Translation progress"
+          />
+        </div>
         <div className="mt-2 flex items-center justify-between text-[12px] text-muted">
           <span className="truncate pr-2 font-medium text-ink">{message || 'Processing pages with layout preservation telemetry...'}</span>
           {(etaStr || (speed && speed > 0)) && (
             <span className="shrink-0 font-mono text-[11.5px] text-teal font-semibold">
-              {etaStr}{etaStr && speed ? ' • ' : ''}{speed && speed > 0 ? `${speed} p/s` : ''}
+              {etaStr}{etaStr && speed ? ' • ' : ''}{speed && speed > 0 ? `${speed} ${overallPct != null && stage === 2 ? 'seg/s' : 'p/s'}` : ''}
             </span>
           )}
         </div>
@@ -282,6 +292,8 @@ function Inspector(p: {
   visibleIssues: Issue[]; activeIssue?: string; openIssue: (i: Issue) => void; start: () => void; cancel: () => void
   onExport: () => void; retryPage: () => void; retrying: boolean
   telemetry?: { eta?: number; speed?: number; message?: string }
+  overallPct?: number | null
+  subtitle?: string | null
 }) {
   const tabs: [Tab, string][] = [['translation', 'Translation'], ['quality', 'Quality checks'], ['page', 'Page details']]
   const locked = p.phase === 'processing'
@@ -428,6 +440,8 @@ function Inspector(p: {
                 eta={p.telemetry?.eta}
                 speed={p.telemetry?.speed}
                 message={p.telemetry?.message}
+                overallPct={p.overallPct}
+                subtitle={p.subtitle}
               />
             )}
             {p.phase === 'cancelled' && (
@@ -571,6 +585,9 @@ export default function Workspace({
   const [tab, setTab] = useState<Tab>('translation')
   const [telemetry, setTelemetry] = useState<{ eta?: number; speed?: number; message?: string }>({})
   const [previewVersion, setPreviewVersion] = useState(0)
+  const [backendStage, setBackendStage] = useState<number | null>(null)
+  const [overallPct, setOverallPct] = useState<number | null>(null)
+  const [progressSubtitle, setProgressSubtitle] = useState<string | null>(null)
 
   const docPages: Page[] = useMemo(() => {
     if (!docInfo?.pages) return pages
@@ -606,6 +623,27 @@ export default function Workspace({
     return () => ro.disconnect()
   }, [])
 
+  useEffect(() => {
+    if (!docInfo?.id) return
+    let active = true
+    fetch(apiUrl(`/api/progress?id=${encodeURIComponent(docInfo.id)}`))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((pData) => {
+        if (!active || !pData) return
+        if (pData.status === 'done') {
+          setDone(totalPages)
+          setOverallPct(100)
+          setBackendStage(stages.length)
+          setPhase('done')
+          setPreviewVersion(Date.now())
+        }
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [docInfo?.id, totalPages])
+
   const isTranslatingRef = useRef(false)
 
   useEffect(() => {
@@ -631,7 +669,18 @@ export default function Workspace({
             if (pData.current_page > 0 && active) {
               setDone(pData.current_page)
             }
+            if (pData.stage_index != null && active) {
+              setBackendStage(pData.stage_index)
+            }
+            if (pData.overall_pct != null && active) {
+              setOverallPct(pData.overall_pct)
+            }
             if (active) {
+              if (pData.stage_index === 2 && pData.segments_total) {
+                setProgressSubtitle(`segment ${pData.segments_done || 0} of ${pData.segments_total}`)
+              } else if (pData.current_page > 0) {
+                setProgressSubtitle(`page ${pData.current_page} of ${pData.total_pages}`)
+              }
               setTelemetry({
                 eta: pData.eta_seconds,
                 speed: pData.speed,
@@ -641,6 +690,8 @@ export default function Workspace({
             if (pData.status === 'done' && active) {
               if (progressTimer) clearInterval(progressTimer)
               setDone(totalPages)
+              setOverallPct(100)
+              setBackendStage(stages.length)
               setPhase('done')
               setPreviewVersion(Date.now())
               if (docInfo?.id || docInfo?.name) {
@@ -671,19 +722,31 @@ export default function Workspace({
       const langCodeMap: Record<string, string> = {
         'English': 'en',
         'Vietnamese': 'vi',
-        'German': 'de',
-        'French': 'fr',
-        'Japanese': 'ja',
-        'Spanish': 'es',
         'Chinese (Simplified)': 'zh',
+        'Chinese (Traditional)': 'zh-tw',
+        'Japanese': 'ja',
+        'Korean': 'ko',
+        'French': 'fr',
+        'German': 'de',
+        'Spanish': 'es',
+        'Russian': 'ru',
+        'Italian': 'it',
+        'Portuguese': 'pt',
+        'Indonesian': 'id',
+        'Dutch': 'nl',
+        'Polish': 'pl',
+        'Turkish': 'tr',
+        'Ukrainian': 'uk',
       }
       const resolvedTargetLang = langCodeMap[tgt] || (tgt === 'Vietnamese' ? 'vi' : 'en')
+      const resolvedSourceLang = langCodeMap[src] || (src === 'Vietnamese' ? 'vi' : 'auto')
 
       fetch(apiUrl('/api/translate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           doc_id: docInfo.id,
+          source_lang: resolvedSourceLang,
           target_lang: resolvedTargetLang,
           page_range: pageRange || 'all',
           custom_glossary: settings.customGlossary || '',
@@ -728,7 +791,9 @@ export default function Workspace({
     }
   }, [phase, docInfo?.id, tgt, settings, totalPages, pageRange])
 
-  const stage = phase === 'done' ? stages.length : done === 0 ? 0 : done < Math.floor(totalPages / 3) ? 1 : done < Math.floor((totalPages * 2) / 3) ? 2 : 3
+  const stage = backendStage != null
+    ? (phase === 'done' ? stages.length : backendStage)
+    : (phase === 'done' ? stages.length : done === 0 ? 0 : done < Math.floor(totalPages / 3) ? 1 : done < Math.floor((totalPages * 2) / 3) ? 2 : 3)
   const known = (p: Page) => (phase === 'idle' || p.n > done ? 'pending' : p.status)
   const visibleIssues = docInfo?.id ? [] : issues.filter((i) => i.page <= done && phase !== 'idle')
   const page = docPages[cur - 1] || docPages[0]
@@ -785,7 +850,15 @@ export default function Workspace({
     if (phase === 'done') {
       return (
         <div className="relative">
-          <PdfPage page={page} type="translated" width={width} docId={docInfo?.id} version={previewVersion} {...mark} />
+          <PdfPage
+            key={`trans-${docInfo?.id}-${page.n}-${previewVersion}`}
+            page={page}
+            type="translated"
+            width={width}
+            docId={docInfo?.id}
+            version={previewVersion}
+            {...mark}
+          />
           {page.status === 'fallback' && <span className="absolute inset-y-0 -left-[5px] w-[3px] bg-red" aria-hidden="true" />}
         </div>
       )
@@ -922,6 +995,8 @@ export default function Workspace({
             retryPage={retryPage}
             retrying={retrying}
             telemetry={telemetry}
+            overallPct={overallPct}
+            subtitle={progressSubtitle}
           />
         )}
       </div>

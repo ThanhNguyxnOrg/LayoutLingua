@@ -85,4 +85,22 @@ export const recents = [
   { name: 'Lecture-07-Signals.pdf', pages: 22, when: '12 May', status: 'failed' as const, path: '~/Downloads' },
 ]
 
-export const languages = ['English', 'Vietnamese', 'German', 'French', 'Japanese', 'Spanish', 'Chinese (Simplified)']
+export const languages = [
+  'English',
+  'Vietnamese',
+  'Chinese (Simplified)',
+  'Chinese (Traditional)',
+  'Japanese',
+  'Korean',
+  'French',
+  'German',
+  'Spanish',
+  'Russian',
+  'Italian',
+  'Portuguese',
+  'Indonesian',
+  'Dutch',
+  'Polish',
+  'Turkish',
+  'Ukrainian',
+]

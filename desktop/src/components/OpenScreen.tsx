@@ -54,7 +54,7 @@ export default function OpenScreen({
       name: f.name,
       size: f.size,
       pages: Math.max(1, Math.min(60, Math.round(f.size / 450000))),
-      path: '~/Documents',
+      path: undefined,
     }
 
     try {
@@ -78,7 +78,7 @@ export default function OpenScreen({
           detectedLang: data.detected_lang,
           isScanned: Boolean(data.is_scanned),
           scanWarning: data.scan_warning,
-          path: '~/Documents',
+          path: undefined,
         }
       } else {
         const errJson = await res.json().catch(() => ({}))
@@ -219,7 +219,7 @@ export default function OpenScreen({
                           name: file || 'Protected-Document.pdf',
                           size: 1800000,
                           pages: 6,
-                          path: '~/Documents',
+                          path: undefined,
                         })
                       }
                     }}
@@ -330,7 +330,7 @@ export default function OpenScreen({
                         {r.name}
                       </span>
                       <span className="mt-0.5 block text-[12px] text-muted font-mono">
-                        {r.pages} pp · {r.time} · {r.path || '~/Documents'}
+                        {r.pages} pp · {r.time}{r.path && r.path !== '~/Documents' ? ` · ${r.path}` : (r.size ? ` · ${(r.size / (1024 * 1024)).toFixed(1)} MB` : '')}
                       </span>
                     </span>
                     <span className="flex flex-col items-end gap-1">

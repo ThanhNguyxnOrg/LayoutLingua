@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Block, Page } from './data'
 import { apiUrl } from '../services/api'
 
@@ -89,14 +89,45 @@ export default function PdfPage({ page, lang = 'en', type, width, highlight, hig
   const scale = width / PAGE_W
   const previewType = type || (lang === 'vi' ? 'translated' : 'source')
 
+  // Reset failure state immediately when page number, preview type, document ID, or version changes
+  useEffect(() => {
+    setImgFailed(false)
+  }, [page.n, previewType, docId, version])
+
+  // Automatically retry loading translated preview after 2 seconds if it failed while processing
+  useEffect(() => {
+    if (imgFailed && previewType === 'translated') {
+      const timer = setTimeout(() => {
+        setImgFailed(false)
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [imgFailed, previewType])
+
   if (docId) {
     return (
       <div style={{ width, height: PAGE_H * scale }} className="relative shrink-0 overflow-hidden bg-white shadow-2xs">
         {imgFailed && previewType === 'translated' ? (
-          <div className="size-full flex flex-col items-center justify-center gap-3 bg-canvas/40 border border-dashed border-line text-center p-6">
-            <div className="size-6 border-2 border-teal border-t-transparent rounded-full animate-spin" />
-            <p className="text-[13px] font-semibold text-ink">Translating page {page.n}...</p>
-            <p className="text-[11.5px] text-muted max-w-[220px]">Preserving mathematical equations and layout typography</p>
+          <div className="size-full flex flex-col items-center justify-center gap-1.5 bg-canvas/40 border border-dashed border-line text-center p-1.5">
+            <div className={`${width < 120 ? 'size-3.5' : 'size-6'} border-2 border-teal border-t-transparent rounded-full animate-spin`} />
+            <p className={width < 120 ? 'text-[10px] font-medium text-ink' : 'text-[13px] font-semibold text-ink'}>
+              {width < 120 ? `P. ${page.n}` : `Translating page ${page.n}...`}
+            </p>
+            {width >= 120 && (
+              <p className="text-[11.5px] text-muted max-w-[220px]">Preserving mathematical equations and layout typography</p>
+            )}
+          </div>
+        ) : imgFailed && previewType === 'source' ? (
+          <div className="size-full flex flex-col items-center justify-center gap-1 bg-canvas/30 border border-dashed border-line text-center p-1.5">
+            <span className={width < 120 ? 'text-base' : 'text-2xl'}>📄</span>
+            <p className={width < 120 ? 'text-[10px] font-semibold text-ink' : 'text-[13px] font-semibold text-ink'}>
+              {width < 120 ? `Page ${page.n}` : 'Preview not available'}
+            </p>
+            {width >= 120 && (
+              <p className="text-[11.5px] text-muted max-w-[220px]">
+                Document session in RAM was cleared. Please re-open or drop your PDF to view.
+              </p>
+            )}
           </div>
         ) : (
           <img

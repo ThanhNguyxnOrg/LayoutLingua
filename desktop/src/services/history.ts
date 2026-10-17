@@ -27,12 +27,25 @@ function formatRelativeTime(date: Date): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+export function formatDocSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return ''
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(0)} KB`
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export function getHistory(): HistoryItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed)) return parsed
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => ({
+        ...item,
+        path: item.path && item.path !== '~/Documents' ? item.path : undefined,
+      }))
+    }
     return []
   } catch {
     return []
@@ -64,13 +77,15 @@ export function addHistoryItem(item: {
   // Deduplicate by id or name
   const filtered = current.filter((i) => i.id !== item.id && i.name !== item.name)
 
+  const cleanPath = item.path && item.path !== '~/Documents' ? item.path : undefined
+
   const newItem: HistoryItem = {
     id: item.id,
     name: item.name,
     pages: item.pages,
     size: item.size,
     time: timeStr,
-    path: item.path || '~/Documents',
+    path: cleanPath,
     status: item.status || 'pending',
     detectedLang: item.detectedLang || 'en',
     targetLang: item.targetLang || 'vi',
