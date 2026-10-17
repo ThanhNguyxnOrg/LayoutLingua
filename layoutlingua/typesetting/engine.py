@@ -90,7 +90,7 @@ def compute_expanded_layout_box(
     # In academic publications and multi-column books (BabelDOC layout preservation):
     # Multi-line paragraphs should not arbitrarily blow up to full page width into neighboring figures.
     # Allow at most 15% horizontal expansion for paragraphs, while single-line titles can use margin whitespace.
-    is_multiline_column = (orig_h > 18.0) and (orig_w < page_width * 0.70)
+    is_multiline_column = (orig_h > 26.0) and (orig_w < page_width * 0.70)
     if is_multiline_column:
         max_allowed_x1 = min(x0 + orig_w * 1.15, page_width - margin_padding)
     else:

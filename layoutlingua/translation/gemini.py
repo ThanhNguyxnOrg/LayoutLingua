@@ -82,20 +82,35 @@ class GeminiTranslationProvider(BaseTranslationProvider):
         return self._capabilities
 
     def _get_client(self) -> Any:
-        """Lazily initialize Google GenAI SDK client if not injected."""
+        """Lazily initialize Google GenAI SDK client, OpenAI-compatible client, or native REST."""
         if self._client is not None:
             return self._client
 
+        # Mode 1: Official google.genai SDK if installed
         try:
             from google import genai  # type: ignore
 
             self._client = genai.Client(api_key=self._api_key)
             return self._client
         except ImportError:
-            raise ProviderUnavailableError(
-                "Google GenAI SDK is not installed. To use Gemini translation, "
-                "install the SDK via: pip install google-genai"
+            pass
+
+        # Mode 2: Official Google OpenAI compatibility layer via installed openai package
+        try:
+            from openai import OpenAI  # type: ignore
+
+            self._client = OpenAI(
+                api_key=self._api_key,
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                timeout=60.0,
             )
+            return self._client
+        except ImportError:
+            pass
+
+        # Mode 3: Native REST fallback via standard library urllib (zero dependencies)
+        self._client = "native_rest"
+        return self._client
 
     def translate_batch(self, request: BatchTranslationRequest) -> BatchTranslationResult:
         """Dispatch batch translation request to Gemini."""
@@ -146,6 +161,7 @@ class GeminiTranslationProvider(BaseTranslationProvider):
 
     def _execute_call(self, client: Any, prompt: str, use_json: bool) -> str:
         """Invoke client with structured configuration if supported."""
+        # 1. Google GenAI SDK (has client.models.generate_content)
         if hasattr(client, "models") and hasattr(client.models, "generate_content"):
             config: dict[str, Any] = {}
             if use_json:
@@ -159,6 +175,49 @@ class GeminiTranslationProvider(BaseTranslationProvider):
             if hasattr(resp, "text") and resp.text:
                 return resp.text
             raise InvalidTranslationResponseError("Empty response received from Gemini.")
+
+        # 2. OpenAI SDK client (has client.chat.completions.create)
+        if hasattr(client, "chat") and hasattr(client.chat, "completions"):
+            kwargs: dict[str, Any] = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+            }
+            if use_json:
+                kwargs["response_format"] = {"type": "json_object"}
+
+            resp = client.chat.completions.create(**kwargs)
+            if resp.choices and resp.choices[0].message and resp.choices[0].message.content:
+                return resp.choices[0].message.content
+            raise InvalidTranslationResponseError("Empty response received from Gemini OpenAI endpoint.")
+
+        # 3. Native REST via urllib.request (zero dependencies)
+        if client == "native_rest":
+            import urllib.request
+            import urllib.error
+
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self._api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.1},
+            }
+            if use_json:
+                payload["generationConfig"]["responseMimeType"] = "application/json"
+
+            req_bytes = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=req_bytes,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts and "text" in parts[0]:
+                        return str(parts[0]["text"])
+                raise InvalidTranslationResponseError(f"Unexpected REST response structure from Gemini: {data}")
 
         # Fallback for custom or mock callables
         if callable(client):
@@ -210,7 +269,12 @@ class GeminiTranslationProvider(BaseTranslationProvider):
         status_code = getattr(exc, "status_code", getattr(exc, "code", None))
 
         # Check status codes
-        if status_code == 401 or "UNAUTHENTICATED" in err_msg or "API_KEY_INVALID" in err_msg:
+        if (
+            status_code == 401
+            or "UNAUTHENTICATED" in err_msg
+            or "API_KEY_INVALID" in err_msg
+            or "pass a valid API key" in err_msg
+        ):
             raise AuthenticationError(f"Gemini authentication failed: {err_msg}") from exc
 
         if status_code == 403 or "PERMISSION_DENIED" in err_msg:

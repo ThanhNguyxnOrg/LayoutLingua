@@ -343,7 +343,9 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                     model_id=m_id,
                     base_url=b_url,
                 )
-            elif provider_type == "gemini" and api_key:
+            elif provider_type == "gemini":
+                if not api_key:
+                    raise ValueError("Gemini API key is required. Please enter your Gemini API key in Settings.")
                 from layoutlingua.translation.gemini import GeminiTranslationProvider
 
                 m_id = model_name if model_name else "gemini-2.5-flash"
@@ -361,17 +363,21 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                 argos = ArgosTranslationProvider()
                 if argos.manager.is_runtime_available():
                     provider_inst = argos
+                else:
+                    raise ValueError("Argos Translate offline package is not installed.")
         except Exception as p_err:
             print(f"[LayoutLingua] Provider init notice: {p_err}")
-            provider_inst = None
-
-        if provider_inst is None and provider_type != "mock":
-            try:
-                from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider
-
-                provider_inst = GoogleRpcTranslationProvider()
-            except Exception as g_err:
-                print(f"[LayoutLingua] Online MT fallback error: {g_err}")
+            with _LOCK:
+                session["progress"] = {
+                    "current_page": session.get("progress", {}).get("current_page", 1),
+                    "total_pages": total_p,
+                    "status": "error",
+                    "speed": 0,
+                    "eta_seconds": 0,
+                    "message": f"Provider error: {p_err}",
+                }
+                session["is_translating"] = False
+            return
 
         if provider_inst is None:
             from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider

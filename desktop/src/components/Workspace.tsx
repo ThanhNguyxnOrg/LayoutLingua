@@ -479,8 +479,27 @@ function Inspector(p: {
               </StateNotice>
             )}
             {p.phase === 'provider-error' && (
-              <StateNotice tone="error" icon={<IconError className="size-5" />} title={`${p.settings.provider.toUpperCase()} stopped responding`} actions={<><Button size="sm" variant="primary" onClick={p.start}>Retry from page {p.done + 1}</Button><Button size="sm" onClick={() => p.onUpdateProvider('google')}>Switch to Google (Free)</Button></>}>
-                The provider returned an error on page {p.done + 1}. Pages 1–{p.done} are kept; nothing needs to be redone.
+              <StateNotice
+                tone="error"
+                icon={<IconError className="size-5" />}
+                title={`${p.settings.provider.toUpperCase()} stopped responding`}
+                actions={
+                  <>
+                    <Button size="sm" variant="primary" onClick={p.start}>
+                      Retry from page {p.done + 1}
+                    </Button>
+                    <Button size="sm" onClick={() => p.onUpdateProvider('google')}>
+                      Switch to Google (Free)
+                    </Button>
+                  </>
+                }
+              >
+                {p.telemetry?.message ? (
+                  <p className="font-medium text-red-600 dark:text-red-400 mb-1.5">{p.telemetry.message}</p>
+                ) : (
+                  <p>The provider returned an error on page {p.done + 1}.</p>
+                )}
+                <span className="text-[12px] text-muted">Pages 1–{p.done} are kept; nothing needs to be redone. Check your API key or model in Settings.</span>
               </StateNotice>
             )}
             {p.phase === 'done' && (

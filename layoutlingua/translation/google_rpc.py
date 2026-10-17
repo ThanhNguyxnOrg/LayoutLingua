@@ -102,29 +102,38 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
         return self._capabilities
 
     def _fetch_single_chunk(self, chunk: str, s_lang: str, t_lang: str) -> str:
-        encoded = urllib.parse.quote(chunk)
         # Pool of Google endpoints & clients. dict-chrome-ex uses extension quota which bypasses web gtx rate-limits.
         endpoints = [
-            ("translate.googleapis.com", "dict-chrome-ex"),
-            ("translate.google.com", "dict-chrome-ex"),
             ("translate.googleapis.com", "gtx"),
+            ("translate.googleapis.com", "dict-chrome-ex"),
+            ("translate.google.com", "gtx"),
+            ("translate.google.com", "dict-chrome-ex"),
         ]
 
         last_err: Exception | None = None
         rate_limited_count = 0
 
+        post_data = urllib.parse.urlencode({
+            "sl": s_lang,
+            "tl": t_lang,
+            "dt": "t",
+            "q": chunk,
+        }).encode("utf-8")
+
         for host, client in endpoints:
-            url = f"https://{host}/translate_a/single?client={client}&sl={s_lang}&tl={t_lang}&dt=t&q={encoded}"
+            url = f"https://{host}/translate_a/single?client={client}"
             req = urllib.request.Request(
                 url,
+                data=post_data,
                 headers={
                     "User-Agent": self._user_agent,
                     "Accept": "*/*",
+                    "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
                 },
             )
             for attempt in range(self._max_retries + 1):
                 try:
-                    with urllib.request.urlopen(req, timeout=10) as resp:
+                    with urllib.request.urlopen(req, timeout=12) as resp:
                         raw = resp.read().decode("utf-8")
                         data = json.loads(raw)
                         parts: List[str] = []
