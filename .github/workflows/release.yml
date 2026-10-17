@@ -166,7 +166,7 @@ jobs:
             Compress-Archive -Path layoutlingua, requirements.txt, README.md, LICENSE -DestinationPath "dist/LayoutLingua-windows-x86_64-$ver.zip"
           }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: LayoutLingua-windows-x86_64
           path: dist/LayoutLingua-windows-*.zip
@@ -209,7 +209,7 @@ jobs:
             tar -czf "dist/LayoutLingua-macos-${{ matrix.arch }}-$VER.tar.gz" layoutlingua requirements.txt README.md LICENSE
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: LayoutLingua-macos-${{ matrix.arch }}
           path: dist/LayoutLingua-macos-*
@@ -244,7 +244,7 @@ jobs:
             tar -czf "dist/LayoutLingua-linux-x86_64-$VER.tar.gz" layoutlingua requirements.txt README.md LICENSE
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: LayoutLingua-linux-x86_64
           path: dist/LayoutLingua-linux-*.tar.gz
