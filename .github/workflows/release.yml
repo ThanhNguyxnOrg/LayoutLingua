@@ -57,8 +57,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
-          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+          app-id: ${{ secrets.BOT_APP_ID || secrets.THANHNGUYXNAGENT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY || secrets.THANHNGUYXNAGENT_PRIVATE_KEY }}
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -127,8 +127,8 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG_NAME: ${{ steps.check.outputs.tag }}
         run: |
-          git config user.name "ThanhNguyxnAgent[bot]"
-          git config user.email "4125740+thanhnguyxnagent[bot]@users.noreply.github.com"
+          git config --global user.name "ThanhNguyxnAgent[bot]"
+          git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
           if ! git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
             echo "Tag $TAG_NAME not found on remote. Creating and pushing tag via ThanhNguyxnAgent..."
             git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
@@ -260,8 +260,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
-          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+          app-id: ${{ secrets.BOT_APP_ID || secrets.THANHNGUYXNAGENT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY || secrets.THANHNGUYXNAGENT_PRIVATE_KEY }}
 
       - uses: actions/checkout@v4
         with:
@@ -301,8 +301,8 @@ jobs:
               f.write(content)
           "
           if ! git diff --quiet; then
-            git config user.name "ThanhNguyxnAgent[bot]"
-            git config user.email "4125740+thanhnguyxnagent[bot]@users.noreply.github.com"
+            git config --global user.name "ThanhNguyxnAgent[bot]"
+            git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
             git add layoutlingua/_version.py
             git commit -m "chore(release): bump version to ${{ needs.check-and-tag.outputs.version }} [skip ci]"
             git push origin main

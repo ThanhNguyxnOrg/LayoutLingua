@@ -81,8 +81,8 @@ jobs:
           # Check for changes in glossary resources
           if git status --porcelain layoutlingua/resources/glossary/ | grep -q .; then
             echo "New terminology detected! Preparing commit..."
-            git config user.name "ThanhNguyxnAgent[bot]"
-            git config user.email "thanhnguyxnagent[bot]@users.noreply.github.com"
+            git config --global user.name "ThanhNguyxnAgent[bot]"
+            git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
             git add layoutlingua/resources/glossary/
             
             DATE_STR=$(date -u +"%Y-%m-%d")
