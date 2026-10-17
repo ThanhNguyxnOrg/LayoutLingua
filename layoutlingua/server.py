@@ -435,6 +435,10 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 if provider_inst is None:
                     provider_inst = MockTranslationProvider()
 
+                from layoutlingua.translation.cache import CachedTranslationProvider
+
+                provider_inst = CachedTranslationProvider(provider_inst)
+
                 translated_segments: dict[str, str] = {}
                 start_time = time.time()
                 total_p = len(src_doc) if 'src_doc' in locals() else len(doc_ir.pages)
@@ -451,6 +455,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
 
                     batch_sz = 35
                     total_segs = len(segments)
+                    total_cached_so_far = 0
                     for b_idx in range(0, total_segs, batch_sz):
                         chunk = segments[b_idx : b_idx + batch_sz]
                         done_segs = min(b_idx + len(chunk), total_segs)
@@ -460,6 +465,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         rem_p = max(0, total_p - approx_p)
                         calc_eta = int(rem_p / max(curr_speed, 0.1)) if curr_speed > 0 else 30
 
+                        cache_prefix = f"⚡ Cached {total_cached_so_far} segs • " if total_cached_so_far > 0 else ""
                         with _LOCK:
                             session["progress"] = {
                                 "current_page": approx_p,
@@ -467,7 +473,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                                 "status": "processing",
                                 "speed": curr_speed,
                                 "eta_seconds": calc_eta,
-                                "message": f"Translating text ({done_segs}/{total_segs} segments)...",
+                                "message": f"{cache_prefix}Translating text ({done_segs}/{total_segs} segments)...",
                             }
 
                         req = BatchTranslationRequest(
@@ -479,6 +485,8 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         try:
                             b_res = provider_inst.translate_batch(req)
                             translated_segments.update(b_res.translations)
+                            if hasattr(provider_inst, "last_cache_hits"):
+                                total_cached_so_far += provider_inst.last_cache_hits
                         except RateLimitError as rl_err:
                             print(f"[LayoutLingua] Rate limit error: {rl_err}")
                             with _LOCK:
