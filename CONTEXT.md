@@ -33,13 +33,16 @@ Cloud AI translation utilizing active, user-selectable models:
 - *Google AI Studio*: Production models (e.g., `gemini-3.1-flash-lite`) with mandatory **Privacy Disclosure** alerting users that free tier inputs may be reviewed or used for model training.
 - *OpenAI-Compatible Standard*: Supports Groq (active models e.g., `openai/gpt-oss-120b`), DeepSeek, OpenAI, and local Ollama (`localhost:11434`).
 
-**Classified Fault Handling**:
-Explicit error mitigation rules:
-- *Network/5xx*: Bounded retry with exponential backoff and jitter.
-- *HTTP 429*: Respect `Retry-After` headers and throttle dispatch rate.
-- *HTTP 401/403*: Immediate fail-fast with authentication error.
-- *CAPTCHA / Endpoint Block*: Stop provider cleanly; request alternative engine.
-- *Corrupted Batch / Marker Mismatch*: Bisect/subdivide batch and re-verify.
+**Persistent Segment Cache**:
+An on-disk SQLite store (`layoutlingua_translations.db`) indexed by SHA-256 fingerprint (`source_lang + target_lang + provider_model + masked_text`). Guarantees that every translated segment is persisted across application restarts, session terminations, or rate limit halts, eliminating duplicate API costs and redundant network requests.
+
+**Cached Translation Provider (Deep Seam)**:
+A transparent decorator implementing `BaseTranslationProvider` that wraps any underlying translation engine. It partitions incoming batches into cache hits and cache misses, dispatches only unseen segments over the wire, and atomically commits newly translated segments to the persistent store.
+
+**Graceful Failover Matrix**:
+The systematic escalation policy when a provider encounters rate limits (HTTP 429) or transport failures:
+1. If the user has configured API keys for secondary providers (Gemini / Groq / OpenAI), the system permits 1-click or automatic failover to continue translation.
+2. If no secondary keys are configured, the engine safely halts with fail-closed semantics, preserving 100% of processed pages in the Persistent Segment Cache and rendering actionable configuration shortcuts in the desktop UI.
 
 ---
 
