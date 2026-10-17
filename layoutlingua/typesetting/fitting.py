@@ -50,13 +50,13 @@ class TextFitTester:
         space_len = self.font_manager.measure_text_length(" ", font_size)
         dot_len = max(1.0, self.font_manager.measure_text_length(".", font_size))
 
-        # Available width for dot leader with a safety cushion of 10pt
-        avail_width = target_width - prefix_len - suffix_len - (2 * space_len) - 10.0
-        if avail_width <= dot_len * 3:
-            return f"{prefix} ... {suffix}"
+        # Available width for dot leader with a safety cushion of 8.0pt
+        avail_width = target_width - prefix_len - suffix_len - (2 * space_len) - 8.0
+        if avail_width <= dot_len * 2:
+            return f"{prefix} .. {suffix}"
 
         num_dots = int(avail_width / dot_len)
-        num_dots = max(3, min(num_dots, 120))
+        num_dots = max(2, min(num_dots, 120))
         dots_str = "." * num_dots
         return f"{prefix} {dots_str} {suffix}"
 
@@ -87,10 +87,13 @@ class TextFitTester:
 
         active_font = font_name or self.font_name
 
-        # Adapt Table of Contents dot leaders so they fit comfortably on one line
-        text = self.adapt_dot_leader_if_needed(text, width, orig_font_size, active_font)
+        is_toc = bool(TOC_LEADER_PATTERN.match(text.strip()))
 
-        min_font_size = max(options.min_font_pt, options.min_font_scale * orig_font_size)
+        # For Table of Contents dot-leader lines, allow flexible font floor (down to 0.58x or 5.5pt)
+        # to prevent catastrophic 2-line wrapping in a 1-line bounding box.
+        effective_min_scale = min(options.min_font_scale, 0.58) if is_toc else options.min_font_scale
+        effective_min_pt = min(options.min_font_pt, 5.5) if is_toc else options.min_font_pt
+        min_font_size = max(effective_min_pt, effective_min_scale * orig_font_size)
         test_rect = pymupdf.Rect(x0, y0, x1, y1)
 
         fontfile_arg = (
@@ -99,10 +102,16 @@ class TextFitTester:
             else str(self.font_manager.font_path)
         )
 
+        def get_text_for_size(sz: float) -> str:
+            if is_toc:
+                return self.adapt_dot_leader_if_needed(text, width, sz, active_font)
+            return text
+
         # 1. Test original size
+        text_orig = get_text_for_size(orig_font_size)
         rc_orig = self._page.insert_textbox(
             test_rect,
-            text,
+            text_orig,
             fontsize=orig_font_size,
             fontname=active_font,
             fontfile=fontfile_arg,
@@ -114,14 +123,15 @@ class TextFitTester:
 
         # 1b. Single-line ink-height accommodation:
         # If text fits horizontally on a single line and the overflow is purely vertical padding deficit (within 60% of font size):
-        text_advance = self.font_manager.measure_text_length(text, orig_font_size)
+        text_advance = self.font_manager.measure_text_length(text_orig, orig_font_size)
         if text_advance <= (width * 1.02) and abs(rc_orig) <= (orig_font_size * 0.60):
             return True, orig_font_size, OverflowCause.NONE, 1, effective_lineheight
 
         # 2. Test minimum font size floor
+        text_min = get_text_for_size(min_font_size)
         rc_min = self._page.insert_textbox(
             test_rect,
-            text,
+            text_min,
             fontsize=min_font_size,
             fontname=active_font,
             fontfile=fontfile_arg,
@@ -132,7 +142,7 @@ class TextFitTester:
             compact_lh = max(1.02, effective_lineheight * 0.90)
             rc_compact = self._page.insert_textbox(
                 test_rect,
-                text,
+                text_min,
                 fontsize=min_font_size,
                 fontname=active_font,
                 fontfile=fontfile_arg,
@@ -150,7 +160,7 @@ class TextFitTester:
                 soft_rect = pymupdf.Rect(x0, y0, x1, y1 + soft_pad)
                 rc_soft = self._page.insert_textbox(
                     soft_rect,
-                    text,
+                    text_min,
                     fontsize=min_font_size,
                     fontname=active_font,
                     fontfile=fontfile_arg,
@@ -161,7 +171,7 @@ class TextFitTester:
                     return True, min_font_size, OverflowCause.NONE, lines, compact_lh
 
             # Overflow event at minimum scale: classify cause
-            cause = self._classify_overflow_cause(text, width, min_font_size)
+            cause = self._classify_overflow_cause(text_min, width, min_font_size)
             return False, orig_font_size, cause, 0, effective_lineheight
 
         # 3. Binary Search in [min_font_size, orig_font_size]
@@ -173,9 +183,10 @@ class TextFitTester:
 
         while (high - low) > options.binary_search_epsilon and iteration < options.max_search_iterations:
             mid = (low + high) / 2.0
+            text_mid = get_text_for_size(mid)
             rc = self._page.insert_textbox(
                 test_rect,
-                text,
+                text_mid,
                 fontsize=mid,
                 fontname=active_font,
                 fontfile=fontfile_arg,
@@ -190,9 +201,10 @@ class TextFitTester:
             iteration += 1
 
         # 4. Verification pass on scratch page
+        text_best = get_text_for_size(best_size)
         confirm_rc = self._page.insert_textbox(
             test_rect,
-            text,
+            text_best,
             fontsize=best_size,
             fontname=active_font,
             fontfile=fontfile_arg,

@@ -550,10 +550,17 @@ class ClearancePlanner:
 
             # Check 2: Formula collision
             if zone.zone_type == ExclusionZoneType.FORMULA:
-                # Check both tight clearance lines and replacement layout box
-                formula_tol = max(0.5, self.padding_pt)
-                intersects_line = any(rects_intersect(line_rect, zone.bbox, tolerance=formula_tol) for line_rect in tight_line_rects)
-                intersects_box = rects_intersect(layout_box, zone.bbox, tolerance=0.1)
+                # Distinguish genuine destructive 2D intrusion from natural adjacent neighbor boundary contact.
+                # In math textbooks and tables, labels naturally sit adjacent to math symbols (e.g. '=', '-', 'Δ').
+                # Clearance padding (self.padding_pt) on both text and formula produces a nominal ~1.0-2.0pt border overlap.
+                # A true destructive collision requires substantial 2D intrusion into the formula glyph region (> 2.5pt in both axes).
+                def has_destructive_formula_overlap(r1: tuple[float, float, float, float], r2: tuple[float, float, float, float]) -> bool:
+                    x_ov = min(r1[2], r2[2]) - max(r1[0], r2[0])
+                    y_ov = min(r1[3], r2[3]) - max(r1[1], r2[1])
+                    return (x_ov > 2.5) and (y_ov > 2.5)
+
+                intersects_line = any(has_destructive_formula_overlap(line_rect, zone.bbox) for line_rect in tight_line_rects)
+                intersects_box = has_destructive_formula_overlap(layout_box, zone.bbox)
                 if intersects_line or intersects_box:
                     return CollisionDetail(
                         collision_type=ExclusionZoneType.FORMULA.value,

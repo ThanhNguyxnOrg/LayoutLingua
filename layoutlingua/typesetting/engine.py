@@ -558,6 +558,13 @@ class TypesetEngine:
                     )
 
                 if fits:
+                    # For Table of Contents dot leaders, re-adapt to the fitted font size
+                    translated_text = self._fit_tester.adapt_dot_leader_if_needed(
+                        text=translated_text,
+                        target_width=target_w,
+                        font_size=final_font_size,
+                        font_name=block_font,
+                    )
                     fitting_plan.append((
                         block,
                         tight_line_rects,
