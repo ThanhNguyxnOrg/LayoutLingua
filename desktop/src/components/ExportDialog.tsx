@@ -19,12 +19,13 @@ export default function ExportDialog({
   docId?: string
 }) {
   const [step, setStep] = useState<Step>('form')
+  const [layoutMode, setLayoutMode] = useState<'mono' | 'bilingual'>('mono')
   const defaultExportName = initialDocName.replace(/\.pdf$/i, '') + '.vi.pdf'
   const [name, setName] = useState(defaultExportName)
-  const [dir, setDir] = useState('~/Documents/Papers')
+  const [dir, setDir] = useState('~/Downloads')
   const [failDemo, setFailDemo] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const exists = dir === '~/Documents/Papers' && name === 'Research-Paper.vi.pdf'
+  const exists = dir === '~/Downloads' && name === 'Research-Paper.vi.pdf'
   const fname = name.toLowerCase().endsWith('.pdf') ? name : `${name}.pdf`
 
   useEffect(() => {
@@ -39,7 +40,7 @@ export default function ExportDialog({
 
     if (docId) {
       try {
-        const res = await fetch(apiUrl(`/api/download?id=${encodeURIComponent(docId)}`))
+        const res = await fetch(apiUrl(`/api/download?id=${encodeURIComponent(docId)}&mode=${layoutMode}`))
         if (res.ok) {
           const blob = await res.blob()
           const element = document.createElement('a')
@@ -122,21 +123,48 @@ export default function ExportDialog({
                 </span>
               </label>
             </div>
-            <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
-              Save destination
-              <select
-                value={dir}
-                onChange={(e) => {
-                  setDir(e.target.value)
-                  setStep('form')
-                }}
-                className="h-9 rounded-md border border-line-strong bg-white px-2.5 font-mono text-[13px] font-normal focus:border-teal focus:ring-1 focus:ring-teal"
-              >
-                <option>~/Downloads</option>
-                <option>~/Documents/Papers</option>
-                <option>~/Desktop</option>
-              </select>
-            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
+                Export Layout Mode
+                <select
+                  value={layoutMode}
+                  onChange={(e) => {
+                    const m = e.target.value as 'mono' | 'bilingual'
+                    setLayoutMode(m)
+                    const base = initialDocName.replace(/\.pdf$/i, '')
+                    setName(m === 'bilingual' ? `${base}.bilingual.pdf` : `${base}.vi.pdf`)
+                    setStep('form')
+                  }}
+                  className="h-9 rounded-md border border-line-strong bg-white px-2.5 text-[13px] font-normal focus:border-teal focus:ring-1 focus:ring-teal"
+                >
+                  <option value="mono">Mono (Translated Only)</option>
+                  <option value="bilingual">Bilingual (Alternating Pages)</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
+                Save destination
+                <select
+                  value={dir}
+                  onChange={(e) => {
+                    setDir(e.target.value)
+                    setStep('form')
+                  }}
+                  className="h-9 rounded-md border border-line-strong bg-white px-2.5 font-mono text-[13px] font-normal focus:border-teal focus:ring-1 focus:ring-teal"
+                >
+                  <option>~/Downloads</option>
+                  <option>~/Documents/Papers</option>
+                  <option>~/Desktop</option>
+                </select>
+              </label>
+            </div>
+
+            {layoutMode === 'bilingual' && (
+              <div className="rounded-lg border border-teal/40 bg-teal-soft/20 p-3 text-[12.5px] text-teal-ink flex items-center gap-2">
+                <span>📖</span>
+                <span><strong>Bilingual Mode Active:</strong> Interleaves original and translated pages (Original 1 → Translated 1 → Original 2 → Translated 2...) for easy comparison.</span>
+              </div>
+            )}
 
             <div className="rounded-lg border border-line bg-canvas/30 p-3.5">
               <p className="text-[12px] font-bold uppercase tracking-wider text-muted mb-2">

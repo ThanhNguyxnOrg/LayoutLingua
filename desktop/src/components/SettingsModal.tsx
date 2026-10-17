@@ -385,6 +385,28 @@ export default function SettingsModal({
                 </label>
               </div>
             </div>
+
+            {/* Academic Glossary & User Custom Dictionary */}
+            <div className="space-y-2 pt-2 border-t border-line">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[13px] font-bold tracking-wider uppercase text-muted">
+                  Terminology Glossary (Optional)
+                </h3>
+                <span className="text-[11px] font-bold text-teal bg-teal-soft/30 px-2 py-0.5 rounded">
+                  Built-in Multilingual STEM Active
+                </span>
+              </div>
+              <p className="text-[12px] text-muted leading-relaxed">
+                LayoutLingua automatically applies standardized academic & math translations (Theorems, Lemmas, Proofs, Matrices, etc.). You can optionally add custom terms below (one per line: <code>Original = Translation</code>).
+              </p>
+              <textarea
+                rows={3}
+                value={settings.customGlossary || ''}
+                onChange={(e) => setSettings({ ...settings, customGlossary: e.target.value })}
+                placeholder={"e.g.\nTheorem = Tiên đề thực nghiệm\nEigenvalue = Giá trị đặc trưng"}
+                className="w-full rounded-md border border-line-strong p-2.5 font-mono text-[12.5px] focus:border-teal focus:ring-1 focus:ring-teal bg-white"
+              />
+            </div>
           </div>
         )}
 

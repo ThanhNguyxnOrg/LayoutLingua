@@ -281,17 +281,68 @@ class DocumentAccumulator:
         except Exception:
             pass
 
-    def finish(self, report: FittingReport | None = None) -> bytes:
+    def finish(self, report: FittingReport | None = None, layout_mode: str = "mono") -> bytes:
         """Finalize and return the accumulated PDF bytes, closing the output document.
 
         Args:
             report: If provided, post-assembly link restoration is performed and
                     warnings are appended to report.warnings.
+            layout_mode: "mono" for translated pages only; "bilingual" for alternating
+                         source and translated pages (pdf2zh dual layout pattern).
         """
+        if (layout_mode or "").lower() == "bilingual":
+            return self.build_bilingual_document(report=report)
+
         self.preserve_document_properties()
         if report is not None:
             self.restore_links(report)
         pdf_bytes = self.output_doc.tobytes(deflate=True, garbage=3)
+        self.output_doc.close()
+        return pdf_bytes
+
+    def build_bilingual_document(self, report: FittingReport | None = None) -> bytes:
+        """Create and return a bilingual alternating PDF document.
+
+        Interleaves source and translated pages:
+        [Source 0, Translated 0, Source 1, Translated 1, ...]
+        """
+        self.preserve_document_properties()
+        if report is not None:
+            self.restore_links(report)
+
+        bilingual_doc = pymupdf.open()
+        num_pages = max(len(self.source_doc), len(self.output_doc))
+
+        for idx in range(num_pages):
+            if idx < len(self.source_doc):
+                bilingual_doc.insert_pdf(
+                    self.source_doc,
+                    from_page=idx,
+                    to_page=idx,
+                    links=False,
+                    annots=True,
+                    widgets=True,
+                    join_duplicates=True,
+                )
+            if idx < len(self.output_doc):
+                bilingual_doc.insert_pdf(
+                    self.output_doc,
+                    from_page=idx,
+                    to_page=idx,
+                    links=False,
+                    annots=True,
+                    widgets=True,
+                    join_duplicates=True,
+                )
+
+        try:
+            if self.source_doc.metadata:
+                bilingual_doc.set_metadata(self.source_doc.metadata)
+        except Exception:
+            pass
+
+        pdf_bytes = bilingual_doc.tobytes(deflate=True, garbage=3)
+        bilingual_doc.close()
         self.output_doc.close()
         return pdf_bytes
 

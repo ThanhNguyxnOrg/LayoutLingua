@@ -173,10 +173,39 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "Document session not found"}, status=404)
                 return
 
-            pdf_bytes = session.get("translated_pdf_bytes") or session.get("source_pdf_bytes")
+            raw_source = session.get("source_pdf_bytes")
+            raw_translated = session.get("translated_pdf_bytes")
+
+            layout_mode = query.get("mode", ["mono"])[0].lower().strip()
+            if layout_mode == "bilingual" and raw_source and raw_translated:
+                try:
+                    src_doc = pymupdf.open(stream=raw_source, filetype="pdf")
+                    tgt_doc = pymupdf.open(stream=raw_translated, filetype="pdf")
+                    bi_doc = pymupdf.open()
+                    n_pages = max(len(src_doc), len(tgt_doc))
+                    for idx in range(n_pages):
+                        if idx < len(src_doc):
+                            bi_doc.insert_pdf(src_doc, from_page=idx, to_page=idx, annots=True)
+                        if idx < len(tgt_doc):
+                            bi_doc.insert_pdf(tgt_doc, from_page=idx, to_page=idx, annots=True)
+                    if src_doc.metadata:
+                        bi_doc.set_metadata(src_doc.metadata)
+                    pdf_bytes = bi_doc.tobytes(deflate=True, garbage=3)
+                    bi_doc.close()
+                    src_doc.close()
+                    tgt_doc.close()
+                except Exception as bi_err:
+                    print(f"[LayoutLingua] Bilingual export notice: {bi_err}")
+                    pdf_bytes = raw_translated or raw_source
+            else:
+                pdf_bytes = raw_translated or raw_source
+
             file_name = session.get("filename", "document.pdf")
-            if not file_name.endswith(".vi.pdf") and not file_name.endswith(".en.pdf"):
-                file_name = file_name.replace(".pdf", "") + ".translated.pdf"
+            base_stem = file_name.rsplit(".pdf", 1)[0]
+            if layout_mode == "bilingual":
+                file_name = f"{base_stem}.bilingual.pdf"
+            elif not file_name.endswith(".vi.pdf") and not file_name.endswith(".en.pdf"):
+                file_name = f"{base_stem}.translated.pdf"
             clean_filename = re.sub(r'[\r\n"\\]', '_', file_name)
 
             self.send_response(200)
@@ -511,6 +540,22 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                                     text=seg.masked_text,
                                     target_lang=target_lang,
                                 )
+
+                # Apply domain glossary & custom user overrides
+                custom_glossary = req_json.get("custom_glossary", None)
+                try:
+                    from layoutlingua.translation.glossary import GlossaryManager
+
+                    src_l = session.get("detected_lang", "en")
+                    for s_id, t_text in list(translated_segments.items()):
+                        translated_segments[s_id] = GlossaryManager.apply_glossary(
+                            text=t_text,
+                            source_lang=src_l,
+                            target_lang=target_lang,
+                            custom_glossary=custom_glossary,
+                        )
+                except Exception as g_err:
+                    print(f"[LayoutLingua] Glossary application notice: {g_err}")
 
                 # Run TypesetEngine with language-aware font selection
                 src_doc = pymupdf.open(stream=src_bytes, filetype="pdf")

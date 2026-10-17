@@ -74,6 +74,38 @@ class TextFitTester:
             lineheight=effective_lineheight,
         )
         if rc_min < 0:
+            # 2a. Lineheight micro-compaction: try tighter lineheight (down to 1.05x)
+            compact_lh = max(1.02, effective_lineheight * 0.90)
+            rc_compact = self._page.insert_textbox(
+                test_rect,
+                text,
+                fontsize=min_font_size,
+                fontname=self.font_name,
+                fontfile=fontfile_arg,
+                lineheight=compact_lh,
+            )
+            if rc_compact >= 0:
+                lines = self._estimate_lines(height, rc_compact, min_font_size, compact_lh)
+                return True, min_font_size, OverflowCause.NONE, lines, compact_lh
+
+            # 2b. Soft Margin Absorption:
+            # Absorb minor vertical overflow (within 1.2 * min_font_size or 8% box height)
+            slight_overflow_threshold = 1.2 * min_font_size
+            if abs(rc_compact) <= slight_overflow_threshold:
+                soft_pad = min(height * 0.08, slight_overflow_threshold)
+                soft_rect = pymupdf.Rect(x0, y0, x1, y1 + soft_pad)
+                rc_soft = self._page.insert_textbox(
+                    soft_rect,
+                    text,
+                    fontsize=min_font_size,
+                    fontname=self.font_name,
+                    fontfile=fontfile_arg,
+                    lineheight=compact_lh,
+                )
+                if rc_soft >= 0:
+                    lines = self._estimate_lines(height + soft_pad, rc_soft, min_font_size, compact_lh)
+                    return True, min_font_size, OverflowCause.NONE, lines, compact_lh
+
             # Overflow event at minimum scale: classify cause
             cause = self._classify_overflow_cause(text, width, min_font_size)
             return False, orig_font_size, cause, 0, effective_lineheight

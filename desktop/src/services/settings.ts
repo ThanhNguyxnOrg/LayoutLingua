@@ -14,6 +14,7 @@ export interface AppSettings {
   targetLang: string
   preserveFormulas: boolean
   minFontShrink: number
+  customGlossary?: string
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -26,6 +27,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   targetLang: 'vi',
   preserveFormulas: true,
   minFontShrink: 0.7,
+  customGlossary: '',
 }
 
 const STORAGE_KEY = 'layoutlingua_settings'

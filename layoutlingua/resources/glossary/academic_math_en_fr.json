@@ -1,0 +1,33 @@
+{
+  "language_pair": "en-fr",
+  "domain": "academic_math_stem",
+  "terms": {
+    "Abstract": "Résumé",
+    "Introduction": "Introduction",
+    "Related Work": "Travaux connexes",
+    "Methodology": "Méthodologie",
+    "Methods": "Méthodes",
+    "Experiments": "Expérimentations",
+    "Discussion": "Discussion",
+    "Conclusion": "Conclusion",
+    "References": "Références",
+    "Appendix": "Annexe",
+    "Theorem": "Théorème",
+    "Lemma": "Lemme",
+    "Corollary": "Corollaire",
+    "Proposition": "Proposition",
+    "Definition": "Définition",
+    "Proof": "Démonstration",
+    "Example": "Exemple",
+    "Algorithm": "Algorithme",
+    "Eigenvalue": "Valeur propre",
+    "Eigenvector": "Vecteur propre",
+    "Determinant": "Déterminant",
+    "Derivative": "Dérivée",
+    "Gradient": "Gradient",
+    "Integral": "Intégrale",
+    "Matrix": "Matrice",
+    "Neural Network": "Réseau de neurones",
+    "Loss Function": "Fonction de perte"
+  }
+}

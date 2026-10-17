@@ -586,12 +586,24 @@ export default function Workspace({
         } catch {}
       }, 400)
 
+      const langCodeMap: Record<string, string> = {
+        'English': 'en',
+        'Vietnamese': 'vi',
+        'German': 'de',
+        'French': 'fr',
+        'Japanese': 'ja',
+        'Spanish': 'es',
+        'Chinese (Simplified)': 'zh',
+      }
+      const resolvedTargetLang = langCodeMap[tgt] || (tgt === 'Vietnamese' ? 'vi' : 'en')
+
       fetch(apiUrl('/api/translate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           doc_id: docInfo.id,
-          target_lang: tgt === 'Vietnamese' ? 'vi' : 'en',
+          target_lang: resolvedTargetLang,
+          custom_glossary: settings.customGlossary || '',
           provider: settings.provider,
           api_key: settings.provider === 'gemini' ? settings.geminiKey : settings.provider === 'openai' ? settings.openaiKey : '',
           base_url: settings.provider === 'openai' ? settings.openaiEndpoint : '',
