@@ -17,6 +17,7 @@ import re
 import tempfile
 import threading
 import time
+import subprocess
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -48,6 +49,40 @@ _GLOBAL_DETECTOR: Any = None
 _DETECTOR_TRIED: bool = False
 
 
+def get_user_known_folders() -> dict[str, str]:
+    """Retrieve verified absolute filesystem paths for Desktop, Downloads, and Documents."""
+    folders: dict[str, str] = {}
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
+            )
+            for k_name, reg_val in [
+                ("Desktop", "Desktop"),
+                ("Downloads", "{374DE290-123F-4565-9164-39C4925E467B}"),
+                ("Documents", "Personal"),
+            ]:
+                try:
+                    val, _ = winreg.QueryValueEx(key, reg_val)
+                    p = os.path.normpath(os.path.expandvars(val))
+                    if os.path.isdir(p):
+                        folders[k_name] = p
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    home = os.path.expanduser("~")
+    for k_name in ["Desktop", "Downloads", "Documents"]:
+        if k_name not in folders:
+            d = os.path.join(home, k_name)
+            folders[k_name] = d if os.path.isdir(d) else home
+    return folders
+
+
 def get_layout_detector() -> Any:
     """Retrieve active ONNX vision layout detector if model file is present."""
     global _GLOBAL_DETECTOR, _DETECTOR_TRIED
@@ -66,6 +101,324 @@ def get_layout_detector() -> Any:
             except Exception as exc:
                 print(f"[LayoutLingua] Failed to initialize ONNX detector: {exc}")
     return _GLOBAL_DETECTOR
+
+
+def _run_translation_worker(doc_id: str, req_json: dict) -> None:
+    """Background worker thread that translates and typesets a document."""
+    with _LOCK:
+        session = _SESSIONS.get(doc_id)
+    if not session:
+        return
+
+    try:
+        doc_ir: DocumentIR = session["doc_ir"]
+        src_bytes: bytes = session["source_pdf_bytes"]
+        target_lang = req_json.get("target_lang", "vi")
+
+        # Parse selective page range
+        page_range_spec = req_json.get("page_range", "all")
+        from layoutlingua.processing.page_range import parse_page_range
+
+        selected_pages = parse_page_range(page_range_spec, total_pages=len(doc_ir.pages))
+
+        # Extract translatable segments strictly for selected pages
+        segments = extract_document_segments(doc_ir, page_numbers=selected_pages)
+
+        # Read provider options
+        provider_type = str(req_json.get("provider", "google")).lower().strip()
+        api_key = str(req_json.get("api_key", "")).strip()
+        base_url = str(req_json.get("base_url", "")).strip()
+        model_name = str(req_json.get("model", "")).strip()
+        custom_glossary = req_json.get("custom_glossary", None)
+
+        provider_inst = None
+        try:
+            if provider_type in ("openai", "ollama") or base_url:
+                from layoutlingua.translation.openai_compat import OpenAITranslationProvider
+
+                b_url = base_url if base_url else ("http://localhost:11434/v1" if provider_type == "ollama" else "https://api.openai.com/v1")
+                m_id = (model_name or "").strip()
+                if not m_id:
+                    try:
+                        headers = {"User-Agent": "LayoutLingua/2.0"}
+                        if api_key and api_key != "ollama":
+                            headers["Authorization"] = f"Bearer {api_key}"
+                        req_m = urllib.request.Request(f"{b_url.rstrip('/')}/models", headers=headers)
+                        with urllib.request.urlopen(req_m, timeout=2.5) as r_m:
+                            data_m = json.loads(r_m.read().decode("utf-8"))
+                            fetched = [m.get("id") for m in data_m.get("data", []) if m.get("id")]
+                            if fetched:
+                                m_id = fetched[0]
+                    except Exception:
+                        pass
+
+                if not m_id:
+                    if "api.openai.com" in b_url:
+                        m_id = "gpt-4o-mini"
+                    else:
+                        raise ValueError(
+                            f"No model specified and could not auto-discover models from {b_url}. "
+                            f"Please specify a Model ID in Settings."
+                        )
+
+                provider_inst = OpenAITranslationProvider(
+                    api_key=api_key or "ollama",
+                    model_id=m_id,
+                    base_url=b_url,
+                )
+            elif provider_type == "gemini" and api_key:
+                from layoutlingua.translation.gemini import GeminiTranslationProvider
+
+                m_id = model_name if model_name else "gemini-2.5-flash"
+                provider_inst = GeminiTranslationProvider(
+                    api_key=api_key,
+                    profile_or_model=m_id,
+                )
+            elif provider_type in ("google", "google_rpc"):
+                from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider
+
+                provider_inst = GoogleRpcTranslationProvider()
+            elif provider_type == "argos":
+                from layoutlingua.translation.argos.provider import ArgosTranslationProvider
+
+                argos = ArgosTranslationProvider()
+                if argos.manager.is_runtime_available():
+                    provider_inst = argos
+        except Exception as p_err:
+            print(f"[LayoutLingua] Provider init notice: {p_err}")
+            provider_inst = None
+
+        if provider_inst is None and provider_type != "mock":
+            try:
+                from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider
+
+                provider_inst = GoogleRpcTranslationProvider()
+            except Exception as g_err:
+                print(f"[LayoutLingua] Online MT fallback error: {g_err}")
+
+        if provider_inst is None:
+            from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider
+
+            provider_inst = GoogleRpcTranslationProvider()
+
+        from layoutlingua.translation.cache import CachedTranslationProvider
+
+        provider_inst = CachedTranslationProvider(provider_inst)
+
+        translated_segments: dict[str, str] = {}
+        start_time = time.time()
+        total_p = len(doc_ir.pages)
+
+        from layoutlingua.processing.citation import shield_citations, unshield_citations
+        from layoutlingua.processing.text_sanitizer import (
+            shield_academic_abbreviations,
+            unshield_academic_abbreviations,
+        )
+
+        batch_sz = 35
+        total_segs = len(segments)
+        concurrency = 3 if (provider_type in ("openai", "gemini", "ollama") or base_url) else 1
+
+        all_ref_mappings = {}
+        all_abbr_mappings = {}
+        shielded_chunks = []
+        for b_idx in range(0, total_segs, batch_sz):
+            chunk = segments[b_idx : b_idx + batch_sz]
+            shielded_chunk = []
+            for seg in chunk:
+                s_text, ref_map = shield_citations(seg.masked_text)
+                s_text, abbr_map = shield_academic_abbreviations(s_text)
+                if ref_map:
+                    all_ref_mappings[seg.segment_id] = ref_map
+                if abbr_map:
+                    all_abbr_mappings[seg.segment_id] = abbr_map
+                if ref_map or abbr_map:
+                    shielded_chunk.append(
+                        TextSegment(
+                            segment_id=seg.segment_id,
+                            raw_text=seg.raw_text,
+                            masked_text=s_text,
+                            tokens=seg.tokens,
+                            span_ids=seg.span_ids,
+                        )
+                    )
+                else:
+                    shielded_chunk.append(seg)
+            shielded_chunks.append(shielded_chunk)
+
+        from layoutlingua.translation.concurrent_pool import concurrent_batch_translate
+
+        def _on_chunk_progress(c_idx: int, done_segs: int, chunk_res: dict[str, str]):
+            approx_p = max(1, int((done_segs / max(1, total_segs)) * total_p))
+            elapsed = max(0.2, time.time() - start_time)
+            curr_speed = round(approx_p / elapsed, 1)
+            rem_p = max(0, total_p - approx_p)
+            calc_eta = int(rem_p / max(curr_speed, 0.1)) if curr_speed > 0 else 30
+            with _LOCK:
+                session["progress"] = {
+                    "current_page": approx_p,
+                    "total_pages": total_p,
+                    "status": "processing",
+                    "speed": curr_speed,
+                    "eta_seconds": calc_eta,
+                    "message": f"Translating document ({done_segs}/{total_segs} segments)...",
+                }
+
+        try:
+            raw_batch_res = concurrent_batch_translate(
+                provider=provider_inst,
+                chunks=shielded_chunks,
+                source_lang=session.get("detected_lang", "auto"),
+                target_lang=target_lang,
+                max_workers=concurrency,
+                on_chunk_done=_on_chunk_progress,
+            )
+            for s_id, t_text in raw_batch_res.items():
+                if s_id in all_abbr_mappings:
+                    t_text = unshield_academic_abbreviations(t_text, all_abbr_mappings[s_id])
+                if s_id in all_ref_mappings:
+                    t_text = unshield_citations(t_text, all_ref_mappings[s_id])
+                translated_segments[s_id] = t_text
+        except RateLimitError as rl_err:
+            print(f"[LayoutLingua] Rate limit error: {rl_err}")
+            with _LOCK:
+                session["progress"] = {
+                    "current_page": session.get("progress", {}).get("current_page", 1),
+                    "total_pages": total_p,
+                    "status": "rate-limited",
+                    "speed": 0,
+                    "eta_seconds": 0,
+                    "message": "Google free quota temporarily blocked (HTTP 429). Please switch provider in Settings.",
+                    "error_type": "rate_limit",
+                    "provider": "google",
+                }
+                session["is_translating"] = False
+            return
+        except Exception as b_err:
+            print(f"[LayoutLingua] Translation error: {b_err}")
+            with _LOCK:
+                session["progress"] = {
+                    "current_page": session.get("progress", {}).get("current_page", 1),
+                    "total_pages": total_p,
+                    "status": "error",
+                    "speed": 0,
+                    "eta_seconds": 0,
+                    "message": f"Translation error: {b_err}",
+                }
+                session["is_translating"] = False
+            return
+
+        # Apply domain glossary & custom user overrides
+        try:
+            from layoutlingua.translation.glossary import GlossaryManager
+
+            src_l = session.get("detected_lang", "en")
+            for s_id, t_text in list(translated_segments.items()):
+                translated_segments[s_id] = GlossaryManager.apply_glossary(
+                    text=t_text,
+                    source_lang=src_l,
+                    target_lang=target_lang,
+                    custom_glossary=custom_glossary,
+                )
+        except Exception as g_err:
+            print(f"[LayoutLingua] Glossary application notice: {g_err}")
+
+        # Run TypesetEngine with language-aware font selection
+        src_doc = pymupdf.open(stream=src_bytes, filetype="pdf")
+        t_lang = (target_lang or "vi").lower().strip()
+        typeset_font = "DejaVuSans"
+        if t_lang in ("zh", "chinese", "zh-cn", "zh-tw"):
+            typeset_font = "china-s"
+        elif t_lang in ("ja", "japanese"):
+            typeset_font = "japan"
+        elif t_lang in ("ko", "korean"):
+            typeset_font = "korea"
+
+        engine = TypesetEngine(options=TypesetOptions(font_name=typeset_font))
+
+        from layoutlingua.typesetting.accumulator import DocumentAccumulator
+
+        accumulator = DocumentAccumulator(source_doc=src_doc)
+        total_p = len(src_doc)
+
+        for page_idx in range(total_p):
+            pages_done = page_idx + 1
+            elapsed = max(0.2, time.time() - start_time)
+            curr_speed = round(pages_done / elapsed, 1)
+            rem_p = max(0, total_p - pages_done)
+            calc_eta = int(rem_p / max(curr_speed, 0.1)) if curr_speed > 0 else 0
+
+            with _LOCK:
+                session["progress"] = {
+                    "current_page": pages_done,
+                    "total_pages": total_p,
+                    "status": "processing",
+                    "speed": curr_speed,
+                    "eta_seconds": calc_eta,
+                    "message": f"Typesetting layout for page {pages_done} of {total_p}...",
+                }
+
+            p_ir = doc_ir.pages[page_idx] if page_idx < len(doc_ir.pages) else None
+            if p_ir and (page_idx + 1) in selected_pages:
+                tx = engine.stage_page_transaction(
+                    source_doc=src_doc,
+                    page_ir=p_ir,
+                    document_ir=doc_ir,
+                    translated_segments=translated_segments,
+                )
+                accumulator.commit_page(tx)
+            else:
+                accumulator.commit_pristine_source_page(page_idx)
+
+        # Translate Table of Contents
+        translated_toc = None
+        try:
+            from layoutlingua.processing.toc import translate_toc
+
+            translated_toc = translate_toc(
+                source_doc=src_doc,
+                target_lang=target_lang,
+                source_lang=session.get("detected_lang", "en"),
+                custom_glossary=custom_glossary,
+                bilingual_mode=False,
+            )
+        except Exception as toc_err:
+            print(f"[LayoutLingua] TOC translation notice: {toc_err}")
+
+        # Finalize rendered PDF
+        translated_bytes = accumulator.finish(translated_toc=translated_toc)
+        src_doc.close()
+
+        with _LOCK:
+            session["translated_pdf_bytes"] = translated_bytes
+            session["translated_segments"] = translated_segments
+            session["target_lang"] = target_lang
+            session["custom_glossary"] = custom_glossary
+            session["progress"] = {
+                "current_page": total_p,
+                "total_pages": total_p,
+                "status": "done",
+                "speed": round(total_p / max(0.2, time.time() - start_time), 1),
+                "eta_seconds": 0,
+                "message": "Translation complete!",
+            }
+            session["is_translating"] = False
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        with _LOCK:
+            p_curr = session.get("progress", {}).get("current_page", 1)
+            t_p = len(session["doc_ir"].pages) if session.get("doc_ir") else 1
+            session["progress"] = {
+                "current_page": p_curr,
+                "total_pages": t_p,
+                "status": "error",
+                "speed": 0,
+                "eta_seconds": 0,
+                "message": f"Translation failed: {e}",
+            }
+            session["is_translating"] = False
 
 
 class LayoutLinguaHandler(BaseHTTPRequestHandler):
@@ -151,8 +504,12 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
 
             try:
                 # Select source or translated document
-                if preview_type == "translated" and session.get("translated_pdf_bytes"):
-                    pdf_doc = pymupdf.open(stream=session["translated_pdf_bytes"], filetype="pdf")
+                if preview_type == "translated":
+                    if session.get("translated_pdf_bytes"):
+                        pdf_doc = pymupdf.open(stream=session["translated_pdf_bytes"], filetype="pdf")
+                    else:
+                        self._send_json({"error": "Translated document not yet ready", "status": "processing"}, status=404)
+                        return
                 else:
                     pdf_doc = pymupdf.open(stream=session["source_pdf_bytes"], filetype="pdf")
 
@@ -309,6 +666,30 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 })
                 return
 
+        # 6. Discover user system folders (Desktop, Downloads, Documents)
+        if path in ("/api/system-folders", "/system-folders"):
+            folders = get_user_known_folders()
+            self._send_json(folders)
+            return
+
+        # 7. Native folder picker dialog
+        if path in ("/api/pick-folder", "/pick-folder"):
+            selected_dir = ""
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                initial = query.get("initial", [""])[0] or get_user_known_folders().get("Desktop", "")
+                selected_dir = filedialog.askdirectory(initialdir=initial, title="Select Destination Folder")
+                root.destroy()
+            except Exception as e:
+                print(f"[LayoutLingua] Folder dialog error: {e}")
+            self._send_json({"path": selected_dir or ""})
+            return
+
         self._send_json({"error": f"Path not found: {path}"}, status=404)
 
     def do_POST(self) -> None:
@@ -446,12 +827,11 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": f"Failed to parse PDF document: {e}"}, status=400)
             return
 
-        # 2. Run document translation & typesetting
+        # 2. Run document translation & typesetting (asynchronous job)
         if path in ("/api/translate", "/translate"):
             try:
                 req_json = json.loads(post_body.decode("utf-8"))
                 doc_id = req_json.get("doc_id", "")
-                target_lang = req_json.get("target_lang", "vi")
 
                 with _LOCK:
                     session = _SESSIONS.get(doc_id)
@@ -460,327 +840,148 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                     self._send_json({"error": f"Session '{doc_id}' not found"}, status=404)
                     return
 
-                doc_ir: DocumentIR = session["doc_ir"]
-                src_bytes: bytes = session["source_pdf_bytes"]
-
-                # Parse selective page range
-                page_range_spec = req_json.get("page_range", "all")
-                from layoutlingua.processing.page_range import parse_page_range
-
-                selected_pages = parse_page_range(page_range_spec, total_pages=len(doc_ir.pages))
-
-                # Extract translatable segments strictly for selected pages
-                segments = extract_document_segments(doc_ir, page_numbers=selected_pages)
-
-                # Read provider options
-                provider_type = str(req_json.get("provider", "mock")).lower()
-                api_key = str(req_json.get("api_key", "")).strip()
-                base_url = str(req_json.get("base_url", "")).strip()
-                model_name = str(req_json.get("model", "")).strip()
-
-                provider_inst = None
-                try:
-                    if provider_type in ("openai", "ollama") or base_url:
-                        from layoutlingua.translation.openai_compat import OpenAITranslationProvider
-
-                        b_url = base_url if base_url else ("http://localhost:11434/v1" if provider_type == "ollama" else "https://api.openai.com/v1")
-                        m_id = (model_name or "").strip()
-                        if not m_id:
-                            # Dynamic model discovery from server
-                            try:
-                                headers = {"User-Agent": "LayoutLingua/2.0"}
-                                if api_key and api_key != "ollama":
-                                    headers["Authorization"] = f"Bearer {api_key}"
-                                req_m = urllib.request.Request(f"{b_url.rstrip('/')}/models", headers=headers)
-                                with urllib.request.urlopen(req_m, timeout=2.5) as r_m:
-                                    data_m = json.loads(r_m.read().decode("utf-8"))
-                                    fetched = [m.get("id") for m in data_m.get("data", []) if m.get("id")]
-                                    if fetched:
-                                        m_id = fetched[0]
-                            except Exception:
-                                pass
-
-                        if not m_id:
-                            if "api.openai.com" in b_url:
-                                m_id = "gpt-4o-mini"
-                            else:
-                                raise ValueError(
-                                    f"No model specified and could not auto-discover models from {b_url}. "
-                                    f"Please specify a Model ID in Settings."
-                                )
-
-                        provider_inst = OpenAITranslationProvider(
-                            api_key=api_key or "ollama",
-                            model_id=m_id,
-                            base_url=b_url,
-                        )
-                    elif provider_type == "gemini" and api_key:
-                        from layoutlingua.translation.gemini import GeminiTranslationProvider
-
-                        m_id = model_name if model_name else "gemini-2.5-flash"
-                        provider_inst = GeminiTranslationProvider(
-                            api_key=api_key,
-                            profile_or_model=m_id,
-                        )
-                    elif provider_type in ("google", "google_rpc"):
-                        from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider
-
-                        provider_inst = GoogleRpcTranslationProvider()
-                    elif provider_type == "argos":
-                        from layoutlingua.translation.argos.provider import ArgosTranslationProvider
-
-                        argos = ArgosTranslationProvider()
-                        if argos.manager.is_runtime_available():
-                            provider_inst = argos
-                except Exception as p_err:
-                    print(f"[LayoutLingua] Provider init notice: {p_err}")
-                    provider_inst = None
-
-                if provider_inst is None and provider_type != "mock":
-                    try:
-                        from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider
-
-                        provider_inst = GoogleRpcTranslationProvider()
-                    except Exception as g_err:
-                        print(f"[LayoutLingua] Online MT fallback error: {g_err}")
-
-                if provider_inst is None:
-                    provider_inst = MockTranslationProvider()
-
-                from layoutlingua.translation.cache import CachedTranslationProvider
-
-                provider_inst = CachedTranslationProvider(provider_inst)
-
-                translated_segments: dict[str, str] = {}
-                start_time = time.time()
-                total_p = len(src_doc) if 'src_doc' in locals() else len(doc_ir.pages)
-
-                from layoutlingua.processing.citation import shield_citations, unshield_citations
-                from layoutlingua.processing.text_sanitizer import (
-                    shield_academic_abbreviations,
-                    unshield_academic_abbreviations,
-                )
-
-                if isinstance(provider_inst, MockTranslationProvider):
-                    for seg in segments:
-                        s_text, ref_map = shield_citations(seg.masked_text)
-                        s_text, abbr_map = shield_academic_abbreviations(s_text)
-                        t_text = provider_inst.translate_segment(
-                            segment_id=seg.segment_id,
-                            text=s_text,
-                            target_lang=target_lang,
-                        )
-                        if abbr_map:
-                            t_text = unshield_academic_abbreviations(t_text, abbr_map)
-                        if ref_map:
-                            t_text = unshield_citations(t_text, ref_map)
-                        translated_segments[seg.segment_id] = t_text
-                else:
-                    batch_sz = 35
-                    total_segs = len(segments)
-                    concurrency = 3 if (provider_type in ("openai", "gemini", "ollama") or base_url) else 1
-
-                    all_ref_mappings = {}
-                    all_abbr_mappings = {}
-                    shielded_chunks = []
-                    for b_idx in range(0, total_segs, batch_sz):
-                        chunk = segments[b_idx : b_idx + batch_sz]
-                        shielded_chunk = []
-                        for seg in chunk:
-                            s_text, ref_map = shield_citations(seg.masked_text)
-                            s_text, abbr_map = shield_academic_abbreviations(s_text)
-                            if ref_map:
-                                all_ref_mappings[seg.segment_id] = ref_map
-                            if abbr_map:
-                                all_abbr_mappings[seg.segment_id] = abbr_map
-                            if ref_map or abbr_map:
-                                shielded_chunk.append(
-                                    TextSegment(
-                                        segment_id=seg.segment_id,
-                                        raw_text=seg.raw_text,
-                                        masked_text=s_text,
-                                        tokens=seg.tokens,
-                                        span_ids=seg.span_ids,
-                                    )
-                                )
-                            else:
-                                shielded_chunk.append(seg)
-                        shielded_chunks.append(shielded_chunk)
-
-                    from layoutlingua.translation.concurrent_pool import concurrent_batch_translate
-
-                    def _on_chunk_progress(c_idx: int, done_segs: int, chunk_res: dict[str, str]):
-                        approx_p = max(1, int((done_segs / max(1, total_segs)) * total_p))
-                        elapsed = max(0.2, time.time() - start_time)
-                        curr_speed = round(approx_p / elapsed, 1)
-                        rem_p = max(0, total_p - approx_p)
-                        calc_eta = int(rem_p / max(curr_speed, 0.1)) if curr_speed > 0 else 30
-                        with _LOCK:
-                            session["progress"] = {
-                                "current_page": approx_p,
-                                "total_pages": total_p,
-                                "status": "processing",
-                                "speed": curr_speed,
-                                "eta_seconds": calc_eta,
-                                "message": f"Translating text ({done_segs}/{total_segs} segments)...",
-                            }
-
-                    try:
-                        raw_batch_res = concurrent_batch_translate(
-                            provider=provider_inst,
-                            chunks=shielded_chunks,
-                            source_lang=session.get("detected_lang", "auto"),
-                            target_lang=target_lang,
-                            max_workers=concurrency,
-                            on_chunk_done=_on_chunk_progress,
-                        )
-                        for s_id, t_text in raw_batch_res.items():
-                            if s_id in all_abbr_mappings:
-                                t_text = unshield_academic_abbreviations(t_text, all_abbr_mappings[s_id])
-                            if s_id in all_ref_mappings:
-                                t_text = unshield_citations(t_text, all_ref_mappings[s_id])
-                            translated_segments[s_id] = t_text
-                    except RateLimitError as rl_err:
-                        print(f"[LayoutLingua] Rate limit error: {rl_err}")
-                        with _LOCK:
-                            session["progress"] = {
-                                "current_page": approx_p if 'approx_p' in locals() else 1,
-                                "total_pages": total_p,
-                                "status": "rate-limited",
-                                "speed": 0,
-                                "eta_seconds": 0,
-                                "message": "Google free quota temporarily blocked (HTTP 429). Please switch provider.",
-                                "error_type": "rate_limit",
-                                "provider": "google",
-                            }
-                        self._send_error(429, str(rl_err))
-                        return
-                    except Exception as b_err:
-                        print(f"[LayoutLingua] Live batch error: {b_err}, falling back to mock")
-                        mock_fallback = MockTranslationProvider()
-                        for seg in segments:
-                            s_text, ref_map = shield_citations(seg.masked_text)
-                            s_text, abbr_map = shield_academic_abbreviations(s_text)
-                            t_text = mock_fallback.translate_segment(
-                                segment_id=seg.segment_id,
-                                text=s_text,
-                                target_lang=target_lang,
-                            )
-                            if abbr_map:
-                                t_text = unshield_academic_abbreviations(t_text, abbr_map)
-                            if ref_map:
-                                t_text = unshield_citations(t_text, ref_map)
-                            translated_segments[seg.segment_id] = t_text
-
-                # Apply domain glossary & custom user overrides
-                custom_glossary = req_json.get("custom_glossary", None)
-                try:
-                    from layoutlingua.translation.glossary import GlossaryManager
-
-                    src_l = session.get("detected_lang", "en")
-                    for s_id, t_text in list(translated_segments.items()):
-                        translated_segments[s_id] = GlossaryManager.apply_glossary(
-                            text=t_text,
-                            source_lang=src_l,
-                            target_lang=target_lang,
-                            custom_glossary=custom_glossary,
-                        )
-                except Exception as g_err:
-                    print(f"[LayoutLingua] Glossary application notice: {g_err}")
-
-                # Run TypesetEngine with language-aware font selection
-                src_doc = pymupdf.open(stream=src_bytes, filetype="pdf")
-                t_lang = (target_lang or "vi").lower().strip()
-                typeset_font = "DejaVuSans"
-                if t_lang in ("zh", "chinese", "zh-cn", "zh-tw"):
-                    typeset_font = "china-s"
-                elif t_lang in ("ja", "japanese"):
-                    typeset_font = "japan"
-                elif t_lang in ("ko", "korean"):
-                    typeset_font = "korea"
-
-                engine = TypesetEngine(options=TypesetOptions(font_name=typeset_font))
-
-                # Typeset document page-by-page
-                from layoutlingua.typesetting.accumulator import DocumentAccumulator
-
-                accumulator = DocumentAccumulator(source_doc=src_doc)
-                total_p = len(src_doc)
-
-                for page_idx in range(total_p):
-                    pages_done = page_idx + 1
-                    elapsed = max(0.2, time.time() - start_time)
-                    curr_speed = round(pages_done / elapsed, 1)
-                    rem_p = max(0, total_p - pages_done)
-                    calc_eta = int(rem_p / max(curr_speed, 0.1)) if curr_speed > 0 else 0
-
-                    with _LOCK:
-                        session["progress"] = {
-                            "current_page": pages_done,
-                            "total_pages": total_p,
-                            "status": "processing",
-                            "speed": curr_speed,
-                            "eta_seconds": calc_eta,
-                            "message": f"Typesetting layout for page {pages_done} of {total_p}...",
-                        }
-
-                    p_ir = doc_ir.pages[page_idx] if page_idx < len(doc_ir.pages) else None
-                    if p_ir and (page_idx + 1) in selected_pages:
-                        tx = engine.stage_page_transaction(
-                            source_doc=src_doc,
-                            page_ir=p_ir,
-                            document_ir=doc_ir,
-                            translated_segments=translated_segments,
-                        )
-                        accumulator.commit_page(tx)
-                    else:
-                        accumulator.commit_pristine_source_page(page_idx)
-
-                # Translate Table of Contents (bookmarks / outlines)
-                translated_toc = None
-                try:
-                    from layoutlingua.processing.toc import translate_toc
-
-                    translated_toc = translate_toc(
-                        source_doc=src_doc,
-                        target_lang=target_lang,
-                        source_lang=session.get("detected_lang", "en"),
-                        custom_glossary=custom_glossary,
-                        bilingual_mode=False,
-                    )
-                except Exception as toc_err:
-                    print(f"[LayoutLingua] TOC translation notice: {toc_err}")
-
-                # Finalize rendered PDF
-                translated_bytes = accumulator.finish(translated_toc=translated_toc)
-                src_doc.close()
-
                 with _LOCK:
-                    session["translated_pdf_bytes"] = translated_bytes
-                    session["translated_segments"] = translated_segments
-                    session["target_lang"] = target_lang
-                    session["custom_glossary"] = custom_glossary
+                    if session.get("is_translating"):
+                        self._send_json({
+                            "status": "processing",
+                            "doc_id": doc_id,
+                            "message": "Translation already in progress",
+                        })
+                        return
+
+                    session["is_translating"] = True
+                    total_pages = len(session["doc_ir"].pages) if session.get("doc_ir") else session.get("page_count", 1)
                     session["progress"] = {
-                        "current_page": total_p,
-                        "total_pages": total_p,
-                        "status": "done",
-                        "speed": round(total_p / max(0.2, time.time() - start_time), 1),
-                        "eta_seconds": 0,
-                        "message": "Translation complete!",
+                        "current_page": 0,
+                        "total_pages": total_pages,
+                        "status": "processing",
+                        "speed": 0,
+                        "eta_seconds": 60,
+                        "message": "Initializing background neural translation worker...",
                     }
 
+                worker_th = threading.Thread(
+                    target=_run_translation_worker,
+                    args=(doc_id, req_json),
+                    daemon=True,
+                )
+                worker_th.start()
+
                 self._send_json({
-                    "status": "done",
+                    "status": "processing",
                     "doc_id": doc_id,
-                    "translated_pages": total_p,
-                    "total_pages": total_p,
-                    "issues": [],
+                    "total_pages": total_pages,
+                    "message": "Translation job started",
                 })
             except Exception as e:
                 import traceback
 
                 traceback.print_exc()
-                self._send_json({"error": f"Translation failed: {e}"}, status=500)
+                self._send_json({"error": f"Failed to start translation: {e}"}, status=500)
+            return
+
+        # 3. Save file directly to filesystem destination path
+        if path in ("/api/save", "/save", "/api/save-file"):
+            try:
+                req_json = json.loads(post_body.decode("utf-8"))
+                doc_id = req_json.get("doc_id", "")
+                dest_dir = req_json.get("directory", "").strip()
+                file_name = req_json.get("filename", "").strip() or "translated_document.pdf"
+                export_fmt = req_json.get("format", "pdf").lower().strip()
+                layout_mode = req_json.get("mode", "mono").lower().strip()
+
+                with _LOCK:
+                    session = _SESSIONS.get(doc_id)
+
+                if not session:
+                    self._send_json({"error": f"Session '{doc_id}' not found"}, status=404)
+                    return
+
+                # Resolve known directory nicknames like ~/Desktop, ~/Downloads, Desktop
+                known_folders = get_user_known_folders()
+                if not dest_dir or dest_dir.lower() in ("desktop", "~/desktop", "desk"):
+                    dest_dir = known_folders.get("Desktop", os.path.expanduser("~/Desktop"))
+                elif dest_dir.lower() in ("downloads", "~/downloads", "down"):
+                    dest_dir = known_folders.get("Downloads", os.path.expanduser("~/Downloads"))
+                elif dest_dir.lower() in ("documents", "~/documents", "docs"):
+                    dest_dir = known_folders.get("Documents", os.path.expanduser("~/Documents"))
+                elif dest_dir.startswith("~"):
+                    dest_dir = os.path.expanduser(dest_dir)
+
+                norm_dir = os.path.normpath(os.path.abspath(dest_dir))
+                os.makedirs(norm_dir, exist_ok=True)
+
+                clean_filename = re.sub(r'[\r\n/\\:*?"<>|]', '_', file_name)
+
+                # Generate content
+                if export_fmt in ("md", "markdown"):
+                    from layoutlingua.processing.markdown_export import export_document_markdown
+
+                    md_text = export_document_markdown(
+                        doc_ir=session["doc_ir"],
+                        translated_segments=session.get("translated_segments"),
+                    )
+                    content_bytes = md_text.encode("utf-8")
+                    if not clean_filename.lower().endswith(".md"):
+                        clean_filename += ".md"
+                else:
+                    raw_source = session.get("source_pdf_bytes")
+                    raw_translated = session.get("translated_pdf_bytes")
+
+                    if layout_mode == "bilingual" and raw_source and raw_translated:
+                        src_doc = pymupdf.open(stream=raw_source, filetype="pdf")
+                        tgt_doc = pymupdf.open(stream=raw_translated, filetype="pdf")
+                        bi_doc = pymupdf.open()
+                        n_pages = max(len(src_doc), len(tgt_doc))
+                        for idx in range(n_pages):
+                            if idx < len(src_doc):
+                                bi_doc.insert_pdf(src_doc, from_page=idx, to_page=idx, annots=True)
+                            if idx < len(tgt_doc):
+                                bi_doc.insert_pdf(tgt_doc, from_page=idx, to_page=idx, annots=True)
+                        if src_doc.metadata:
+                            bi_doc.set_metadata(src_doc.metadata)
+                        content_bytes = bi_doc.tobytes(deflate=True, garbage=3)
+                        bi_doc.close()
+                        src_doc.close()
+                        tgt_doc.close()
+                    else:
+                        content_bytes = raw_translated or raw_source
+
+                    if not clean_filename.lower().endswith(".pdf"):
+                        clean_filename += ".pdf"
+
+                target_file_path = os.path.join(norm_dir, clean_filename)
+                with open(target_file_path, "wb") as f_out:
+                    f_out.write(content_bytes)
+
+                self._send_json({
+                    "status": "ok",
+                    "saved_path": target_file_path,
+                    "directory": norm_dir,
+                    "filename": clean_filename,
+                    "bytes": len(content_bytes),
+                })
+            except Exception as e:
+                import traceback
+
+                traceback.print_exc()
+                self._send_json({"error": f"Failed to save file: {e}"}, status=500)
+            return
+
+        # 4. Open saved file location in Windows Explorer
+        if path in ("/api/open-folder", "/open-folder"):
+            try:
+                req_json = json.loads(post_body.decode("utf-8"))
+                target_p = req_json.get("path", "").strip()
+                if target_p:
+                    norm = os.path.normpath(target_p)
+                    if os.path.isfile(norm):
+                        subprocess.Popen(["explorer.exe", f"/select,{norm}"])
+                    elif os.path.isdir(norm):
+                        os.startfile(norm)
+                self._send_json({"status": "ok"})
+            except Exception as e:
+                self._send_json({"error": f"Failed to open folder: {e}"}, status=500)
             return
 
         self._send_json({"error": f"Unknown POST endpoint: {path}"}, status=404)

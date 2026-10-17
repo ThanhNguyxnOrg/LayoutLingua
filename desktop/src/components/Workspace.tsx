@@ -281,8 +281,8 @@ function Inspector(p: {
   const locked = p.phase === 'processing'
   const pageIssues = p.visibleIssues.filter((i) => i.page === p.page.n)
   return (
-    <aside aria-label="Inspector" className="flex w-[340px] shrink-0 flex-col border-l border-line bg-white">
-      <div role="tablist" className="flex border-b border-line px-2">
+    <aside aria-label="Inspector" className="flex w-[340px] shrink-0 flex-col border-l border-line bg-white min-h-0 h-full max-h-full overflow-hidden">
+      <div role="tablist" className="flex border-b border-line px-2 shrink-0">
         {tabs.map(([t, l]) => (
           <button key={t} role="tab" aria-selected={p.tab === t} onClick={() => p.setTab(t)} className={`relative flex h-12 items-center gap-1.5 px-3 text-[13px] font-semibold ${p.tab === t ? 'text-ink' : 'text-muted hover:text-ink'}`}>
             {l}
@@ -292,7 +292,7 @@ function Inspector(p: {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
         {p.tab === 'translation' && (
           <div className="space-y-6 p-5">
             <section className="space-y-3">
@@ -520,23 +520,22 @@ export default function Workspace({
   const [activeIssue, setActiveIssue] = useState<string>()
   const [tab, setTab] = useState<Tab>('translation')
   const [telemetry, setTelemetry] = useState<{ eta?: number; speed?: number; message?: string }>({})
+  const [previewVersion, setPreviewVersion] = useState(0)
 
   const docPages: Page[] = useMemo(() => {
     if (!docInfo?.pages) return pages
     return Array.from({ length: docInfo.pages }, (_, i) => {
       const n = i + 1
       const isDone = phase === 'done' || (phase === 'processing' && i < done)
-      const mockP = pages[i]
-      if (mockP && !docInfo.id) return mockP
       return {
         n,
         status: isDone ? ('ok' as const) : ('pending' as const),
-        blocks: mockP ? mockP.blocks : [],
-        blockCount: mockP ? mockP.blockCount : 12,
-        cellCount: mockP ? mockP.cellCount : 0,
+        blocks: [],
+        blockCount: 12,
+        cellCount: 0,
       }
     })
-  }, [docInfo?.pages, docInfo?.id, phase, done])
+  }, [docInfo?.pages, phase, done])
   const [inspectorOpen, setInspectorOpen] = useState(() => window.innerWidth >= 1340)
   const [zoom, setZoom] = useState<number | null>(null)
   const [mode, setMode] = useState<'side' | 'overlay'>('side')
@@ -589,14 +588,35 @@ export default function Workspace({
                 message: pData.message,
               })
             }
+            if (pData.status === 'done' && active) {
+              if (progressTimer) clearInterval(progressTimer)
+              setDone(totalPages)
+              setPhase('done')
+              setPreviewVersion(Date.now())
+              if (docInfo?.id || docInfo?.name) {
+                updateHistoryStatus(docInfo.id || docInfo.name, 'translated')
+              }
+              return
+            }
             if (pData.status === 'rate-limited' && active) {
               if (progressTimer) clearInterval(progressTimer)
               setPhase('rate-limited')
+              if (docInfo?.id || docInfo?.name) {
+                updateHistoryStatus(docInfo.id || docInfo.name, 'failed')
+              }
+              return
+            }
+            if (pData.status === 'error' && active) {
+              if (progressTimer) clearInterval(progressTimer)
+              setPhase('provider-error')
+              if (docInfo?.id || docInfo?.name) {
+                updateHistoryStatus(docInfo.id || docInfo.name, 'failed')
+              }
               return
             }
           }
         } catch {}
-      }, 400)
+      }, 350)
 
       const langCodeMap: Record<string, string> = {
         'English': 'en',
@@ -625,19 +645,14 @@ export default function Workspace({
       })
         .then(async (res) => {
           if (!active) return
-          if (progressTimer) clearInterval(progressTimer)
           if (res.status === 429) {
+            if (progressTimer) clearInterval(progressTimer)
             setPhase('rate-limited')
             if (docInfo?.id || docInfo?.name) {
               updateHistoryStatus(docInfo.id || docInfo.name, 'failed')
             }
-          } else if (res.ok) {
-            setDone(totalPages)
-            setPhase('done')
-            if (docInfo?.id || docInfo?.name) {
-              updateHistoryStatus(docInfo.id || docInfo.name, 'translated')
-            }
-          } else {
+          } else if (!res.ok) {
+            if (progressTimer) clearInterval(progressTimer)
             setPhase('provider-error')
             if (docInfo?.id || docInfo?.name) {
               updateHistoryStatus(docInfo.id || docInfo.name, 'failed')
@@ -658,20 +673,10 @@ export default function Workspace({
         if (progressTimer) clearInterval(progressTimer)
       }
     } else {
-      // Offline fallback timer simulation for local UI demo
-      const t = setInterval(() => {
-        setDone((d) => {
-          const n = d + 1
-          if (n >= totalPages) {
-            clearInterval(t)
-            setPhase('done')
-          }
-          return n
-        })
-      }, 500)
-      return () => clearInterval(t)
+      alert('No active document session found. Please re-open your PDF.')
+      setPhase('idle')
     }
-  }, [phase, docInfo?.id, tgt, settings, totalPages])
+  }, [phase, docInfo?.id, tgt, settings, totalPages, pageRange])
 
   const stage = phase === 'done' ? stages.length : done === 0 ? 0 : done < Math.floor(totalPages / 3) ? 1 : done < Math.floor((totalPages * 2) / 3) ? 2 : 3
   const known = (p: Page) => (phase === 'idle' || p.n > done ? 'pending' : p.status)
@@ -730,7 +735,7 @@ export default function Workspace({
     if (phase === 'done') {
       return (
         <div className="relative">
-          <PdfPage page={page} type="translated" width={width} docId={docInfo?.id} {...mark} />
+          <PdfPage page={page} type="translated" width={width} docId={docInfo?.id} version={previewVersion} {...mark} />
           {page.status === 'fallback' && <span className="absolute inset-y-0 -left-[5px] w-[3px] bg-red" aria-hidden="true" />}
         </div>
       )
@@ -874,6 +879,7 @@ export default function Workspace({
         <ExportDialog
           initialDocName={docInfo?.name}
           docId={docInfo?.id}
+          totalPages={totalPages}
           onClose={() => setExportOpen(false)}
           needsReview={counts.review}
           preserved={docPages.filter((p) => p.n <= done && p.status === 'fallback').map((p) => p.n)}

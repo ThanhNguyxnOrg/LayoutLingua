@@ -33,17 +33,22 @@ export const DEFAULT_SETTINGS: AppSettings = {
 const STORAGE_KEY = 'layoutlingua_settings'
 const EVENT_NAME = 'layoutlingua:settings_updated'
 
+const VALID_PROVIDERS: ProviderType[] = ['google', 'openai', 'gemini', 'argos']
+
 export function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      const merged = { ...DEFAULT_SETTINGS, ...parsed }
+      const merged: AppSettings = { ...DEFAULT_SETTINGS, ...parsed }
       // Transparent migration: convert legacy 'ollama' provider to unified 'openai'
       if (merged.provider === 'ollama') {
         merged.provider = 'openai'
         if (parsed.ollamaEndpoint) merged.openaiEndpoint = parsed.ollamaEndpoint
         if (parsed.ollamaModel) merged.openaiModel = parsed.ollamaModel
+      }
+      if (!VALID_PROVIDERS.includes(merged.provider)) {
+        merged.provider = 'google'
       }
       return merged
     }

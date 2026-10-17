@@ -15,6 +15,7 @@ type Props = {
   highlightTone?: 'warning' | 'info' | 'failure'
   showMarks?: boolean
   docId?: string
+  version?: number
 }
 
 function BlockView({ b, lang, mark }: { b: Block; lang: 'en' | 'vi'; mark?: boolean }) {
@@ -82,7 +83,7 @@ function BlockView({ b, lang, mark }: { b: Block; lang: 'en' | 'vi'; mark?: bool
   }
 }
 
-export default function PdfPage({ page, lang = 'en', type, width, highlight, highlightLabel, highlightTone = 'warning', showMarks = true, docId }: Props) {
+export default function PdfPage({ page, lang = 'en', type, width, highlight, highlightLabel, highlightTone = 'warning', showMarks = true, docId, version }: Props) {
   const [imgFailed, setImgFailed] = useState(false)
   const c = highlightTone === 'info' ? '#3D6A8F' : highlightTone === 'failure' ? '#B64C4C' : '#B97827'
   const scale = width / PAGE_W
@@ -99,7 +100,8 @@ export default function PdfPage({ page, lang = 'en', type, width, highlight, hig
           </div>
         ) : (
           <img
-            src={apiUrl(`/api/page-preview?id=${encodeURIComponent(docId)}&page=${page.n}&type=${previewType}`)}
+            key={`${docId}-${page.n}-${previewType}-${version || 0}`}
+            src={apiUrl(`/api/page-preview?id=${encodeURIComponent(docId)}&page=${page.n}&type=${previewType}${version ? `&v=${version}` : ''}`)}
             alt={`Page ${page.n} (${lang})`}
             className="size-full object-contain"
             onError={() => setImgFailed(true)}
@@ -111,6 +113,15 @@ export default function PdfPage({ page, lang = 'en', type, width, highlight, hig
             {highlightLabel}
           </span>
         )}
+      </div>
+    )
+  }
+
+  if (!page.blocks || page.blocks.length === 0) {
+    return (
+      <div style={{ width, height: PAGE_H * scale }} className="relative shrink-0 overflow-hidden bg-white border border-line flex flex-col items-center justify-center p-6 text-center">
+        <p className="text-[13px] font-semibold text-ink">Page {page.n}</p>
+        <p className="mt-1 text-[11.5px] text-muted">Upload a PDF document to view pages</p>
       </div>
     )
   }
