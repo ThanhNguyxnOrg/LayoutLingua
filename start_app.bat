@@ -17,6 +17,10 @@ if %errorlevel% equ 0 (
 )
 
 echo [2/2] Launching Native Desktop App...
-start "" "desktop\src-tauri\target\release\layoutlingua-desktop.exe"
+if exist "LayoutLingua.exe" (
+    start "" "LayoutLingua.exe"
+) else (
+    start "" "desktop\src-tauri\target\release\layoutlingua-desktop.exe"
+)
 
 echo Done! LayoutLingua is now running.
