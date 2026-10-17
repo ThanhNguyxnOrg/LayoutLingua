@@ -588,21 +588,24 @@ export default function Workspace({
   const [backendStage, setBackendStage] = useState<number | null>(null)
   const [overallPct, setOverallPct] = useState<number | null>(null)
   const [progressSubtitle, setProgressSubtitle] = useState<string | null>(null)
+  const [integrity, setIntegrity] = useState<any>(null)
 
   const docPages: Page[] = useMemo(() => {
     if (!docInfo?.pages) return pages
     return Array.from({ length: docInfo.pages }, (_, i) => {
       const n = i + 1
       const isDone = phase === 'done' || (phase === 'processing' && i < done)
+      const realStatus = integrity?.page_statuses?.[n] || (isDone ? 'ok' : 'pending')
+      const realBlockCount = integrity?.page_block_counts?.[n] ?? 12
       return {
         n,
-        status: isDone ? ('ok' as const) : ('pending' as const),
+        status: realStatus as any,
         blocks: [],
-        blockCount: 12,
+        blockCount: realBlockCount,
         cellCount: 0,
       }
     })
-  }, [docInfo?.pages, phase, done])
+  }, [docInfo?.pages, phase, done, integrity])
   const [inspectorOpen, setInspectorOpen] = useState(() => window.innerWidth >= 1340)
   const [zoom, setZoom] = useState<number | null>(null)
   const [mode, setMode] = useState<'side' | 'overlay'>('side')
@@ -636,6 +639,9 @@ export default function Workspace({
           setBackendStage(stages.length)
           setPhase('done')
           setPreviewVersion(Date.now())
+        }
+        if (pData.integrity && active) {
+          setIntegrity(pData.integrity)
         }
       })
       .catch(() => {})
@@ -676,6 +682,9 @@ export default function Workspace({
               setOverallPct(pData.overall_pct)
             }
             if (active) {
+              if (pData.integrity) {
+                setIntegrity(pData.integrity)
+              }
               if (pData.stage_index === 2 && pData.segments_total) {
                 setProgressSubtitle(`segment ${pData.segments_done || 0} of ${pData.segments_total}`)
               } else if (pData.current_page > 0) {
@@ -795,9 +804,36 @@ export default function Workspace({
     ? (phase === 'done' ? stages.length : backendStage)
     : (phase === 'done' ? stages.length : done === 0 ? 0 : done < Math.floor(totalPages / 3) ? 1 : done < Math.floor((totalPages * 2) / 3) ? 2 : 3)
   const known = (p: Page) => (phase === 'idle' || p.n > done ? 'pending' : p.status)
-  const visibleIssues = docInfo?.id ? [] : issues.filter((i) => i.page <= done && phase !== 'idle')
+
+  const backendIssues: Issue[] = useMemo(() => {
+    if (integrity?.issues && Array.isArray(integrity.issues)) {
+      return integrity.issues.map((iss: any) => ({
+        id: iss.id,
+        severity: (iss.severity || 'warning') as any,
+        page: iss.page,
+        code: iss.code,
+        title: iss.title,
+        detail: iss.detail,
+        region: iss.region,
+      }))
+    }
+    return []
+  }, [integrity])
+
+  const visibleIssues = docInfo?.id
+    ? backendIssues.filter((i) => i.page <= done && phase !== 'idle')
+    : issues.filter((i) => i.page <= done && phase !== 'idle')
+
   const page = docPages[cur - 1] || docPages[0]
   const counts = useMemo(() => {
+    if (integrity && integrity.blocks_translated != null) {
+      return {
+        blocks: integrity.blocks_translated ?? 0,
+        cells: 0,
+        review: integrity.needs_review ?? 0,
+        preserved: integrity.preserved_pages ?? 0,
+      }
+    }
     const dp = docPages.filter((p) => p.n <= done && phase !== 'idle')
     return {
       blocks: dp.reduce((a, p) => a + p.blockCount, 0),
@@ -805,7 +841,7 @@ export default function Workspace({
       review: visibleIssues.filter((i) => i.severity === 'warning').length,
       preserved: dp.filter((p) => p.status === 'fallback').length,
     }
-  }, [docPages, done, phase, visibleIssues])
+  }, [docPages, done, phase, visibleIssues, integrity])
 
   const docState: DocState = phase === 'processing' ? 'processing' : phase === 'done' ? (counts.review > 0 ? 'review' : 'done') : (phase === 'provider-error' || phase === 'rate-limited') ? 'failed' : 'not-started'
   const fitW = Math.max(160, Math.min(mode === 'side' ? (box.w - 64) / 2 : box.w - 48, ((box.h - 56) * 210) / 297))

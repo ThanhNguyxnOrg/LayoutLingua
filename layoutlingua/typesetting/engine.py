@@ -77,26 +77,78 @@ def compute_expanded_layout_box(
     page_width: float,
     current_block_id: str,
     margin_padding: float = 40.0,
+    page_regions: list[Any] | None = None,
+    scratch_page: Any = None,
 ) -> tuple[float, float, float, float]:
     """Dynamically expand block width into available whitespace in writing direction (BabelDOC algorithm).
-    Clamps expansion before right page margin or any adjacent block on the same vertical band.
+    Strictly preserves multi-column layouts and avoids colliding with adjacent figures, drawings, tables, and images.
     """
     x0, y0, x1, y1 = block_bbox
-    right_limit = max(x1, page_width - margin_padding)
+    orig_w = max(10.0, x1 - x0)
+    orig_h = max(8.0, y1 - y0)
 
+    # In academic publications and multi-column books (BabelDOC layout preservation):
+    # Multi-line paragraphs should not arbitrarily blow up to full page width into neighboring figures.
+    # Allow at most 15% horizontal expansion for paragraphs, while single-line titles can use margin whitespace.
+    is_multiline_column = (orig_h > 18.0) and (orig_w < page_width * 0.70)
+    if is_multiline_column:
+        max_allowed_x1 = min(x0 + orig_w * 1.15, page_width - margin_padding)
+    else:
+        max_allowed_x1 = max(x1, page_width - margin_padding)
+
+    right_limit = max_allowed_x1
+
+    # 1. Collect obstacles from other text blocks
     for other in page_blocks:
         if other.block_id == current_block_id:
             continue
         ox0, oy0, ox1, oy1 = other.bbox
-        # Vertical overlap check (with 2pt tolerance)
         v_overlap = max(0.0, min(y1, oy1) - max(y0, oy0))
-        if v_overlap > 2.0:
-            # If other block is to the right of current block
-            if ox0 >= x1 - 2.0:
-                right_limit = min(right_limit, ox0 - 5.0)
+        if v_overlap > 2.0 and ox0 >= x1 - 5.0:
+            right_limit = min(right_limit, ox0 - 5.0)
 
-    expanded_x1 = max(x1, right_limit)
-    return (x0, y0, expanded_x1, y1)
+    # 2. Collect obstacles from page regions (figures, tables, images, formulas)
+    if page_regions:
+        for reg in page_regions:
+            cat = getattr(reg, "category", "")
+            if cat in ("figure", "image", "table", "formula"):
+                r_bbox = getattr(reg, "bbox", None)
+                if r_bbox and len(r_bbox) == 4:
+                    rx0, ry0, rx1, ry1 = r_bbox
+                    v_overlap = max(0.0, min(y1, ry1) - max(y0, ry0))
+                    if v_overlap > 2.0 and rx0 >= x0:
+                        right_limit = min(right_limit, rx0 - 5.0)
+
+    # 3. Collect obstacles from vector drawings on scratch_page (e.g. geometric diagrams)
+    if scratch_page and hasattr(scratch_page, "get_drawings"):
+        try:
+            for drw in scratch_page.get_drawings():
+                dr = drw.get("rect")
+                if dr and (dr.width > 12.0 or dr.height > 12.0):
+                    v_overlap = max(0.0, min(y1, dr.y1) - max(y0, dr.y0))
+                    if v_overlap > 2.0 and dr.x0 >= x0:
+                        right_limit = min(right_limit, dr.x0 - 5.0)
+        except Exception:
+            pass
+
+    # 4. Collect obstacles from raster images on scratch_page
+    if scratch_page and hasattr(scratch_page, "get_images"):
+        try:
+            for img_info in scratch_page.get_images():
+                xref = img_info[0]
+                for r in scratch_page.get_image_rects(xref):
+                    v_overlap = max(0.0, min(y1, r.y1) - max(y0, r.y0))
+                    if v_overlap > 2.0 and r.x0 >= x0:
+                        right_limit = min(right_limit, r.x0 - 5.0)
+        except Exception:
+            pass
+
+    expanded_x1 = max(x1, min(max_allowed_x1, right_limit))
+    # Never exceed right_limit if right_limit is valid
+    if right_limit > x0 + 10.0:
+        expanded_x1 = min(expanded_x1, right_limit)
+
+    return (x0, y0, max(x0 + 10.0, expanded_x1), y1)
 
 
 class TypesetEngine:
@@ -459,6 +511,8 @@ class TypesetEngine:
                         page_width=page_w,
                         current_block_id=block.block_id,
                         margin_padding=self.options.clearance_padding_pt + 30.0,
+                        page_regions=getattr(page_ir, "regions", None),
+                        scratch_page=scratch_page,
                     )
 
                 fits, final_font_size, overflow_cause, line_count, effective_lineheight = self._fit_tester.test_fit(

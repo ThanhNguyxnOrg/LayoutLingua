@@ -32,6 +32,11 @@ DOMAIN_ROOTS: dict[str, list[str]] = {
         "wd:Q65943",    # mathematical theorem
         "wd:Q8078",     # algebra
         "wd:Q1845",     # geometry
+        "wd:Q8075",     # triangle (scalene, isosceles, equilateral, right triangle)
+        "wd:Q8125",     # polygon / geometric shapes
+        "wd:Q107658",   # arc
+        "wd:Q102436",   # line segment
+        "wd:Q208571",   # proposition / statement
         "wd:Q395",      # mathematics
         "wd:Q28865",    # algebraic topology
         "wd:Q131476",   # graph theory

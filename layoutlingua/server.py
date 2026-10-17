@@ -563,8 +563,17 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
 
         from layoutlingua.typesetting.accumulator import DocumentAccumulator
 
+        from layoutlingua.typesetting.models import BlockFittingStatus
+
         accumulator = DocumentAccumulator(source_doc=src_doc)
         total_p = len(src_doc)
+
+        total_replaced_blocks = 0
+        total_review_blocks = 0
+        total_preserved_pages = 0
+        page_statuses: dict[int, str] = {}
+        page_block_counts: dict[int, int] = {}
+        collected_issues: list[dict[str, Any]] = []
 
         for page_idx in range(total_p):
             pages_done = page_idx + 1
@@ -587,10 +596,16 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                     "speed_unit": "p/s",
                     "eta_seconds": calc_eta,
                     "message": f"Fitting text to layout for page {pages_done} of {total_p}...",
+                    "integrity": {
+                        "blocks_translated": total_replaced_blocks,
+                        "needs_review": total_review_blocks,
+                        "preserved_pages": total_preserved_pages,
+                    },
                 }
 
             p_ir = doc_ir.pages[page_idx] if page_idx < len(doc_ir.pages) else None
-            if p_ir and (page_idx + 1) in selected_pages:
+            p_num = page_idx + 1
+            if p_ir and p_num in selected_pages:
                 tx = engine.stage_page_transaction(
                     source_doc=src_doc,
                     page_ir=p_ir,
@@ -598,7 +613,35 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                     translated_segments=translated_segments,
                 )
                 accumulator.commit_page(tx)
+                replaced_on_page = getattr(tx.summary, "replaced_blocks", 0)
+                overflow_on_page = getattr(tx.summary, "overflow_blocks", 0) + getattr(tx.summary, "collision_blocks", 0)
+                total_replaced_blocks += replaced_on_page
+                total_review_blocks += overflow_on_page
+                page_block_counts[p_num] = len(p_ir.blocks)
+
+                if tx.is_fallback:
+                    total_preserved_pages += 1
+                    page_statuses[p_num] = "fallback"
+                elif overflow_on_page > 0:
+                    page_statuses[p_num] = "warn"
+                    for d in getattr(tx, "details", []):
+                        if getattr(d, "status", None) in (BlockFittingStatus.OVERFLOW_FALLBACK, BlockFittingStatus.COLLISION_FALLBACK):
+                            status_val = d.status.value if hasattr(d.status, "value") else str(d.status)
+                            collected_issues.append({
+                                "id": f"iss_{p_num}_{d.block_id}",
+                                "severity": "warning",
+                                "page": p_num,
+                                "code": status_val,
+                                "title": f"Page {p_num}: {d.reason or 'Text fit warning'}",
+                                "detail": f"Source: {d.original_text[:80]}",
+                                "region": list(d.bbox) if d.bbox and len(d.bbox) == 4 else None,
+                            })
+                else:
+                    page_statuses[p_num] = "ok"
             else:
+                total_preserved_pages += 1
+                page_statuses[p_num] = "fallback"
+                page_block_counts[p_num] = len(p_ir.blocks) if p_ir else 0
                 accumulator.commit_pristine_source_page(page_idx)
 
         # Stage 4: Table of Contents & Writing final PDF
@@ -614,6 +657,11 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                 "speed_unit": "p/s",
                 "eta_seconds": 1,
                 "message": "Writing final vector output PDF...",
+                "integrity": {
+                    "blocks_translated": total_replaced_blocks,
+                    "needs_review": total_review_blocks,
+                    "preserved_pages": total_preserved_pages,
+                },
             }
 
         translated_toc = None
@@ -634,12 +682,22 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
         translated_bytes = accumulator.finish(translated_toc=translated_toc)
         src_doc.close()
 
+        integrity_data = {
+            "blocks_translated": total_replaced_blocks,
+            "needs_review": total_review_blocks,
+            "preserved_pages": total_preserved_pages,
+            "page_statuses": page_statuses,
+            "page_block_counts": page_block_counts,
+            "issues": collected_issues[:50],
+        }
+
         with _LOCK:
             session["translated_pdf_bytes"] = translated_bytes
             session["translated_segments"] = translated_segments
             session["target_lang"] = target_lang
             session["custom_glossary"] = custom_glossary
             session["selected_pages"] = sorted(list(selected_pages))
+            session["integrity"] = integrity_data
             session["progress"] = {
                 "stage_index": 5,
                 "stage_name": "Complete",
@@ -652,6 +710,7 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                 "speed_unit": "p/s",
                 "eta_seconds": 0,
                 "message": "Translation complete!",
+                "integrity": integrity_data,
             }
             session["is_translating"] = False
             _persist_session_to_disk(session)
@@ -786,11 +845,13 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "Document session not found"}, status=404)
                 return
 
-            prog = session.get("progress", {
+            prog = dict(session.get("progress", {
                 "current_page": 0,
                 "total_pages": session.get("page_count", 0),
                 "status": "idle",
-            })
+            }))
+            if "integrity" not in prog and "integrity" in session:
+                prog["integrity"] = session["integrity"]
             self._send_json(prog)
             return
 

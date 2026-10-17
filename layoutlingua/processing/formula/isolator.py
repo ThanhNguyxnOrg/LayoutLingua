@@ -74,6 +74,10 @@ class FormulaIsolator:
         if span.font_size <= 9.5 and len(text) <= 4:
             return True
 
+        # Isolated punctuation or closing brackets belong to enclosing prose syntax
+        if text.strip() in (")", "]", "}", ".)", "]:", "):", ".", ",", ":", ";"):
+            return False
+
         # If span consists predominantly of mathematical symbols or degree marks (e.g. 60°, 360°, ±, α, x², ≤, ≥)
         math_count = sum(1 for ch in text if ch in _MATH_OPERATOR_CHARS or ch in "+-=/*^<>()[]{}≤≥±≠≈")
         if math_count > 0 and (math_count / len(text)) >= 0.3:
@@ -87,8 +91,9 @@ class FormulaIsolator:
         Sorts spans left-to-right and groups consecutive/connected math spans into a single
         cohesive formula token, preventing neural MT models from fragmenting expressions.
         """
-        # Sort spans by left-to-right x-coordinate to restore visual order
-        sorted_spans = sorted(block.spans, key=lambda s: s.bbox[0])
+        # Sort spans in natural reading order: top-to-bottom first, then left-to-right on each line.
+        # Uses 8pt vertical baseline quantization to accommodate subscript/superscript baseline jitters.
+        sorted_spans = sorted(block.spans, key=lambda s: (round(s.bbox[1] / 8.0) * 8.0, s.bbox[0]))
 
         tokens: list[FormulaToken] = []
         masked_parts: list[str] = []
