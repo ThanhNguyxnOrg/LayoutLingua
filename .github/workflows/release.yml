@@ -274,7 +274,7 @@ jobs:
           merge-multiple: true
 
       - name: Create GitHub Release via ThanhNguyxnAgent
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.check-and-tag.outputs.tag }}
           name: LayoutLingua ${{ needs.check-and-tag.outputs.tag }}
