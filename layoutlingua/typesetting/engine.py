@@ -6,6 +6,8 @@ precision binary search font fitting, dynamic line-height, and multi-tier teleme
 
 from __future__ import annotations
 
+from typing import Any
+
 import pymupdf
 
 from layoutlingua.core.ir import DocumentIR, PageIR, TextBlock
@@ -306,6 +308,7 @@ class TypesetEngine:
                     bool,
                     Any,
                     Any,
+                    str,
                 ]
             ] = []
 
