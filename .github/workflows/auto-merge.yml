@@ -20,26 +20,28 @@ permissions:
 
 jobs:
   auto-merge-safe-updates:
-    name: Auto-Merge and Triage
+    name: Auto-Merge and Triage via ThanhNguyxnAgent
     runs-on: ubuntu-latest
     if: >
       !github.event.pull_request.draft &&
       (
         github.actor == 'dependabot[bot]' ||
+        github.actor == 'ThanhNguyxnAgent[bot]' ||
+        github.actor == 'ThanhNguyxnAgent' ||
         contains(github.event.pull_request.labels.*.name, 'automerge') ||
         contains(github.event.pull_request.labels.*.name, 'safe-update')
       )
     steps:
-      - name: 🤖 Generate GitHub App Token
+      - name: 🤖 Generate ThanhNguyxnAgent App Token
         id: app-token
         continue-on-error: true
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
+          client-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
 
-      - name: 🔍 Inspect Dependabot Metadata (if Dependabot)
-        if: github.actor == 'dependabot[bot]'
+      - name: 🔍 Inspect Automated Dependency Metadata
+        if: github.actor == 'dependabot[bot]' || github.actor == 'ThanhNguyxnAgent[bot]'
         id: dependabot-metadata
         continue-on-error: true
         uses: dependabot/fetch-metadata@v3
@@ -60,8 +62,8 @@ jobs:
           
           echo "is_critical=$IS_CRITICAL" >> $GITHUB_OUTPUT
 
-      # If marked critical/needs-review: assign and tag core team, disable auto-merge
-      - name: 👥 Assign & Tag Core Team for Critical PR
+      # If marked critical/needs-review: assign and tag core team via ThanhNguyxnAgent, disable auto-merge
+      - name: 👥 Assign & Tag Core Team for Critical PR via ThanhNguyxnAgent
         if: steps.review-gate.outputs.is_critical == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
@@ -81,6 +83,9 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
+          echo "Configuring Git actor for ThanhNguyxnAgent..."
+          git config --global user.name "ThanhNguyxnAgent[bot]"
+          git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
           echo "Approving safe routine update: $PR_URL"
           gh pr review "$PR_URL" --approve --body "Auto-approved by ThanhNguyxnAgent: verified routine update with co-authorship." || true
           echo "Enabling auto-merge (squash) once 3-OS CI tests pass..."
