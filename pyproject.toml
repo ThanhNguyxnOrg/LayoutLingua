@@ -34,13 +34,13 @@ vision = [
     "shapely>=2.0.0",
 ]
 ocr = [
-    "rapidocr-onnxruntime>=1.3.0",
+    "rapidocr-onnxruntime>=1.4.4",
 ]
 all = [
     "onnxruntime>=1.18.0",
     "opencv-python-headless>=4.8.0",
     "shapely>=2.0.0",
-    "rapidocr-onnxruntime>=1.3.0",
+    "rapidocr-onnxruntime>=1.4.4",
 ]
 dev = [
     "pytest>=8.0.0",
