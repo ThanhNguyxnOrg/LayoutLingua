@@ -1,0 +1,31 @@
+{
+  "language_pair": "en-pl",
+  "domain": "academic_cs_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 23,
+  "terms": {
+    "computational audiology": "audiologia obliczeniowa",
+    "artificial intelligence in higher education": "sztuczna inteligencja w szkolnictwie wyższym",
+    "machine learning": "uczenie maszynowe",
+    "ensemble learning": "uczenie zespołowe",
+    "pattern recognition": "Rozpoznawanie wzorców",
+    "Dijkstra's algorithm": "algorytm Dijkstry",
+    "Przemyśl Gospels": "Przemyski Ewangeliarz",
+    "work": "praca",
+    "virtual work": "zasada prac wirtualnych",
+    "function overloading": "przeciążanie funkcji",
+    "agile software development": "programowanie zwinne",
+    "aspect-oriented programming": "Programowanie aspektowe",
+    "zero": "zero",
+    "Fibonacci number": "liczbą Fibonacciego",
+    "Internet": "Internet",
+    "wireless network": "sieć bezprzewodowa",
+    "algorithm": "algorytm",
+    "neural network": "sieć neuronowa",
+    "compiler": "kompilator",
+    "database": "baza danych",
+    "gradient descent": "metoda spadku gradientu",
+    "block cipher mode of operation": "Tryb wiązania bloków zaszyfrowanych",
+    "optical character recognition": "optyczne rozpoznawanie znaków"
+  }
+}

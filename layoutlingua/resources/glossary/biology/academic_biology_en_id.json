@@ -1,0 +1,28 @@
+{
+  "language_pair": "en-id",
+  "domain": "academic_biology_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 20,
+  "terms": {
+    "astrobiology": "astrobiologi",
+    "TILLING": "Tilling",
+    "molecular genetics": "Genetika molekuler",
+    "molecular ecology": "Ekologi Molekuler",
+    "erythropoietin": "Eritropoietin",
+    "RB1": "pRb",
+    "oncogene": "Onkogen",
+    "Hox gene": "Gen Hox",
+    "C-C motif chemokine receptor 5": "CCR5",
+    "enzyme": "enzim",
+    "Ayam Cemani": "ayam kedu",
+    "limnic eruption": "Letusan limnik",
+    "psychiatry": "psikiater",
+    "occupational illiteracy": "literasi kerja rendah",
+    "Busiate": "busiate",
+    "mitochondrion": "mitokondria",
+    "photosynthesis": "fotosintesis",
+    "transcription": "transkripsi",
+    "bantam": "Ayam kate",
+    "broiler": "Ayam broiler"
+  }
+}

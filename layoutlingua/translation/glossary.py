@@ -23,7 +23,7 @@ class GlossaryManager:
             return {}
         suffix = file_path.suffix.lower()
         terms: dict[str, str] = {}
-        t_clean = (target_lang_code or "").lower().strip()[:2]
+        t_clean = (target_lang_code or "").lower().strip()
 
         if suffix == ".json":
             try:
@@ -87,18 +87,44 @@ class GlossaryManager:
         lang_map = {
             "vietnamese": "vi",
             "chinese": "zh",
+            "chinese-simplified": "zh",
+            "zh": "zh",
             "zh-cn": "zh",
-            "zh-tw": "zh",
+            "zh-hans": "zh",
+            "chinese-traditional": "zh-tw",
+            "zh-tw": "zh-tw",
+            "zh-hant": "zh-tw",
             "japanese": "ja",
-            "german": "de",
-            "french": "fr",
-            "spanish": "es",
-            "english": "en",
+            "ja": "ja",
             "korean": "ko",
+            "ko": "ko",
+            "german": "de",
+            "de": "de",
+            "french": "fr",
+            "fr": "fr",
+            "spanish": "es",
+            "es": "es",
+            "english": "en",
+            "en": "en",
             "russian": "ru",
+            "ru": "ru",
+            "italian": "it",
+            "it": "it",
+            "portuguese": "pt",
+            "pt": "pt",
+            "indonesian": "id",
+            "id": "id",
+            "dutch": "nl",
+            "nl": "nl",
+            "polish": "pl",
+            "pl": "pl",
+            "turkish": "tr",
+            "tr": "tr",
+            "ukrainian": "uk",
+            "uk": "uk",
         }
-        s_code = lang_map.get(s_lang, s_lang[:2] if len(s_lang) > 2 else s_lang)
-        t_code = lang_map.get(t_lang, t_lang[:2] if len(t_lang) > 2 else t_lang)
+        s_code = lang_map.get(s_lang, s_lang)
+        t_code = lang_map.get(t_lang, t_lang)
         if s_code == t_code:
             return {}
 
@@ -201,9 +227,13 @@ class GlossaryManager:
         custom_glossary: str | Mapping[str, str] | None = None,
     ) -> dict[str, str]:
         """Get unified glossary where user custom terms take precedence over built-in terms."""
-        terms = cls.load_builtin_glossary(source_lang, target_lang)
+        terms = cls.load_builtin_glossary(source_lang, target_lang).copy()
         custom_terms = cls.parse_custom_glossary(custom_glossary)
-        terms.update(custom_terms)
+        if custom_terms:
+            # Case-insensitive override: remove built-in terms matching custom terms
+            custom_lower = {k.lower() for k in custom_terms}
+            terms = {k: v for k, v in terms.items() if k.lower() not in custom_lower}
+            terms.update(custom_terms)
         return terms
 
     @classmethod
@@ -276,50 +306,67 @@ class GlossaryManager:
         target_lang: str = "en",
         custom_glossary: str | Mapping[str, str] | None = None,
     ) -> str:
-        """Heal untranslated terms and correct common MT terminology errors based on source text anchors."""
+        """Heal untranslated terms and MT terminology drifts using structural layout anchors from source text."""
         if not translated_text:
             return translated_text
 
         result = translated_text
         glossary = cls.get_effective_glossary(source_lang, target_lang, custom_glossary)
+        if not glossary:
+            return result
 
-        # 1. First heal any source terms that were left untranslated in the output
+        # Scan for glossary terms that appear in source_text (ordered by term length descending)
         for s_term, t_term in sorted(glossary.items(), key=lambda x: len(x[0]), reverse=True):
-            if not s_term.strip():
+            if not s_term.strip() or len(s_term) < 2:
                 continue
-            # If the source term is still in the translated text, replace it with the target term
-            is_cjk = any("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u30ff" or "\uac00" <= c <= "\ud7af" for c in s_term)
-            if is_cjk:
+
+            # Check if source term is present in source_text
+            is_cjk_src = any("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u30ff" or "\uac00" <= c <= "\ud7af" for c in s_term)
+            if is_cjk_src:
                 p_src = re.compile(re.escape(s_term))
             else:
                 p_src = re.compile(
                     rf"(?<![\w\u00C0-\u024F\u1EA0-\u1EF9]){re.escape(s_term)}(?![\w\u00C0-\u024F\u1EA0-\u1EF9])",
                     re.IGNORECASE,
                 )
+
+            m_src = p_src.search(source_text)
+            if not m_src:
+                continue
+
+            # If target term is already correctly present in translated text, no healing needed
+            is_cjk_tgt = any("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u30ff" or "\uac00" <= c <= "\ud7af" for c in t_term)
+            if is_cjk_tgt:
+                p_tgt = re.compile(re.escape(t_term))
+            else:
+                p_tgt = re.compile(
+                    rf"(?<![\w\u00C0-\u024F\u1EA0-\u1EF9]){re.escape(t_term)}(?![\w\u00C0-\u024F\u1EA0-\u1EF9])",
+                    re.IGNORECASE,
+                )
+            if p_tgt.search(result):
+                continue
+
+            # 1. Direct healing: if untranslated s_term exists in translated text
             if p_src.search(result):
                 def _rep(m: re.Match) -> str:
                     return t_term[0].upper() + t_term[1:] if m.group(0).istitle() else t_term
                 result = p_src.sub(_rep, result)
+                continue
 
-        # 2. Known literal mistranslations from Google RPC in mathematical prose
-        if target_lang in ("en", "english"):
-            _MATH_FIXES = [
-                (r"\bAwake rate\b", "Proportion"),
-                (r"\bConsciousness rate\b", "Proportion"),
-                (r"\bConsciousness ratio\b", "Proportion"),
-                (r"\bRepeated alignment\b", "Arrangements with repetition"),
-                (r"\bIterative adjustment\b", "Arrangements with repetition"),
-                (r"\bAlignment\s*\(no repetition\)", "Arrangements (no repetition)"),
-                (r"\bRepeated permutation\b", "Permutations with repetition"),
-                (r"\bRepetitive combination\b", "Combinations with repetition"),
-                (r"\bArithmetic average\b", "Arithmetic mean"),
-                (r"\bAverage(?=:\s*[A-Za-z0-9_]+\s*=)", "Geometric mean"),
-                (r"\bNewton binomia\b", "Newton's binomial theorem"),
-                (r"\bNewton binomial\b", "Newton's binomial theorem"),
-                (r"\bGood(?=\s+[A-Za-z0-9_]+\s*=|⟦LL_FORMULA_|<b\d+>)", "That is,"),
-                (r"\bGive (\d+no\.|\d+:)\b", r"For \1"),
-            ]
-            for pat_str, rep_str in _MATH_FIXES:
-                result = re.sub(pat_str, rep_str, result, flags=re.IGNORECASE)
+            # 2. Structural layout anchor alignment: find shared pre/suf tokens (indices, dot leaders, tags, formulas)
+            m_pre = re.search(r"(\d+[\.\)]\s*|[•\-\*]\s*|\S+\s*)$", source_text[:m_src.start()])
+            pre_anchor = m_pre.group(0) if m_pre else ""
+
+            m_suf = re.search(r"^(\s*[\.\:\-_–—…]{2,}\s*\d+|\s*[\.\:\-_–—…]+|\s*⟦LL_[^⟧]+⟧)", source_text[m_src.end():])
+            suf_anchor = m_suf.group(0) if m_suf else ""
+
+            if pre_anchor and suf_anchor:
+                anchor_pat = re.compile(
+                    rf"({re.escape(pre_anchor.strip())}\s+)(.*?)(\s*{re.escape(suf_anchor.strip())})",
+                    re.DOTALL,
+                )
+                if anchor_pat.search(result):
+                    result = anchor_pat.sub(rf"\g<1>{t_term}\g<3>", result)
+                    continue
 
         return result

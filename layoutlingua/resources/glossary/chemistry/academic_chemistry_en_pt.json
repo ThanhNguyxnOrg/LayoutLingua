@@ -1,0 +1,25 @@
+{
+  "language_pair": "en-pt",
+  "domain": "academic_chemistry_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 17,
+  "terms": {
+    "pentane interference": "Interferência de pentano",
+    "Bisoxazoline ligand": "Ligando de bisoxazolina",
+    "analytical chemistry": "química analítica",
+    "selenium trioxide": "trióxido de selénio",
+    "acid": "ácido",
+    "hydrogen": "hidrogénio",
+    "samarium": "samário",
+    "helium": "hélio",
+    "lanthanum": "lantânio",
+    "unbiunium": "unbiúnio",
+    "promethium": "promécio",
+    "Urolite": "Urólito",
+    "crystallography": "cristalografia",
+    "shogi": "shogi",
+    "chemical reaction": "reação química",
+    "covalent bond": "ligação covalente",
+    "catalyst": "catalisador"
+  }
+}

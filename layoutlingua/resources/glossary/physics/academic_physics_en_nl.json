@@ -1,0 +1,30 @@
+{
+  "language_pair": "en-nl",
+  "domain": "academic_physics_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 22,
+  "terms": {
+    "compression": "compressie",
+    "biophysics": "biofysica",
+    "radiation pattern": "radiation pattern",
+    "winery": "wijndomein",
+    "tobacco industry": "tabaksindustrie",
+    "permaculture": "permacultuur",
+    "chemical thermodynamics": "chemische thermodynamica",
+    "firefighting": "brandbestrijding",
+    "hydropower": "waterkracht",
+    "renewable energy": "duurzame energie",
+    "quantum mechanics": "kwantummechanica",
+    "thermodynamics": "thermodynamica",
+    "entropy": "entropie",
+    "acceleration": "versnelling",
+    "organic agriculture": "biologische landbouw",
+    "horticulture": "horticultuur",
+    "arboriculture": "boomverzorging",
+    "experimental physics": "experimentele natuurkunde",
+    "theoretical physics": "theoretische natuurkunde",
+    "age of a person": "leeftijd",
+    "time per unit": "tijd per eenheid",
+    "astrophysics": "astrofysica"
+  }
+}

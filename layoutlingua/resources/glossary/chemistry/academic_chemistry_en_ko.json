@@ -1,0 +1,26 @@
+{
+  "language_pair": "en-ko",
+  "domain": "academic_chemistry_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 18,
+  "terms": {
+    "Woodward's rules": "우드워드 규칙",
+    "Salt metathesis reaction": "염 복분해 반응",
+    "analytical chemistry": "분석화학",
+    "Copper carbonate": "탄산 구리",
+    "potassium hydride": "수소화 칼륨",
+    "acid": "산",
+    "hydrogen": "수소",
+    "samarium": "사마륨",
+    "helium": "헬륨",
+    "lanthanum": "란타넘",
+    "unbiunium": "운비우늄",
+    "lithium": "리튬",
+    "promethium": "프로메튬",
+    "crystallography": "결정학",
+    "shogi": "쇼기",
+    "chemical reaction": "화학 반응",
+    "covalent bond": "공유 결합",
+    "catalyst": "촉매"
+  }
+}

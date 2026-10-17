@@ -1,0 +1,30 @@
+{
+  "language_pair": "en-id",
+  "domain": "academic_chemistry_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 22,
+  "terms": {
+    "pentane interference": "Interferensi pentana",
+    "Salt metathesis reaction": "reaksi metatesis garam",
+    "analytical chemistry": "Kimia analitik",
+    "Copper carbonate": "Copper carbonate",
+    "Polonium diiodide": "polonium diiodida",
+    "potassium hydride": "kalium hidrida",
+    "selenium trioxide": "Selenium trioksida",
+    "acid": "asam",
+    "hydrogen": "hidrogen",
+    "samarium": "samarium",
+    "helium": "helium",
+    "lanthanum": "lantanum",
+    "unbiunium": "unbiunium",
+    "lithium": "litium",
+    "promethium": "prometium",
+    "silicon": "silikon",
+    "crystallography": "kristalografi",
+    "shogi": "shogi",
+    "xiangqi": "xiangqi",
+    "chemical reaction": "reaksi kimia",
+    "covalent bond": "ikatan kovalen",
+    "catalyst": "katalis"
+  }
+}

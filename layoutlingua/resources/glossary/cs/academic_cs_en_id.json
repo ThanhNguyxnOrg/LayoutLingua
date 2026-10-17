@@ -1,0 +1,30 @@
+{
+  "language_pair": "en-id",
+  "domain": "academic_cs_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 22,
+  "terms": {
+    "AlphaFold": "AlphaFold",
+    "Apple Intelligence": "Apple Intelligence",
+    "machine learning": "pembelajaran mesin",
+    "bag-of-words model": "Model tas-kata-kata",
+    "ensemble learning": "Metode ensemble",
+    "pattern recognition": "Pengenalan pola",
+    "Dijkstra's algorithm": "Algoritma Dijkstra",
+    "block cipher mode of operation": "mode operasi penyandian blok",
+    "optical character recognition": "Rekognisi karakter optik",
+    "work": "kerja",
+    "virtual work": "kerja virtual",
+    "agile software development": "Agile Development Methods",
+    "−1": "−1",
+    "Fibonacci number": "Bilangan Fibonacci",
+    "Personal Handy-phone System": "Personal Handy-phone System",
+    "wireless network": "Jaringan nirkabel",
+    "local area network": "jaringan area lokal",
+    "algorithm": "algoritma",
+    "neural network": "jaringan saraf",
+    "compiler": "kompilator",
+    "database": "basis data",
+    "gradient descent": "penurunan gradien"
+  }
+}

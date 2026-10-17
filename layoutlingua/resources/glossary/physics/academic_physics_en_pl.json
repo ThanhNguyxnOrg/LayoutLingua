@@ -1,0 +1,33 @@
+{
+  "language_pair": "en-pl",
+  "domain": "academic_physics_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 25,
+  "terms": {
+    "ampere-turn": "amperozwój",
+    "Piezoresistive effect": "Efekt piezorezystywny",
+    "compression": "Kompresja",
+    "biophysics": "biofizyka",
+    "radiation pattern": "charakterystyka promieniowania anteny",
+    "winery": "winiarnia",
+    "tobacco industry": "przemysł tytoniowy",
+    "permaculture": "permakultura",
+    "chemical thermodynamics": "Termodynamika chemiczna",
+    "firefighting": "pożarnictwo",
+    "hydropower": "energia wodna",
+    "Landau pole": "biegun Landaua",
+    "renewable energy": "odnawialne źródła energii",
+    "deafblindness": "Głuchoślepota",
+    "quantum mechanics": "mechanika kwantowa",
+    "thermodynamics": "termodynamika",
+    "entropy": "entropia",
+    "acceleration": "przyspieszenie",
+    "organic agriculture": "Rolnictwo ekologiczne",
+    "horticulture": "hortologia",
+    "arboriculture": "Arborystyka",
+    "experimental physics": "fizyka doświadczalna",
+    "theoretical physics": "fizyka teoretyczna",
+    "age of a person": "wiek",
+    "astrophysics": "astrofizyka"
+  }
+}

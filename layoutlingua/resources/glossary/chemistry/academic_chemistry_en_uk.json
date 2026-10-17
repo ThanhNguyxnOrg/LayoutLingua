@@ -1,0 +1,26 @@
+{
+  "language_pair": "en-uk",
+  "domain": "academic_chemistry_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 18,
+  "terms": {
+    "analytical chemistry": "аналітична хімія",
+    "niobium oxide": "оксид ніобію",
+    "potassium hydride": "гідрид калію",
+    "hydrogen": "водень",
+    "samarium": "самарій",
+    "helium": "гелій",
+    "lanthanum": "лантан",
+    "unbiunium": "Унбіуніум",
+    "promethium": "прометій",
+    "silicon": "кремній",
+    "mineral colour": "Колір мінералів",
+    "crystallography": "кристалографія",
+    "Gala": "Гала",
+    "shogi": "Сьоґі",
+    "xiangqi": "сянці",
+    "chemical reaction": "хімічна реакція",
+    "covalent bond": "ковалентний зв'язок",
+    "catalyst": "каталізатор"
+  }
+}

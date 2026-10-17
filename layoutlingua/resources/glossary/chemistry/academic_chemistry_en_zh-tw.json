@@ -1,0 +1,21 @@
+{
+  "language_pair": "en-zh-tw",
+  "domain": "academic_chemistry_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 13,
+  "terms": {
+    "pentane interference": "Pentane幹擾",
+    "Woodward's rules": "伍德沃德規則",
+    "Bisoxazoline ligand": "雙噁唑啉",
+    "Phoenix Chemical, inc.": "Phoenix Chemical, inc.",
+    "hydrogen": "氫",
+    "silicon": "矽",
+    "crystallography": "晶體學",
+    "shogi": "將棋",
+    "xiangqi": "象棋",
+    "chemical reaction": "化學反應",
+    "covalent bond": "共價鍵",
+    "catalyst": "催化劑",
+    "analytical chemistry": "分析化學"
+  }
+}

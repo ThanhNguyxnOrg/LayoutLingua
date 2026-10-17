@@ -1,0 +1,29 @@
+{
+  "language_pair": "en-ko",
+  "domain": "academic_biology_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 21,
+  "terms": {
+    "astrobiology": "우주생물학",
+    "molecular genetics": "분자유전학",
+    "erythropoietin": "에리트로포이에틴",
+    "oncogene": "암유전자",
+    "Hox gene": "혹스 유전자",
+    "glucose-6-phosphate isomerase": "PGI",
+    "C-C motif chemokine receptor 5": "CCR5",
+    "enzyme": "효소",
+    "limnic eruption": "호수 분출",
+    "disaster medicine": "재난의학",
+    "psychiatry": "정신의학",
+    "occupational illiteracy": "직업 문맹",
+    "Pasta di Gragnano PGI": "Pasta di Gragnano IGP",
+    "Maccheroncini di Campofilone PGI": "Maccheroncini di Campofilone IGP",
+    "Cappellacci di zucca ferraresi PGI": "Cappellacci di zucca ferraresi IGP",
+    "Culurgionis d'Ogliastra PGI": "Culurgionis d'Ogliastra IGP",
+    "Pizzoccheri della Valtellina PGI": "Pizzoccheri della Valtellina IGP",
+    "mitochondrion": "미토콘드리아",
+    "photosynthesis": "광합성",
+    "transcription": "전사",
+    "broiler": "브로일러"
+  }
+}

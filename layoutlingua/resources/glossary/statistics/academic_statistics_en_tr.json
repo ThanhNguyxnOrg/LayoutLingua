@@ -1,0 +1,17 @@
+{
+  "language_pair": "en-tr",
+  "domain": "academic_statistics_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 9,
+  "terms": {
+    "decision theory": "karar kuramı",
+    "facial muscles": "Mimik kasları",
+    "social pedagogy": "Toplumsal eğitim bilimi",
+    "muon neutrino": "müon nötrinosu",
+    "tau neutrino": "tau nötrinosu",
+    "standard deviation": "standart sapma",
+    "normal distribution": "normal dağılım",
+    "hypothesis testing": "hipotez testi",
+    "biostatistics": "biyoistatistik"
+  }
+}

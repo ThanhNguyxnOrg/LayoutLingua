@@ -1,0 +1,22 @@
+{
+  "language_pair": "en-uk",
+  "domain": "academic_statistics_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 14,
+  "terms": {
+    "UEFA Euro 2012 statistics": "Статистика чемпіонату Європи з футболу 2012",
+    "plus-minus": "плюс-мінус",
+    "population numbers for France": "Чисельність населення Франції",
+    "decision theory": "теорія рішень",
+    "biostatistics": "біологічна статистика",
+    "abductor muscle": "Абдуктор",
+    "social pedagogy": "соціальна педагогіка",
+    "youth work": "молодіжна робота",
+    "muon neutrino": "мюонне нейтрино",
+    "tau neutrino": "тау-нейтрино",
+    "electron neutrino": "електронне нейтрино",
+    "standard deviation": "стандартне відхилення",
+    "normal distribution": "нормальний розподіл",
+    "hypothesis testing": "перевірка статистичних гіпотез"
+  }
+}

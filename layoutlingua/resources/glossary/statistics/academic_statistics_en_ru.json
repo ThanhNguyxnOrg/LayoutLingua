@@ -1,0 +1,28 @@
+{
+  "language_pair": "en-ru",
+  "domain": "academic_statistics_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 20,
+  "terms": {
+    "UEFA Euro 2012 statistics": "Статистика чемпионата Европы по футболу 2012",
+    "plus-minus": "плюс-минус",
+    "gender differences in suicide": "Гендерные различия в самоубийствах",
+    "decision theory": "теория принятия решений",
+    "extensor hallucis longus muscle": "длинный разгибатель большого пальца",
+    "extensor indicis muscle": "Разгибатель указательного пальца",
+    "facial muscles": "мышцы лица",
+    "laryngeal muscles": "мышцы гортани",
+    "abductor muscle": "абдуктор",
+    "social pedagogy": "социальная педагогика",
+    "youth work": "молодёжная работа",
+    "Big Bird": "Большая птица",
+    "Ernie": "Эрни",
+    "Bert": "Берт",
+    "muon neutrino": "мюонное нейтрино",
+    "tau neutrino": "тау-нейтрино",
+    "standard deviation": "стандартное отклонение",
+    "normal distribution": "нормальное распределение",
+    "hypothesis testing": "проверка статистических гипотез",
+    "biostatistics": "биологическая статистика"
+  }
+}

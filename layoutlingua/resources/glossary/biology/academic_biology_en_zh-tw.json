@@ -1,0 +1,18 @@
+{
+  "language_pair": "en-zh-tw",
+  "domain": "academic_biology_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 10,
+  "terms": {
+    "Research Specimen": "研究標本",
+    "Teaching Specimen": "教學標本",
+    "Display Specimen": "展示標本",
+    "molecular genetics": "分子遺傳學",
+    "molecular ecology": "分子生態學",
+    "oncogene": "癌基因",
+    "glucose-6-phosphate isomerase": "葡萄糖-6-磷酸異構酶",
+    "mitochondrion": "粒線體",
+    "photosynthesis": "光合作用",
+    "transcription": "轉錄"
+  }
+}

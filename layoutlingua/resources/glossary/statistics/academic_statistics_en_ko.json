@@ -1,0 +1,19 @@
+{
+  "language_pair": "en-ko",
+  "domain": "academic_statistics_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 11,
+  "terms": {
+    "gender differences in suicide": "성별에 따른 자살률 차이",
+    "decision theory": "결정 이론",
+    "biostatistics": "생물통계학",
+    "extensor hallucis longus muscle": "긴엄지폄근",
+    "extensor indicis muscle": "집게폄근",
+    "facial muscles": "얼굴근육",
+    "muon neutrino": "뮤온 중성미자",
+    "tau neutrino": "타우 중성미자",
+    "standard deviation": "표준편차",
+    "normal distribution": "정규 분포",
+    "hypothesis testing": "가설 검정"
+  }
+}

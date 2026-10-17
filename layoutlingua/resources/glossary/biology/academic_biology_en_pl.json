@@ -1,0 +1,30 @@
+{
+  "language_pair": "en-pl",
+  "domain": "academic_biology_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 22,
+  "terms": {
+    "astrobiology": "astrobiologia",
+    "molecular genetics": "Genetyka molekularna",
+    "molecular ecology": "Ekologia molekularna",
+    "erythropoietin": "Erytropoetyna",
+    "RB1": "RB1",
+    "glucose-6-phosphate isomerase": "Izomeraza glukozo-6-fosforanowa",
+    "Hypoxanthine phosphoribosyltransferase 1": "Fosforybozylotransferaza hipoksantynowo-guaninowa",
+    "C-C motif chemokine receptor 5": "CCR5",
+    "desensitization": "Odczulanie",
+    "limnic eruption": "erupcja limniczna",
+    "disaster medicine": "medycyna katastrof",
+    "psychiatry": "psychiatria",
+    "Sarkosom": "Sarkosom",
+    "conchiglioni": "Conchiglioni",
+    "Busiate": "busiate",
+    "pljukanci": "Pljukanci",
+    "mitochondrion": "mitochondrium",
+    "photosynthesis": "fotosynteza",
+    "transcription": "transkrypcja",
+    "bantam": "Bantamka",
+    "broiler": "brojler",
+    "Kosovo Long Crowing Rooster": "Kura kosowska piejąca"
+  }
+}

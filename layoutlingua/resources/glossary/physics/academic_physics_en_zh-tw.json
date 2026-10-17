@@ -1,0 +1,26 @@
+{
+  "language_pair": "en-zh-tw",
+  "domain": "academic_physics_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 18,
+  "terms": {
+    "ampere-turn": "安培轉",
+    "Piezoresistive effect": "壓阻效應",
+    "bioelectromagnetics": "生物電學",
+    "winery": "酒莊",
+    "tin cry": "錫鳴",
+    "firefighting": "消防",
+    "hydropower": "水力資源",
+    "Landau pole": "朗道極點",
+    "deafblindness": "盲聾",
+    "quantum mechanics": "量子力學",
+    "thermodynamics": "熱力學",
+    "entropy": "熵",
+    "acceleration": "加速度",
+    "biophysics": "生物物理學",
+    "organic agriculture": "有機農業",
+    "theoretical physics": "理論物理學",
+    "age of a person": "年齡",
+    "astrophysics": "天體物理學"
+  }
+}

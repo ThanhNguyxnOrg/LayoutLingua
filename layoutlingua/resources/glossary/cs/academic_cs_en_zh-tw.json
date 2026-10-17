@@ -1,0 +1,29 @@
+{
+  "language_pair": "en-zh-tw",
+  "domain": "academic_cs_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 21,
+  "terms": {
+    "Apple Intelligence": "Apple Intelligence",
+    "ensemble learning": "整合學習",
+    "pattern recognition": "圖型識別",
+    "delta encoding": "差分編碼",
+    "Dijkstra's algorithm": "戴克斯特拉演算法",
+    "multiplication algorithm": "乘法演算法",
+    "work": "功",
+    "virtual work": "虛功",
+    "Threaded code": "執行緒程式碼",
+    "function overloading": "函數重載",
+    "Fibonacci number": "費波那契數",
+    "Samsung SGH-A127": "Samsung SGH-A127",
+    "Samsung SGH-A167": "Samsung SGH-A167",
+    "wireless network": "無線網路",
+    "algorithm": "演算法",
+    "neural network": "神經網路",
+    "machine learning": "機器學習",
+    "compiler": "編譯器",
+    "database": "資料庫",
+    "gradient descent": "梯度下降",
+    "optical character recognition": "光學掃描辨字"
+  }
+}

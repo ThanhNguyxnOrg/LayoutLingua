@@ -1,0 +1,32 @@
+{
+  "language_pair": "en-tr",
+  "domain": "academic_cs_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 24,
+  "terms": {
+    "artificial intelligence": "yapay zekâ",
+    "AlphaFold": "AlphaFold",
+    "You.com": "You.com",
+    "Apple Intelligence": "Apple Intelligence",
+    "machine learning": "makine öğrenimi",
+    "bag-of-words model": "Kelime çantası modeli",
+    "pattern recognition": "örüntü tanıma",
+    "Dijkstra's algorithm": "Dijkstra algoritması",
+    "multiplication algorithm": "Çarpma algoritmaları",
+    "block cipher mode of operation": "Blok şifre çalışma kipleri",
+    "agile software development": "atik yazılım geliştirme",
+    "aspect-oriented programming": "Cephe yönelimli programlama",
+    "signed zero": "İşaretli sıfır",
+    "−1": "−1",
+    "Fibonacci number": "Fibonacci sayısı",
+    "Samsung SGH-A127": "Samsung SGH-A127",
+    "Internet": "internet",
+    "wireless network": "Kablosuz ağ",
+    "algorithm": "algoritma",
+    "neural network": "yapay sinir ağı",
+    "compiler": "derleyici",
+    "database": "veri tabanı",
+    "gradient descent": "gradyan inişi",
+    "optical character recognition": "Optik karakter tanıma"
+  }
+}

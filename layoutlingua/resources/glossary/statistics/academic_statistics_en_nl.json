@@ -1,0 +1,24 @@
+{
+  "language_pair": "en-nl",
+  "domain": "academic_statistics_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 16,
+  "terms": {
+    "plus-minus": "plus/minus",
+    "global statistics on irrigation": "statistieken over irrigatie",
+    "statistics Professional Darts Corporation": "statistieken Professional Darts Corporation",
+    "decision theory": "beslissingstheorie",
+    "extensor hallucis longus muscle": "musculus extensor hallucis longus",
+    "superficial transverse perineal muscle": "musculus transversus perinei superficialis",
+    "extensor indicis muscle": "musculus extensor indicis",
+    "facial muscles": "gelaatsspieren",
+    "child protection in Germany": "jeugdzorg in Duitsland",
+    "muon neutrino": "muon-neutrino",
+    "tau neutrino": "tau-neutrino",
+    "electron neutrino": "elektron-neutrino",
+    "standard deviation": "standaarddeviatie",
+    "normal distribution": "normale verdeling",
+    "hypothesis testing": "hypothesetoets",
+    "biostatistics": "biostatistiek"
+  }
+}

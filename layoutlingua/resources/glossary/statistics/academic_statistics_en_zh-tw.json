@@ -1,0 +1,14 @@
+{
+  "language_pair": "en-zh-tw",
+  "domain": "academic_statistics_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 6,
+  "terms": {
+    "decision theory": "做決策",
+    "tau neutrino": "τ中微子",
+    "standard deviation": "標準差",
+    "normal distribution": "常態分佈",
+    "hypothesis testing": "假說檢定",
+    "biostatistics": "生物統計學"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "language_pair": "en-tr",
+  "domain": "academic_chemistry_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 13,
+  "terms": {
+    "analytical chemistry": "analitik kimya",
+    "potassium hydride": "Potasyum hidrür",
+    "hydrogen": "hidrojen",
+    "samarium": "Samaryum",
+    "helium": "Helyum",
+    "lanthanum": "Lantan",
+    "promethium": "Prometyum",
+    "silicon": "silisyum",
+    "crystallography": "kristalografi",
+    "shogi": "şogi",
+    "chemical reaction": "kimyasal reaksiyon",
+    "covalent bond": "kovalent bağ",
+    "catalyst": "katalizör"
+  }
+}

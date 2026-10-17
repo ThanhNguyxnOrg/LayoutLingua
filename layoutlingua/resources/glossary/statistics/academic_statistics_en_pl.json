@@ -1,0 +1,24 @@
+{
+  "language_pair": "en-pl",
+  "domain": "academic_statistics_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 16,
+  "terms": {
+    "population equivalent": "Równoważna Liczba Mieszkańców",
+    "Term Frequency": "Term Frequency",
+    "decision theory": "teoria decyzji",
+    "extensor hallucis longus muscle": "mięsień prostownik długi palucha",
+    "superficial transverse perineal muscle": "Mięsień poprzeczny powierzchowny krocza",
+    "extensor indicis muscle": "Mięsień prostownik wskaziciela",
+    "deep transverse perineal muscle": "Mięsień poprzeczny głęboki krocza",
+    "facial muscles": "Mięśnie mimiczne",
+    "abductor muscle": "Abduktor",
+    "social pedagogy": "pedagogika społeczna",
+    "muon neutrino": "neutrino mionowe",
+    "tau neutrino": "neutrino taonowe",
+    "standard deviation": "odchylenie standardowe",
+    "normal distribution": "rozkład normalny",
+    "hypothesis testing": "testowanie hipotez",
+    "biostatistics": "Biostatystyka"
+  }
+}

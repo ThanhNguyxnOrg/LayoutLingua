@@ -1,0 +1,21 @@
+{
+  "language_pair": "en-pt",
+  "domain": "academic_statistics_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 13,
+  "terms": {
+    "gender differences in suicide": "diferenças de género no suicídio",
+    "decision theory": "teoria da decisão",
+    "extensor hallucis longus muscle": "músculo extensor longo do hálux",
+    "superficial transverse perineal muscle": "Músculo transverso superficial do períneo",
+    "extensor indicis muscle": "músculo extensor do indicador",
+    "deep transverse perineal muscle": "Músculo transverso profundo do períneo",
+    "social pedagogy": "pedagogia social",
+    "muon neutrino": "neutrino do múon",
+    "tau neutrino": "neutrino do tau",
+    "standard deviation": "desvio padrão",
+    "normal distribution": "distribuição normal",
+    "hypothesis testing": "teste de hipóteses",
+    "biostatistics": "bioestatística"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "language_pair": "en-uk",
+  "domain": "academic_biology_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 25,
+  "terms": {
+    "Russkii gidrobiologicheskii zhurnal": "Русский гидробиологический журнал",
+    "astrobiology": "космічна біологія",
+    "molecular genetics": "молекулярна генетика",
+    "erythropoietin": "Еритропоетин",
+    "RB1": "RB",
+    "oncogene": "Онкоген",
+    "Hox gene": "Гомеозисні гени",
+    "glucose-6-phosphate isomerase": "глюкозофосфатізомераза",
+    "Galanin and GMAP prepropeptide": "GAL",
+    "C-C motif chemokine receptor 5": "CCR5",
+    "Proliferating cell nuclear antigen": "Ядерний антиген проліферуючих клітин",
+    "enzyme": "ферменти",
+    "Ayam Cemani": "Аям Цемані",
+    "desensitization": "десенсибілизація",
+    "limnic eruption": "Лімнологічна катастрофа",
+    "disaster medicine": "Медицина катастроф",
+    "psychiatry": "психіатрія",
+    "Busiate": "Бузіате",
+    "mitochondrion": "мітохондрія",
+    "photosynthesis": "фотосинтез",
+    "transcription": "транскрипція",
+    "bantam": "Бентамка",
+    "Lakenvelder": "Лакенфельдер",
+    "broiler": "Бройлер",
+    "Kosovo Long Crowing Rooster": "Косовська голосиста"
+  }
+}

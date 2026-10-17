@@ -1,0 +1,24 @@
+{
+  "language_pair": "en-tr",
+  "domain": "academic_biology_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 16,
+  "terms": {
+    "astrobiology": "astrobiyoloji",
+    "molecular genetics": "moleküler genetik",
+    "molecular ecology": "moleküler ekoloji",
+    "erythropoietin": "Eritropoetin",
+    "RB1": "Retinoblastoma protein",
+    "oncogene": "Onkogen",
+    "Galanin and GMAP prepropeptide": "Galanin",
+    "Ayam Cemani": "Ayam Cemani",
+    "desensitization": "Duyarsızlaştırma",
+    "disaster medicine": "afet tıbbı",
+    "psychiatry": "ruh hekimliği",
+    "banana pasta": "muz makarnası",
+    "mitochondrion": "mitokondri",
+    "photosynthesis": "fotosentez",
+    "transcription": "transkripsiyon",
+    "broiler": "Broiler tavuğu"
+  }
+}

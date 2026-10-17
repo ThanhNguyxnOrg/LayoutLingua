@@ -1,0 +1,21 @@
+{
+  "language_pair": "en-nl",
+  "domain": "academic_chemistry_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 13,
+  "terms": {
+    "pentane interference": "pentaaninterferentie",
+    "Cannizzaro rule": "Cannizzaro rule",
+    "analytical chemistry": "analytische scheikunde",
+    "Copper carbonate": "Copper carbonate",
+    "potassium hydride": "kaliumhydride",
+    "selenium trioxide": "seleentrioxide",
+    "acid": "zuur",
+    "hydrogen": "waterstof",
+    "crystallography": "kristallografie",
+    "shogi": "shogi",
+    "chemical reaction": "chemische reactie",
+    "covalent bond": "covalente binding",
+    "catalyst": "katalysator"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "language_pair": "en-pl",
+  "domain": "academic_chemistry_stem",
+  "source": "Wikidata Open Knowledge Graph Live Web Crawl",
+  "total_terms": 11,
+  "terms": {
+    "analytical chemistry": "chemia analityczna",
+    "potassium hydride": "wodorek potasu",
+    "selenium trioxide": "tritlenek selenu",
+    "acid": "kwas",
+    "hydrogen": "wodór",
+    "silicon": "krzem",
+    "mineral colour": "Barwa minerału",
+    "crystallography": "krystalografia",
+    "chemical reaction": "reakcja chemiczna",
+    "covalent bond": "wiązanie kowalencyjne",
+    "catalyst": "katalizator"
+  }
+}
