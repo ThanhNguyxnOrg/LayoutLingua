@@ -26,28 +26,43 @@ from pathlib import Path
 # Multilingual STEM domain ontology root concepts on Wikidata
 DOMAIN_ROOTS: dict[str, list[str]] = {
     "math": [
-        "wd:Q1936384",  # mathematical concept
-        "wd:Q21199",    # mathematical object (matrix, vector, set, group, ring...)
-        "wd:Q11348",    # mathematical operation (addition, integration, derivative...)
-        "wd:Q65943",    # mathematical theorem
-        "wd:Q8078",     # algebra
-        "wd:Q1845",     # geometry
-        "wd:Q8075",     # triangle (scalene, isosceles, equilateral, right triangle)
-        "wd:Q8125",     # polygon / geometric shapes
-        "wd:Q107658",   # arc
-        "wd:Q102436",   # line segment
-        "wd:Q208571",   # proposition / statement
         "wd:Q395",      # mathematics
-        "wd:Q28865",    # algebraic topology
+        "wd:Q1936384",  # branch of mathematics
+        "wd:Q3968",     # algebra
+        "wd:Q211294",   # elementary algebra
+        "wd:Q82571",    # linear algebra
+        "wd:Q44337",    # matrix
+        "wd:Q43260",    # polynomial
+        "wd:Q8087",     # geometry
+        "wd:Q19821",    # triangle
+        "wd:Q37555",    # polygon
+        "wd:Q134787",   # analytic geometry
+        "wd:Q898575",   # power of a point (phương tích)
+        "wd:Q8084",     # trigonometry
+        "wd:Q93344",    # trigonometric function
+        "wd:Q7754",     # mathematical analysis
+        "wd:Q149999",   # differential calculus
+        "wd:Q150008",   # integral calculus
+        "wd:Q11214",    # differential equation
+        "wd:Q465274",   # ordinary differential equation
+        "wd:Q271977",   # partial differential equation
+        "wd:Q76592",    # combinatorics
+        "wd:Q161519",   # permutation
+        "wd:Q1401935",  # partial permutation / arrangement (chỉnh hợp)
+        "wd:Q202805",   # combination (tổ hợp)
+        "wd:Q133250",   # sequence
+        "wd:Q170198",   # series
+        "wd:Q11205",    # arithmetic
+        "wd:Q12479",    # number theory
+        "wd:Q12482",    # set theory
+        "wd:Q1166618",  # mathematical logic
+        "wd:Q42989",    # topology
         "wd:Q131476",   # graph theory
-        "wd:Q25261",    # calculus
-        "wd:Q1414",     # combinatorics (permutations, combinations, k-permutations...)
-        "wd:Q8084",     # trigonometry (trigonometric functions, identities...)
-        "wd:Q11205",    # arithmetic (divisibility, average, powers...)
-        "wd:Q12479",    # number theory (primes, factors...)
-        "wd:Q36161",    # analytic geometry (power of a point, conics...)
-        "wd:Q41171",    # progression / sequence (arithmetic progression, geometric progression)
-        "wd:Q3175599",  # mathematical identity / formula
+        "wd:Q5862903",  # probability theory
+        "wd:Q12483",    # statistics
+        "wd:Q65943",    # theorem
+        "wd:Q11538",    # mathematical proof
+        "wd:Q976981",   # formula
     ],
     "cs": [
         "wd:Q21198",    # computer science
@@ -59,6 +74,12 @@ DOMAIN_ROOTS: dict[str, list[str]] = {
         "wd:Q12503",    # software engineering
         "wd:Q17517",    # cryptography
         "wd:Q1301371",  # network protocol
+        "wd:Q1341490",  # computer graphics
+        "wd:Q47607",    # database
+        "wd:Q9135",     # operating system
+        "wd:Q11197",    # compiler
+        "wd:Q28789",    # computer architecture
+        "wd:Q213907",   # distributed computing
     ],
     "physics": [
         "wd:Q413",      # physics
@@ -69,6 +90,11 @@ DOMAIN_ROOTS: dict[str, list[str]] = {
         "wd:Q11379",    # electromagnetism
         "wd:Q23059",    # elementary particle
         "wd:Q12133",    # optics
+        "wd:Q7162",     # general relativity
+        "wd:Q11442",    # nuclear physics
+        "wd:Q11397",    # acoustics
+        "wd:Q11454",    # solid-state physics
+        "wd:Q46221",    # astrophysics
     ],
     "chemistry": [
         "wd:Q2329",     # chemistry
@@ -79,6 +105,10 @@ DOMAIN_ROOTS: dict[str, list[str]] = {
         "wd:Q718",      # chemical bond
         "wd:Q174872",   # organic compound
         "wd:Q11314",    # biomolecule
+        "wd:Q11372",    # inorganic chemistry
+        "wd:Q11382",    # physical chemistry
+        "wd:Q11370",    # analytical chemistry
+        "wd:Q11376",    # biochemistry
     ],
     "biology": [
         "wd:Q420",      # biology
@@ -91,6 +121,10 @@ DOMAIN_ROOTS: dict[str, list[str]] = {
         "wd:Q39572",    # organelle
         "wd:Q1055",     # biochemistry
         "wd:Q178",      # genetics
+        "wd:Q7150",     # ecology
+        "wd:Q35164",    # immunology
+        "wd:Q131681",   # physiology
+        "wd:Q36146",    # taxonomy
     ],
     "statistics": [
         "wd:Q12483",    # statistics
@@ -99,6 +133,10 @@ DOMAIN_ROOTS: dict[str, list[str]] = {
         "wd:Q205398",   # estimator
         "wd:Q42468",    # parameter
         "wd:Q2126",     # probability theory
+        "wd:Q42999",    # regression analysis
+        "wd:Q11245",    # variance / standard deviation
+        "wd:Q849479",   # statistical hypothesis testing
+        "wd:Q187834",   # random variable
     ],
 }
 
@@ -136,17 +174,24 @@ def normalize_lang_code(raw_lang: str) -> str:
 
 def crawl_wikidata_root(
     root_qid: str,
-    property_id: str = "wdt:P31",
-    limit: int = 150,
+    limit: int = 200,
     retries: int = 3,
 ) -> list[dict[str, str]]:
-    """Execute live SPARQL query for a specific root concept and relation (P31 or P279)."""
+    """Execute live SPARQL query for root concept itself, instances (P31), subclasses (P279), and parts (P361)."""
     lang_codes = list(SUPPORTED_LANGUAGES) + ["zh-hant", "zh-hans", "zh-cn"]
     lang_filter = " ".join(f'"{code}"' for code in set(lang_codes))
 
     sparql = f"""
     SELECT ?item ?lang ?label WHERE {{
-      ?item {property_id} {root_qid} .
+      {{
+        VALUES ?item {{ {root_qid} }}
+      }} UNION {{
+        ?item wdt:P31 {root_qid} .
+      }} UNION {{
+        ?item wdt:P279 {root_qid} .
+      }} UNION {{
+        ?item wdt:P361 {root_qid} .
+      }}
       ?item rdfs:label ?label .
       VALUES ?lang {{ {lang_filter} }}
       FILTER(LANG(?label) = ?lang)
@@ -168,11 +213,12 @@ def crawl_wikidata_root(
                 return data.get("results", {}).get("bindings", [])
         except Exception as exc:
             if attempt == retries - 1:
-                print(f"    [Crawler] Notice: {root_qid} ({property_id}) skipped ({exc})")
+                print(f"    [Crawler] Notice: {root_qid} skipped ({exc})")
                 return []
             time.sleep(1.0 * (attempt + 1))
 
     return []
+
 
 
 def crawl_domain_concepts(
@@ -189,12 +235,7 @@ def crawl_domain_concepts(
     for idx, root in enumerate(roots, 1):
         print(f"  [{idx}/{len(roots)}] Crawling root {root}...", end=" ", flush=True)
 
-        # 1. Direct instances (wdt:P31)
-        bindings_p31 = crawl_wikidata_root(root, property_id="wdt:P31", limit=limit_per_root)
-        # 2. Subclasses (wdt:P279)
-        bindings_p279 = crawl_wikidata_root(root, property_id="wdt:P279", limit=limit_per_root // 2)
-
-        bindings = bindings_p31 + bindings_p279
+        bindings = crawl_wikidata_root(root, limit=limit_per_root)
         total_bindings += len(bindings)
 
         for row in bindings:
