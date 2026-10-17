@@ -45,6 +45,8 @@ export interface DocumentInfo {
   wordCount: number
   detectedLang: string
   isEncrypted: boolean
+  isScanned?: boolean
+  scanWarning?: string
 }
 
 export interface TranslationProgress {

@@ -230,7 +230,7 @@ class DocumentAccumulator:
                     f"structure but not referenced by any link."
                 )
 
-    def preserve_document_properties(self) -> None:
+    def preserve_document_properties(self, translated_toc: list[list] | None = None) -> None:
         """Transfer document-level attributes verbatim from source_doc to output_doc."""
         # 1. Document metadata (title, author, subject, keywords, creator, producer, dates)
         try:
@@ -241,9 +241,12 @@ class DocumentAccumulator:
 
         # 2. Table of Contents (bookmarks / outlines)
         try:
-            toc = self.source_doc.get_toc()
-            if toc:
-                self.output_doc.set_toc(toc)
+            if translated_toc:
+                self.output_doc.set_toc(translated_toc)
+            else:
+                toc = self.source_doc.get_toc()
+                if toc:
+                    self.output_doc.set_toc(toc)
         except Exception:
             pass
 
@@ -281,7 +284,12 @@ class DocumentAccumulator:
         except Exception:
             pass
 
-    def finish(self, report: FittingReport | None = None, layout_mode: str = "mono") -> bytes:
+    def finish(
+        self,
+        report: FittingReport | None = None,
+        layout_mode: str = "mono",
+        translated_toc: list[list] | None = None,
+    ) -> bytes:
         """Finalize and return the accumulated PDF bytes, closing the output document.
 
         Args:
@@ -289,24 +297,29 @@ class DocumentAccumulator:
                     warnings are appended to report.warnings.
             layout_mode: "mono" for translated pages only; "bilingual" for alternating
                          source and translated pages (pdf2zh dual layout pattern).
+            translated_toc: Optional translated Table of Contents (bookmarks) outline.
         """
         if (layout_mode or "").lower() == "bilingual":
-            return self.build_bilingual_document(report=report)
+            return self.build_bilingual_document(report=report, translated_toc=translated_toc)
 
-        self.preserve_document_properties()
+        self.preserve_document_properties(translated_toc=translated_toc)
         if report is not None:
             self.restore_links(report)
         pdf_bytes = self.output_doc.tobytes(deflate=True, garbage=3)
         self.output_doc.close()
         return pdf_bytes
 
-    def build_bilingual_document(self, report: FittingReport | None = None) -> bytes:
+    def build_bilingual_document(
+        self,
+        report: FittingReport | None = None,
+        translated_toc: list[list] | None = None,
+    ) -> bytes:
         """Create and return a bilingual alternating PDF document.
 
         Interleaves source and translated pages:
         [Source 0, Translated 0, Source 1, Translated 1, ...]
         """
-        self.preserve_document_properties()
+        self.preserve_document_properties(translated_toc=translated_toc)
         if report is not None:
             self.restore_links(report)
 
@@ -338,6 +351,14 @@ class DocumentAccumulator:
         try:
             if self.source_doc.metadata:
                 bilingual_doc.set_metadata(self.source_doc.metadata)
+        except Exception:
+            pass
+
+        try:
+            if translated_toc:
+                bilingual_doc.set_toc(translated_toc)
+            elif self.source_doc.get_toc():
+                bilingual_doc.set_toc(self.source_doc.get_toc())
         except Exception:
             pass
 

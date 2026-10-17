@@ -18,6 +18,8 @@ export interface SelectedDocument {
   path?: string
   id?: string
   detectedLang?: string
+  isScanned?: boolean
+  scanWarning?: string
 }
 
 export default function OpenScreen({
@@ -74,6 +76,8 @@ export default function OpenScreen({
           pages: data.page_count || backendDoc.pages,
           id: data.id,
           detectedLang: data.detected_lang,
+          isScanned: Boolean(data.is_scanned),
+          scanWarning: data.scan_warning,
           path: '~/Documents',
         }
       } else {

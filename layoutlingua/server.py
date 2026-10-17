@@ -208,6 +208,25 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                             bi_doc.insert_pdf(tgt_doc, from_page=idx, to_page=idx, annots=True)
                     if src_doc.metadata:
                         bi_doc.set_metadata(src_doc.metadata)
+
+                    # Translate and set bilingual TOC (doubles page numbers for interleaved layout)
+                    try:
+                        from layoutlingua.processing.toc import translate_toc
+
+                        bi_toc = translate_toc(
+                            source_doc=src_doc,
+                            target_lang=session.get("target_lang", "vi"),
+                            source_lang=session.get("detected_lang", "en"),
+                            custom_glossary=session.get("custom_glossary"),
+                            bilingual_mode=True,
+                        )
+                        if bi_toc:
+                            bi_doc.set_toc(bi_toc)
+                        elif src_doc.get_toc():
+                            bi_doc.set_toc(src_doc.get_toc())
+                    except Exception as bi_toc_err:
+                        print(f"[LayoutLingua] Bilingual TOC notice: {bi_toc_err}")
+
                     pdf_bytes = bi_doc.tobytes(deflate=True, garbage=3)
                     bi_doc.close()
                     src_doc.close()
@@ -314,11 +333,13 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
 
                 pages_info = []
                 total_words = 0
+                total_images = 0
                 for i in range(page_count):
                     p = doc[i]
                     text = p.get_text()
                     words = len(text.split())
                     total_words += words
+                    total_images += len(p.get_images())
                     pages_info.append({
                         "n": i + 1,
                         "width": round(p.rect.width, 1),
@@ -326,6 +347,16 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         "words": words,
                         "status": "pending",
                     })
+
+                # Scanned PDF pre-flight detection
+                avg_words = total_words / max(1, page_count)
+                is_scanned = bool(page_count > 0 and ((avg_words < 12 and total_images > 0) or total_words == 0))
+                scan_warning = ""
+                if is_scanned:
+                    scan_warning = (
+                        "Scanned document detected: Pages appear to contain image-only scans without selectable text layers. "
+                        "LayoutLingua specializes in digital vector typography; an OCR pre-processing step is recommended."
+                    )
 
                 # Detect Vietnamese language from sample text
                 sample_text = ""
@@ -365,6 +396,8 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         "translated_pdf_bytes": None,
                         "issues": [],
                         "detected_lang": detected_lang,
+                        "is_scanned": is_scanned,
+                        "scan_warning": scan_warning,
                         "progress": {
                             "current_page": 0,
                             "total_pages": page_count,
@@ -381,6 +414,8 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                     "page_count": page_count,
                     "word_count": total_words,
                     "detected_lang": detected_lang,
+                    "is_scanned": is_scanned,
+                    "scan_warning": scan_warning,
                     "pages": pages_info,
                 })
             except Exception as e:
@@ -629,13 +664,30 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                     else:
                         accumulator.commit_pristine_source_page(page_idx)
 
+                # Translate Table of Contents (bookmarks / outlines)
+                translated_toc = None
+                try:
+                    from layoutlingua.processing.toc import translate_toc
+
+                    translated_toc = translate_toc(
+                        source_doc=src_doc,
+                        target_lang=target_lang,
+                        source_lang=session.get("detected_lang", "en"),
+                        custom_glossary=custom_glossary,
+                        bilingual_mode=False,
+                    )
+                except Exception as toc_err:
+                    print(f"[LayoutLingua] TOC translation notice: {toc_err}")
+
                 # Finalize rendered PDF
-                translated_bytes = accumulator.finish()
+                translated_bytes = accumulator.finish(translated_toc=translated_toc)
                 src_doc.close()
 
                 with _LOCK:
                     session["translated_pdf_bytes"] = translated_bytes
                     session["translated_segments"] = translated_segments
+                    session["target_lang"] = target_lang
+                    session["custom_glossary"] = custom_glossary
                     session["progress"] = {
                         "current_page": total_p,
                         "total_pages": total_p,

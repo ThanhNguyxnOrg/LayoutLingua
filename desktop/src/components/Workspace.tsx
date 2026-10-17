@@ -789,6 +789,14 @@ export default function Workspace({
         <PageNavigator current={cur} onSelect={select} known={known} pages={docPages} total={totalPages} docId={docInfo?.id} />
         <div className="flex min-w-0 flex-1 flex-col">
           <ComparisonToolbar page={cur} setPage={select} total={totalPages} zoomPct={pct} zoomIn={() => setZ(0.1)} zoomOut={() => setZ(-0.1)} fit={() => setZoom(null)} isFit={zoom === null} mode={mode} setMode={setMode} inspectorOpen={inspectorOpen} toggleInspector={() => setInspectorOpen((o) => !o)} />
+          {docInfo?.isScanned && (
+            <div role="alert" className="flex items-center gap-2.5 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12.5px] text-amber-900">
+              <IconAlert className="size-4 shrink-0 text-amber-600" />
+              <span className="font-medium">
+                {docInfo.scanWarning || 'Scanned document detected: Pages appear to contain image-only scans without selectable text layers. LayoutLingua specializes in digital vector typography; an OCR pre-processing step is recommended.'}
+              </span>
+            </div>
+          )}
           {issue && (() => { const m = sevMeta[issue.severity]; return (
             <div role="status" className="flex h-10 shrink-0 items-center gap-3 border-b border-line bg-white px-4 text-[12.5px]">
               <span className={`flex items-center gap-1.5 font-semibold ${m.text}`}><span className="font-mono">{issues.indexOf(issue) + 1}</span><m.Icon className="size-3.5" />{m.label}</span>
