@@ -71,3 +71,55 @@ def test_parse_custom_glossary_formats():
 Gamma : Delta""")
     assert s["Alpha"] == "Beta"
     assert s["Gamma"] == "Delta"
+
+
+def test_bidirectional_and_pivot_glossary():
+    # 1. Reverse pair (vi -> en) inverted from (en -> vi)
+    vi_en = GlossaryManager.load_builtin_glossary(source_lang="vi", target_lang="en")
+    assert len(vi_en) > 50
+    assert vi_en.get("Tỷ lệ thức") == "Proportion"
+    assert vi_en.get("Hoán vị lặp") == "Permutations with repetition"
+    assert vi_en.get("Chỉnh hợp") == "Arrangements"
+
+    # 2. Cross-lingual pivot (vi -> zh) via English
+    vi_zh = GlossaryManager.load_builtin_glossary(source_lang="vi", target_lang="zh")
+    assert len(vi_zh) > 30
+
+    # 3. Apply glossary on Vietnamese text targeting English
+    vi_text = "Mục 2. Tỷ lệ thức và Hoán vị lặp trong Đại số."
+    res = GlossaryManager.apply_glossary(vi_text, source_lang="vi", target_lang="en")
+    assert "Proportion" in res
+    assert "Permutations with repetition" in res
+    assert "Algebra" in res
+
+
+def test_normalize_translation():
+    # Test healing untranslated source term
+    raw_mt = "2. Hoán vị lặp............ 9"
+    norm = GlossaryManager.normalize_translation(
+        source_text="2. Hoán vị lặp............ 9",
+        translated_text=raw_mt,
+        source_lang="vi",
+        target_lang="en",
+    )
+    assert "Permutations with repetition" in norm
+
+    # Test correcting literal MT error (Awake rate -> Proportion)
+    bad_mt = "2. Awake rate............ 17"
+    norm2 = GlossaryManager.normalize_translation(
+        source_text="2. Tỷ lệ thức............ 17",
+        translated_text=bad_mt,
+        source_lang="vi",
+        target_lang="en",
+    )
+    assert "Proportion" in norm2
+
+    # Test correcting alignment to arrangements
+    bad_mt_align = "3. Alignment (no repetition)............. 10"
+    norm3 = GlossaryManager.normalize_translation(
+        source_text="3. Chỉnh hợp (không lặp)............. 10",
+        translated_text=bad_mt_align,
+        source_lang="vi",
+        target_lang="en",
+    )
+    assert "Arrangements (no repetition)" in norm3

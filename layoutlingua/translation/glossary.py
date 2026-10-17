@@ -17,8 +17,71 @@ class GlossaryManager:
     _builtin_cache: dict[str, dict[str, str]] = {}
 
     @classmethod
+    def _parse_file_terms(cls, file_path: Path, target_lang_code: str = "") -> dict[str, str]:
+        """Parse terms from a JSON, CSV (including BabelDOC 3-column), or TSV file."""
+        if not file_path.exists():
+            return {}
+        suffix = file_path.suffix.lower()
+        terms: dict[str, str] = {}
+        t_clean = (target_lang_code or "").lower().strip()[:2]
+
+        if suffix == ".json":
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        raw_terms = data.get("terms", data)
+                        if isinstance(raw_terms, dict):
+                            for k, v in raw_terms.items():
+                                if str(k).strip() and str(v).strip():
+                                    terms[str(k).strip()] = str(v).strip()
+                    elif isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, dict):
+                                s = item.get("source", "").strip()
+                                t = item.get("target", "").strip()
+                                tgt_lng = item.get("tgt_lng", "").strip().lower()[:2]
+                                if s and t and (not t_clean or not tgt_lng or tgt_lng == t_clean):
+                                    terms[s] = t
+            except Exception:
+                pass
+        elif suffix in (".csv", ".tsv"):
+            try:
+                import csv
+
+                delimiter = "\t" if suffix == ".tsv" else ","
+                with open(file_path, "r", encoding="utf-8", newline="") as f:
+                    reader = csv.reader(f, delimiter=delimiter)
+                    first_row = next(reader, None)
+                    if not first_row:
+                        return terms
+                    headers = [h.strip().lower() for h in first_row]
+                    if "source" in headers and "target" in headers:
+                        s_idx = headers.index("source")
+                        t_idx = headers.index("target")
+                        lng_idx = headers.index("tgt_lng") if "tgt_lng" in headers else -1
+                        for row in reader:
+                            if len(row) > max(s_idx, t_idx):
+                                s = row[s_idx].strip()
+                                t = row[t_idx].strip()
+                                lng = row[lng_idx].strip().lower()[:2] if lng_idx != -1 and len(row) > lng_idx else ""
+                                if s and t and (not t_clean or not lng or lng == t_clean):
+                                    terms[s] = t
+                    else:
+                        # Raw 2-column format without named headers
+                        if len(first_row) >= 2 and first_row[0].strip() and first_row[1].strip():
+                            terms[first_row[0].strip()] = first_row[1].strip()
+                        for row in reader:
+                            if len(row) >= 2 and row[0].strip() and row[1].strip():
+                                terms[row[0].strip()] = row[1].strip()
+            except Exception:
+                pass
+
+        return terms
+
+    @classmethod
     def load_builtin_glossary(cls, source_lang: str = "en", target_lang: str = "vi") -> dict[str, str]:
-        """Load built-in academic and STEM glossary for the given language pair."""
+        """Load built-in academic and STEM glossary for the given language pair with multi-file scanning, bidirectional inversion, and pivot support."""
         s_lang = (source_lang or "en").lower().strip()
         t_lang = (target_lang or "vi").lower().strip()
         lang_map = {
@@ -31,27 +94,64 @@ class GlossaryManager:
             "french": "fr",
             "spanish": "es",
             "english": "en",
+            "korean": "ko",
+            "russian": "ru",
         }
-        s_code = lang_map.get(s_lang, s_lang)
-        t_code = lang_map.get(t_lang, t_lang)
-        cache_key = f"{s_code}_{t_code}"
+        s_code = lang_map.get(s_lang, s_lang[:2] if len(s_lang) > 2 else s_lang)
+        t_code = lang_map.get(t_lang, t_lang[:2] if len(t_lang) > 2 else t_lang)
+        if s_code == t_code:
+            return {}
 
+        cache_key = f"{s_code}_{t_code}"
         if cache_key in cls._builtin_cache:
             return cls._builtin_cache[cache_key].copy()
 
-        glossary_file = _RESOURCE_DIR / f"academic_math_{s_code}_{t_code}.json"
-        if not glossary_file.exists():
-            cls._builtin_cache[cache_key] = {}
-            return {}
+        scanned_terms: dict[str, str] = {}
+        if _RESOURCE_DIR.exists():
+            for f in sorted(_RESOURCE_DIR.rglob("*")):
+                if not f.is_file() or f.suffix.lower() not in (".json", ".csv", ".tsv"):
+                    continue
+                fname = f.stem.lower()
 
-        try:
-            with open(glossary_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                terms = data.get("terms", {})
-                cls._builtin_cache[cache_key] = terms
-                return terms.copy()
-        except Exception:
-            return {}
+                # Direct match: e.g. academic_math_en_vi, community_ai_cs_en_vi, math_en_vi
+                if fname.endswith(f"_{s_code}_{t_code}"):
+                    scanned_terms.update(cls._parse_file_terms(f, t_code))
+                # Inverse match: e.g. academic_math_vi_en inverted from en_vi
+                elif fname.endswith(f"_{t_code}_{s_code}"):
+                    inv_terms = cls._parse_file_terms(f, s_code)
+                    for k, v in inv_terms.items():
+                        if v and k and v not in scanned_terms:
+                            scanned_terms[v] = k
+                # General domain file with tgt_lng column (e.g. math.csv, ai.csv)
+                elif not any(fname.endswith(f"_{s}_{t}") for s in lang_map.values() for t in lang_map.values()):
+                    file_terms = cls._parse_file_terms(f, t_code)
+                    scanned_terms.update(file_terms)
+
+        if scanned_terms:
+            cls._builtin_cache[cache_key] = scanned_terms
+            return scanned_terms.copy()
+
+        # Pivot via English: (s_code -> en) + (en -> t_code)
+        if s_code != "en" and t_code != "en":
+            s_to_en = cls.load_builtin_glossary(s_code, "en")
+            en_to_t = cls.load_builtin_glossary("en", t_code)
+            if s_to_en and en_to_t:
+                pivoted: dict[str, str] = {}
+                for s_term, en_term in s_to_en.items():
+                    if en_term in en_to_t:
+                        pivoted[s_term] = en_to_t[en_term]
+                    else:
+                        en_lower = en_term.lower()
+                        for k, v in en_to_t.items():
+                            if k.lower() == en_lower:
+                                pivoted[s_term] = v
+                                break
+                if pivoted:
+                    cls._builtin_cache[cache_key] = pivoted
+                    return pivoted.copy()
+
+        cls._builtin_cache[cache_key] = {}
+        return {}
 
     @classmethod
     def parse_custom_glossary(cls, custom: str | Mapping[str, str] | None) -> dict[str, str]:
@@ -138,13 +238,24 @@ class GlossaryManager:
                 if not term.strip():
                     continue
                 replacement = glossary[term]
-                pattern = re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
+                
+                # Check for CJK characters
+                is_cjk = any("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u30ff" or "\uac00" <= c <= "\ud7af" for c in term)
+                if is_cjk:
+                    pattern = re.compile(re.escape(term))
+                else:
+                    # Smart boundary supporting Latin, Unicode accents, and digits
+                    pattern = re.compile(
+                        rf"(?<![\w\u00C0-\u024F\u1EA0-\u1EF9]){re.escape(term)}(?![\w\u00C0-\u024F\u1EA0-\u1EF9])",
+                        re.IGNORECASE,
+                    )
+
                 if not pattern.search(processed_part):
                     continue
 
                 def _replace_match(m: re.Match) -> str:
                     matched_str = m.group(0)
-                    if matched_str.istitle() and len(replacement) > 1:
+                    if matched_str and matched_str[0].isupper() and len(replacement) > 1:
                         return replacement[0].upper() + replacement[1:]
                     elif matched_str.isupper() and len(matched_str) > 1:
                         return replacement.upper()
@@ -155,3 +266,60 @@ class GlossaryManager:
             new_parts.append(processed_part)
 
         return "".join(new_parts)
+
+    @classmethod
+    def normalize_translation(
+        cls,
+        source_text: str,
+        translated_text: str,
+        source_lang: str = "auto",
+        target_lang: str = "en",
+        custom_glossary: str | Mapping[str, str] | None = None,
+    ) -> str:
+        """Heal untranslated terms and correct common MT terminology errors based on source text anchors."""
+        if not translated_text:
+            return translated_text
+
+        result = translated_text
+        glossary = cls.get_effective_glossary(source_lang, target_lang, custom_glossary)
+
+        # 1. First heal any source terms that were left untranslated in the output
+        for s_term, t_term in sorted(glossary.items(), key=lambda x: len(x[0]), reverse=True):
+            if not s_term.strip():
+                continue
+            # If the source term is still in the translated text, replace it with the target term
+            is_cjk = any("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u30ff" or "\uac00" <= c <= "\ud7af" for c in s_term)
+            if is_cjk:
+                p_src = re.compile(re.escape(s_term))
+            else:
+                p_src = re.compile(
+                    rf"(?<![\w\u00C0-\u024F\u1EA0-\u1EF9]){re.escape(s_term)}(?![\w\u00C0-\u024F\u1EA0-\u1EF9])",
+                    re.IGNORECASE,
+                )
+            if p_src.search(result):
+                def _rep(m: re.Match) -> str:
+                    return t_term[0].upper() + t_term[1:] if m.group(0).istitle() else t_term
+                result = p_src.sub(_rep, result)
+
+        # 2. Known literal mistranslations from Google RPC in mathematical prose
+        if target_lang in ("en", "english"):
+            _MATH_FIXES = [
+                (r"\bAwake rate\b", "Proportion"),
+                (r"\bConsciousness rate\b", "Proportion"),
+                (r"\bConsciousness ratio\b", "Proportion"),
+                (r"\bRepeated alignment\b", "Arrangements with repetition"),
+                (r"\bIterative adjustment\b", "Arrangements with repetition"),
+                (r"\bAlignment\s*\(no repetition\)", "Arrangements (no repetition)"),
+                (r"\bRepeated permutation\b", "Permutations with repetition"),
+                (r"\bRepetitive combination\b", "Combinations with repetition"),
+                (r"\bArithmetic average\b", "Arithmetic mean"),
+                (r"\bAverage(?=:\s*[A-Za-z0-9_]+\s*=)", "Geometric mean"),
+                (r"\bNewton binomia\b", "Newton's binomial theorem"),
+                (r"\bNewton binomial\b", "Newton's binomial theorem"),
+                (r"\bGood(?=\s+[A-Za-z0-9_]+\s*=|⟦LL_FORMULA_|<b\d+>)", "That is,"),
+                (r"\bGive (\d+no\.|\d+:)\b", r"For \1"),
+            ]
+            for pat_str, rep_str in _MATH_FIXES:
+                result = re.sub(pat_str, rep_str, result, flags=re.IGNORECASE)
+
+        return result

@@ -1,0 +1,21 @@
+source,target,tgt_lng
+attention mechanism,cơ chế chú ý,vi
+self-attention,tự chú ý,vi
+large language model,mô hình ngôn ngữ lớn,vi
+prompt engineering,kỹ thuật gợi ý (prompt engineering),vi
+diffusion model,mô hình khuếch tán,vi
+generative adversarial network,mạng đối nghịch sinh (GAN),vi
+reinforcement learning from human feedback,học tăng cường từ phản hồi con người (RLHF),vi
+zero-shot learning,học zero-shot,vi
+few-shot learning,học few-shot,vi
+fine-tuning,tinh chỉnh mô hình (fine-tuning),vi
+loss function,hàm mất mát,vi
+residual connection,kết nối phần dư,vi
+layer normalization,chuẩn hóa lớp,vi
+mixture of experts,mô hình hỗn hợp chuyên gia (MoE),vi
+vector embeddings,nhúng vectơ,vi
+cosine similarity,độ tương đồng cosine,vi
+transformer architecture,kiến trúc Transformer,vi
+multi-head attention,chú ý đa đầu (multi-head attention),vi
+positional encoding,mã hóa vị trí,vi
+context window,cửa sổ ngữ cảnh,vi

@@ -52,3 +52,8 @@ layoutlingua-server = "layoutlingua.server:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["layoutlingua*"]
+
+[tool.setuptools.package-data]
+layoutlingua = [
+    "resources/**/*",
+]

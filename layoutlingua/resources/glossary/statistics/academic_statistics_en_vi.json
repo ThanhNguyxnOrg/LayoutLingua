@@ -1,0 +1,19 @@
+{
+  "language_pair": "en-vi",
+  "domain": "academic_statistics_stem",
+  "source": "Wikidata Open Ontology + LayoutLingua Community",
+  "total_terms": 11,
+  "terms": {
+    "decision theory": "lý thuyết quyết định",
+    "biostatistics": "thống kê sinh vật học",
+    "geostatistics": "Địa thống kê",
+    "descriptive statistics": "thống kê mô tả",
+    "dimensionality reduction": "Giảm chiều dữ liệu",
+    "statistical data": "số liệu thống kê",
+    "facial muscles": "Cơ mặt",
+    "statistical machine translation": "Dịch máy thống kê",
+    "environmental statistics": "Thống kê môi trường",
+    "CiteScore": "CiteScore",
+    "2022 FIFA World Cup statistics": "Thống kê Giải vô địch bóng đá thế giới 2022"
+  }
+}
