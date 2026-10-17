@@ -326,6 +326,56 @@ function Inspector(p: {
   const tabs: [Tab, string][] = [['translation', 'Translation'], ['quality', 'Quality checks'], ['page', 'Page details']]
   const locked = p.phase === 'processing'
   const pageIssues = p.visibleIssues.filter((i) => i.page === p.page.n)
+
+  // Parse pageRange into numeric bounds [from, to]
+  const parseRange = (val: string, maxP: number): [number, number] => {
+    if (!val || val === 'all') return [1, maxP]
+    const m = val.match(/^(\d+)(?:\s*-\s*(\d+))?$/)
+    if (m) {
+      const f = parseInt(m[1], 10)
+      const t = m[2] ? parseInt(m[2], 10) : f
+      return [Math.max(1, Math.min(f, maxP)), Math.max(1, Math.min(t, maxP))]
+    }
+    return [1, maxP]
+  }
+
+  const [initialFrom, initialTo] = parseRange(p.pageRange, p.total)
+  const [fromPage, setFromPage] = useState(initialFrom)
+  const [toPage, setToPage] = useState(initialTo)
+
+  useEffect(() => {
+    const [f, t] = parseRange(p.pageRange, p.total)
+    setFromPage(f)
+    setToPage(t)
+  }, [p.pageRange, p.total])
+
+  const handleFromChange = (newVal: number) => {
+    if (isNaN(newVal)) return
+    // Auto-clamp: 1 <= from <= to <= total
+    const clamped = Math.max(1, Math.min(newVal, toPage, p.total))
+    setFromPage(clamped)
+    p.setPageRange(clamped === 1 && toPage === p.total ? 'all' : `${clamped}-${toPage}`)
+  }
+
+  const handleToChange = (newVal: number) => {
+    if (isNaN(newVal)) return
+    // Auto-clamp: from <= to <= total
+    const clamped = Math.max(1, Math.min(newVal, p.total))
+    const finalTo = Math.max(fromPage, clamped)
+    setToPage(finalTo)
+    p.setPageRange(fromPage === 1 && finalTo === p.total ? 'all' : `${fromPage}-${finalTo}`)
+  }
+
+  const setPresetRange = (f: number, t: number) => {
+    const validF = Math.max(1, Math.min(f, p.total))
+    const validT = Math.max(validF, Math.min(t, p.total))
+    setFromPage(validF)
+    setToPage(validT)
+    p.setPageRange(validF === 1 && validT === p.total ? 'all' : `${validF}-${validT}`)
+  }
+
+  const selectedCount = Math.max(1, toPage - fromPage + 1)
+  const isAllPages = fromPage === 1 && toPage === p.total
   return (
     <aside aria-label="Inspector" className="flex w-[340px] shrink-0 flex-col border-l border-line bg-white min-h-0 h-full max-h-full overflow-hidden">
       <div role="tablist" className="flex border-b border-line px-2 shrink-0">
@@ -400,63 +450,108 @@ function Inspector(p: {
             <div className="h-px bg-line" />
 
             {p.phase === 'idle' && (
-              <section className="space-y-3">
-                <Field label="Page range (Optional)">
-                  <input
-                    disabled={locked}
-                    value={p.pageRange}
-                    onChange={(e) => p.setPageRange(e.target.value)}
-                    placeholder="e.g. all or 1-5, 8, 10-12"
-                    className="h-8 rounded-md border border-line-strong px-2.5 font-mono text-[12.5px] focus:border-teal focus:ring-1 focus:ring-teal"
-                  />
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <section className="space-y-3.5">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[12.5px] font-semibold">
+                    <span>Page range</span>
+                    <span className="font-mono text-[11.5px] font-semibold text-teal">
+                      {isAllPages
+                        ? `All (${p.total} pp)`
+                        : `${selectedCount} of ${p.total} pp selected`}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-medium text-muted">From page</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={toPage}
+                        value={fromPage}
+                        disabled={locked}
+                        onChange={(e) => handleFromChange(parseInt(e.target.value, 10))}
+                        className="h-8.5 w-full rounded-md border border-line-strong px-2.5 font-mono text-[13px] font-bold text-ink focus:border-teal focus:ring-1 focus:ring-teal"
+                      />
+                    </div>
+                    <span className="mt-4 text-muted font-bold text-[13px]">→</span>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-medium text-muted">To page</label>
+                      <input
+                        type="number"
+                        min={fromPage}
+                        max={p.total}
+                        value={toPage}
+                        disabled={locked}
+                        onChange={(e) => handleToChange(parseInt(e.target.value, 10))}
+                        className="h-8.5 w-full rounded-md border border-line-strong px-2.5 font-mono text-[13px] font-bold text-ink focus:border-teal focus:ring-1 focus:ring-teal"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                     <button
                       type="button"
-                      onClick={() => p.setPageRange('all')}
-                      className={`rounded px-1.5 py-0.5 text-[11px] font-medium border transition-colors cursor-pointer ${
-                        !p.pageRange || p.pageRange === 'all'
+                      onClick={() => setPresetRange(1, p.total)}
+                      className={`rounded px-2 py-0.5 text-[11px] font-semibold border transition-colors cursor-pointer ${
+                        isAllPages
                           ? 'border-teal bg-teal/10 text-teal'
                           : 'border-line text-muted hover:border-line-strong'
                       }`}
                     >
-                      All ({p.total} pp)
+                      All (1–{p.total})
                     </button>
                     {p.total > 5 && (
                       <button
                         type="button"
-                        onClick={() => p.setPageRange('1-5')}
-                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium border transition-colors cursor-pointer ${
-                          p.pageRange === '1-5' || p.pageRange === '5'
+                        onClick={() => setPresetRange(1, Math.min(5, p.total))}
+                        className={`rounded px-2 py-0.5 text-[11px] font-semibold border transition-colors cursor-pointer ${
+                          fromPage === 1 && toPage === Math.min(5, p.total)
                             ? 'border-teal bg-teal/10 text-teal'
                             : 'border-line text-muted hover:border-line-strong'
                         }`}
                       >
-                        First 5 pp (1–5)
+                        First 5 (1–{Math.min(5, p.total)})
                       </button>
                     )}
                     {p.total > 20 && (
                       <button
                         type="button"
-                        onClick={() => p.setPageRange('1-20')}
-                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium border transition-colors cursor-pointer ${
-                          p.pageRange === '1-20' || p.pageRange === '20'
+                        onClick={() => setPresetRange(1, Math.min(20, p.total))}
+                        className={`rounded px-2 py-0.5 text-[11px] font-semibold border transition-colors cursor-pointer ${
+                          fromPage === 1 && toPage === Math.min(20, p.total)
                             ? 'border-teal bg-teal/10 text-teal'
                             : 'border-line text-muted hover:border-line-strong'
                         }`}
                       >
-                        First 20 pp (1–20)
+                        First 20 (1–{Math.min(20, p.total)})
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setPresetRange(p.page.n, p.page.n)}
+                      className={`rounded px-2 py-0.5 text-[11px] font-semibold border transition-colors cursor-pointer ${
+                        fromPage === p.page.n && toPage === p.page.n
+                          ? 'border-teal bg-teal/10 text-teal'
+                          : 'border-line text-muted hover:border-line-strong'
+                      }`}
+                    >
+                      Current (p.{p.page.n})
+                    </button>
                   </div>
-                  {/^\d+$/.test(p.pageRange.trim()) && Number(p.pageRange.trim()) > 1 && (
-                    <div className="rounded bg-teal-soft/40 px-2 py-1 text-[11px] text-teal-ink">
-                      Translating first {p.pageRange.trim()} pages (1–{p.pageRange.trim()}). For only page {p.pageRange.trim()}, use 'p{p.pageRange.trim()}'.
-                    </div>
-                  )}
-                  <span className="text-[11px] text-muted">Untranslated pages remain pristine in original layout.</span>
-                </Field>
-                <p className="text-[13px] leading-relaxed"><span className="font-mono">{p.total}</span> pages ready for translation from {p.src} to {p.tgt}.</p>
-                <Button variant="primary" className="h-10 w-full" onClick={p.start}>Translate PDF</Button>
+
+                  <p className="text-[11px] text-muted leading-relaxed">
+                    {isAllPages
+                      ? `Translating all ${p.total} pages with full layout preservation.`
+                      : `Translating pages ${fromPage} to ${toPage} (${selectedCount} pp). Other pages remain pristine from original PDF.`}
+                  </p>
+                </div>
+
+                <Button variant="primary" className="h-10 w-full" onClick={p.start}>
+                  {isAllPages
+                    ? 'Translate full document'
+                    : `Translate pages ${fromPage}–${toPage} (${selectedCount} pp)`}
+                </Button>
               </section>
             )}
             {p.phase === 'processing' && (
@@ -710,6 +805,7 @@ export default function Workspace({
 
     let active = true
     let progressTimer: any = null
+    let consecutiveFails = 0
 
     // If backend doc is open, invoke real translation API with live progress polling
     if (docInfo?.id) {
@@ -745,6 +841,12 @@ export default function Workspace({
                 message: pData.message,
               })
             }
+            if (pData.status === 'idle' && active) {
+              if (progressTimer) clearInterval(progressTimer)
+              isTranslatingRef.current = false
+              setPhase('idle')
+              return
+            }
             if (pData.status === 'done' && active) {
               if (progressTimer) clearInterval(progressTimer)
               setDone(totalPages)
@@ -774,7 +876,16 @@ export default function Workspace({
               return
             }
           }
-        } catch {}
+        } catch {
+          if (active) {
+            consecutiveFails++
+            if (consecutiveFails > 8) {
+              if (progressTimer) clearInterval(progressTimer)
+              isTranslatingRef.current = false
+              setPhase('idle')
+            }
+          }
+        }
       }, 350)
 
       const langCodeMap: Record<string, string> = {
@@ -1078,7 +1189,10 @@ export default function Workspace({
             activeIssue={activeIssue}
             openIssue={openIssue}
             start={start}
-            cancel={() => setPhase('cancelled')}
+            cancel={() => {
+              isTranslatingRef.current = false
+              setPhase('idle')
+            }}
             onExport={() => setExportOpen(true)}
             retryPage={retryPage}
             retrying={retrying}

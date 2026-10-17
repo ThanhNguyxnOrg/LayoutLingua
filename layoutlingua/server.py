@@ -432,12 +432,17 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
         from layoutlingua.translation.concurrent_pool import concurrent_batch_translate
         from layoutlingua.processing.telemetry import PipelineProgressTracker
 
-        tracker = PipelineProgressTracker(total_pages=total_p, total_segments=total_segs)
+        selected_count = len(selected_pages)
+        tracker = PipelineProgressTracker(total_pages=selected_count, total_segments=total_segs)
         tracker.set_stage(2)
 
         def _on_chunk_progress(c_idx: int, done_segs: int, chunk_res: dict[str, str]):
             with _LOCK:
-                session["progress"] = tracker.update_translation(done_segs, total_segs)
+                snap = tracker.update_translation(done_segs, total_segs)
+                if selected_count < total_p:
+                    snap["subtitle"] = f"segment {done_segs} of {total_segs} ({selected_count} pp)"
+                    snap["message"] = f"Translating selected text ({done_segs}/{total_segs} segments across {selected_count} pp)..."
+                session["progress"] = snap
 
         try:
             raw_batch_res = concurrent_batch_translate(
@@ -549,19 +554,24 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
         collected_issues: list[dict[str, Any]] = []
 
         tracker.set_stage(3)
+        processed_selected = 0
         for page_idx in range(total_p):
-            pages_done = page_idx + 1
-            with _LOCK:
-                session["progress"] = tracker.update_typesetting(pages_done)
-                session["progress"]["integrity"] = {
-                    "blocks_translated": total_replaced_blocks,
-                    "needs_review": total_review_blocks,
-                    "preserved_pages": total_preserved_pages,
-                }
-
             p_ir = doc_ir.pages[page_idx] if page_idx < len(doc_ir.pages) else None
             p_num = page_idx + 1
             if p_ir and p_num in selected_pages:
+                processed_selected += 1
+                with _LOCK:
+                    snap = tracker.update_typesetting(processed_selected)
+                    if selected_count < total_p:
+                        snap["subtitle"] = f"page {p_num} ({processed_selected} of {selected_count})"
+                        snap["message"] = f"Fitting layout for page {p_num} ({processed_selected}/{selected_count} selected)..."
+                    snap["integrity"] = {
+                        "blocks_translated": total_replaced_blocks,
+                        "needs_review": total_review_blocks,
+                        "preserved_pages": total_preserved_pages,
+                    }
+                    session["progress"] = snap
+
                 tx = engine.stage_page_transaction(
                     source_doc=src_doc,
                     page_ir=p_ir,
@@ -595,8 +605,8 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                 else:
                     page_statuses[p_num] = "ok"
             else:
-                total_preserved_pages += 1
-                page_statuses[p_num] = "fallback"
+                # Untouched page kept pristine from original source
+                page_statuses[p_num] = "ok"
                 page_block_counts[p_num] = len(p_ir.blocks) if p_ir else 0
                 accumulator.commit_pristine_source_page(page_idx)
 
