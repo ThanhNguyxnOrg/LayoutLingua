@@ -45,6 +45,7 @@ def _from_opaque_placeholders(text: str) -> str:
 def extract_document_segments(
     doc_ir: DocumentIR,
     isolator: FormulaIsolator | None = None,
+    page_numbers: set[int] | None = None,
 ) -> list[TextSegment]:
     """Extract translatable TextSegments from DocumentIR, enforcing fail-closed block suppression.
 
@@ -52,6 +53,7 @@ def extract_document_segments(
     - blocks with block_type == "formula"
     - blocks with block_type == "table_rejected"
     - blocks whose ID is registered in doc_ir.metadata["preserved_block_ids"] or page.metadata["preserved_block_ids"]
+    - pages not included in page_numbers (if page_numbers is provided)
     """
     iso = isolator or FormulaIsolator()
     doc_preserved: set[str] = set()
@@ -62,6 +64,8 @@ def extract_document_segments(
 
     segments: list[TextSegment] = []
     for page in doc_ir.pages:
+        if page_numbers is not None and page.page_number not in page_numbers:
+            continue
         page_preserved = set(doc_preserved)
         if hasattr(page, "metadata") and isinstance(page.metadata, dict):
             p_ids = page.metadata.get("preserved_block_ids", set())

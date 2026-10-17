@@ -271,6 +271,7 @@ function ProcessingPanel({
 function Inspector(p: {
   tab: Tab; setTab: (t: Tab) => void; phase: Phase; done: number; total: number; stage: number; page: Page; pageState: string
   src: string; tgt: string; setSrc: (s: string) => void; setTgt: (s: string) => void
+  pageRange: string; setPageRange: (r: string) => void
   settings: AppSettings; onUpdateProvider: (pr: ProviderType) => void; onOpenSettings?: () => void
   visibleIssues: Issue[]; activeIssue?: string; openIssue: (i: Issue) => void; start: () => void; cancel: () => void
   onExport: () => void; retryPage: () => void; retrying: boolean
@@ -354,7 +355,17 @@ function Inspector(p: {
 
             {p.phase === 'idle' && (
               <section className="space-y-3">
-                <p className="text-[13.5px] leading-relaxed"><span className="font-mono">{p.total}</span> pages will be translated from {p.src} to {p.tgt}. You can review each page before exporting.</p>
+                <Field label="Page range (Optional)">
+                  <input
+                    disabled={locked}
+                    value={p.pageRange}
+                    onChange={(e) => p.setPageRange(e.target.value)}
+                    placeholder="e.g. all or 1-5, 8, 10-12"
+                    className="h-8 rounded-md border border-line-strong px-2.5 font-mono text-[12.5px] focus:border-teal focus:ring-1 focus:ring-teal"
+                  />
+                  <span className="text-[11px] text-muted">Leave as "all" to translate entire document. Untranslated pages remain pristine.</span>
+                </Field>
+                <p className="text-[13px] leading-relaxed"><span className="font-mono">{p.total}</span> pages ready for translation from {p.src} to {p.tgt}.</p>
                 <Button variant="primary" className="h-10 w-full" onClick={p.start}>Translate PDF</Button>
               </section>
             )}
@@ -532,6 +543,7 @@ export default function Workspace({
   const [blend, setBlend] = useState(100)
   const [src, setSrc] = useState(() => docInfo?.detectedLang === 'vi' ? 'Vietnamese' : 'English')
   const [tgt, setTgt] = useState(() => docInfo?.detectedLang === 'vi' ? 'English' : 'Vietnamese')
+  const [pageRange, setPageRange] = useState('all')
   const [exportOpen, setExportOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -603,6 +615,7 @@ export default function Workspace({
         body: JSON.stringify({
           doc_id: docInfo.id,
           target_lang: resolvedTargetLang,
+          page_range: pageRange || 'all',
           custom_glossary: settings.customGlossary || '',
           provider: settings.provider,
           api_key: settings.provider === 'gemini' ? settings.geminiKey : settings.provider === 'openai' ? settings.openaiKey : '',
@@ -832,6 +845,8 @@ export default function Workspace({
             tgt={tgt}
             setSrc={setSrc}
             setTgt={setTgt}
+            pageRange={pageRange}
+            setPageRange={setPageRange}
             settings={settings}
             onUpdateProvider={(pr) => updateSettings((prev) => ({ ...prev, provider: pr }))}
             onOpenSettings={onOpenSettings}

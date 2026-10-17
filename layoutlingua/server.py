@@ -171,6 +171,24 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
 
             if not session:
                 self._send_json({"error": "Document session not found"}, status=404)
+            export_fmt = query.get("format", ["pdf"])[0].lower().strip()
+            if export_fmt in ("md", "markdown"):
+                from layoutlingua.processing.markdown_export import export_document_markdown
+
+                md_text = export_document_markdown(
+                    doc_ir=session["doc_ir"],
+                    translated_segments=session.get("translated_segments"),
+                )
+                md_bytes = md_text.encode("utf-8")
+                base_stem = session.get("filename", "document.pdf").rsplit(".pdf", 1)[0]
+                clean_filename = f"{base_stem}.translated.md"
+                self.send_response(200)
+                self._send_cors_headers()
+                self.send_header("Content-Type", "text/markdown; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{clean_filename}"')
+                self.send_header("Content-Length", str(len(md_bytes)))
+                self.end_headers()
+                self.wfile.write(md_bytes)
                 return
 
             raw_source = session.get("source_pdf_bytes")
@@ -386,8 +404,14 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 doc_ir: DocumentIR = session["doc_ir"]
                 src_bytes: bytes = session["source_pdf_bytes"]
 
-                # Extract translatable segments
-                segments = extract_document_segments(doc_ir)
+                # Parse selective page range
+                page_range_spec = req_json.get("page_range", "all")
+                from layoutlingua.processing.page_range import parse_page_range
+
+                selected_pages = parse_page_range(page_range_spec, total_pages=len(doc_ir.pages))
+
+                # Extract translatable segments strictly for selected pages
+                segments = extract_document_segments(doc_ir, page_numbers=selected_pages)
 
                 # Read provider options
                 provider_type = str(req_json.get("provider", "mock")).lower()
@@ -594,7 +618,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         }
 
                     p_ir = doc_ir.pages[page_idx] if page_idx < len(doc_ir.pages) else None
-                    if p_ir:
+                    if p_ir and (page_idx + 1) in selected_pages:
                         tx = engine.stage_page_transaction(
                             source_doc=src_doc,
                             page_ir=p_ir,
@@ -611,6 +635,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
 
                 with _LOCK:
                     session["translated_pdf_bytes"] = translated_bytes
+                    session["translated_segments"] = translated_segments
                     session["progress"] = {
                         "current_page": total_p,
                         "total_pages": total_p,

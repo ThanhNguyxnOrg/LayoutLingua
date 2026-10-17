@@ -19,6 +19,7 @@ export default function ExportDialog({
   docId?: string
 }) {
   const [step, setStep] = useState<Step>('form')
+  const [format, setFormat] = useState<'pdf' | 'md'>('pdf')
   const [layoutMode, setLayoutMode] = useState<'mono' | 'bilingual'>('mono')
   const defaultExportName = initialDocName.replace(/\.pdf$/i, '') + '.vi.pdf'
   const [name, setName] = useState(defaultExportName)
@@ -26,7 +27,14 @@ export default function ExportDialog({
   const [failDemo, setFailDemo] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const exists = dir === '~/Downloads' && name === 'Research-Paper.vi.pdf'
-  const fname = name.toLowerCase().endsWith('.pdf') ? name : `${name}.pdf`
+  const fname =
+    format === 'md'
+      ? name.endsWith('.md')
+        ? name
+        : `${name.replace(/\.pdf$/i, '')}.md`
+      : name.toLowerCase().endsWith('.pdf')
+      ? name
+      : `${name}.pdf`
 
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>('input,button')?.focus()
@@ -40,7 +48,9 @@ export default function ExportDialog({
 
     if (docId) {
       try {
-        const res = await fetch(apiUrl(`/api/download?id=${encodeURIComponent(docId)}&mode=${layoutMode}`))
+        const res = await fetch(
+          apiUrl(`/api/download?id=${encodeURIComponent(docId)}&mode=${layoutMode}&format=${format}`)
+        )
         if (res.ok) {
           const blob = await res.blob()
           const element = document.createElement('a')
@@ -118,9 +128,26 @@ export default function ExportDialog({
               </label>
               <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
                 Format
-                <span className="flex h-9 items-center rounded-md border border-line bg-canvas px-3 text-[13px] font-normal text-muted">
-                  PDF document (.pdf)
-                </span>
+                <select
+                  value={format}
+                  onChange={(e) => {
+                    const f = e.target.value as 'pdf' | 'md'
+                    setFormat(f)
+                    const base = initialDocName.replace(/\.pdf$/i, '')
+                    setName(
+                      f === 'md'
+                        ? `${base}.translated.md`
+                        : layoutMode === 'bilingual'
+                        ? `${base}.bilingual.pdf`
+                        : `${base}.vi.pdf`
+                    )
+                    setStep('form')
+                  }}
+                  className="h-9 rounded-md border border-line-strong bg-white px-2.5 text-[13px] font-normal focus:border-teal focus:ring-1 focus:ring-teal"
+                >
+                  <option value="pdf">PDF Document (.pdf)</option>
+                  <option value="md">Markdown Notes (.md)</option>
+                </select>
               </label>
             </div>
 
