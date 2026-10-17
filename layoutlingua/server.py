@@ -581,14 +581,16 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
         page_block_counts: dict[int, int] = {}
         collected_issues: list[dict[str, Any]] = []
 
+        stage3_start_time = time.time()
         for page_idx in range(total_p):
             pages_done = page_idx + 1
             # Stage 3: Fitting text & typesetting layout (55% -> 95% overall)
             overall_pct = 55 + int((pages_done / max(1, total_p)) * 40)
-            elapsed = max(0.2, time.time() - start_time)
-            curr_speed = round(pages_done / elapsed, 1)
+            stage3_elapsed = max(0.1, time.time() - stage3_start_time)
+            raw_speed = pages_done / stage3_elapsed
+            curr_speed = round(raw_speed, 1)
             rem_p = max(0, total_p - pages_done)
-            calc_eta = int(rem_p / max(curr_speed, 0.1)) if curr_speed > 0 else 0
+            calc_eta = int(rem_p / max(raw_speed, 0.05)) if raw_speed > 0 else 0
 
             with _LOCK:
                 session["progress"] = {

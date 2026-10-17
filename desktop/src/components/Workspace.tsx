@@ -231,7 +231,23 @@ function ProcessingPanel({
   overallPct?: number | null
   subtitle?: string | null
 }) {
-  const formatEta = (sec?: number) => {
+  const [countdownSec, setCountdownSec] = useState<number | null>(eta ?? null)
+
+  useEffect(() => {
+    if (eta != null && eta > 0) {
+      setCountdownSec(eta)
+    }
+  }, [eta])
+
+  useEffect(() => {
+    if (countdownSec == null || countdownSec <= 0) return
+    const timer = setInterval(() => {
+      setCountdownSec((prev) => (prev && prev > 1 ? prev - 1 : prev))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [countdownSec])
+
+  const formatEta = (sec?: number | null) => {
     if (sec === undefined || sec === null || sec <= 0) return null
     if (sec < 60) return `~${sec}s remaining`
     const mins = Math.floor(sec / 60)
@@ -239,7 +255,7 @@ function ProcessingPanel({
     return rem > 0 ? `~${mins}m ${rem}s remaining` : `~${mins}m remaining`
   }
 
-  const etaStr = formatEta(eta)
+  const etaStr = formatEta(countdownSec)
 
   return (
     <div className="space-y-4">
@@ -258,7 +274,8 @@ function ProcessingPanel({
         <div className="mt-2 flex items-center justify-between text-[12px] text-muted">
           <span className="truncate pr-2 font-medium text-ink">{message || 'Processing pages with layout preservation telemetry...'}</span>
           {(etaStr || (speed && speed > 0)) && (
-            <span className="shrink-0 font-mono text-[11.5px] text-teal font-semibold">
+            <span className="shrink-0 font-mono text-[11.5px] text-teal font-semibold flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-teal animate-pulse" />
               {etaStr}{etaStr && speed ? ' • ' : ''}{speed && speed > 0 ? `${speed} ${overallPct != null && stage === 2 ? 'seg/s' : 'p/s'}` : ''}
             </span>
           )}

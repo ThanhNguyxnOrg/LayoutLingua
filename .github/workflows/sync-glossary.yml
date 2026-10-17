@@ -41,9 +41,9 @@ jobs:
     steps:
       - name: 🤖 Generate GitHub App Token (ThanhNguyxnAgent)
         id: app-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ secrets.BOT_APP_ID || secrets.THANHNGUYXNAGENT_APP_ID }}
+          client-id: ${{ secrets.BOT_APP_ID || secrets.THANHNGUYXNAGENT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY || secrets.THANHNGUYXNAGENT_PRIVATE_KEY }}
 
       - name: 📥 Checkout Repository
