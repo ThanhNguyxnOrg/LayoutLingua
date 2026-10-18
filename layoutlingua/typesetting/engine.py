@@ -283,6 +283,8 @@ class TypesetEngine:
             for block in page_ir.blocks:
                 if block.block_type in ("formula", "table_rejected") or block.block_id in preserved_ids:
                     continue
+                if not block.text.strip():
+                    continue
                 trans_text = self._resolve_translated_text(block, translated_segments)
                 if trans_text and trans_text.strip() and trans_text.strip() != block.text.strip():
                     candidate_blocks.append(block)

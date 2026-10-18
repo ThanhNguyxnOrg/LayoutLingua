@@ -100,43 +100,50 @@ def compute_tight_line_clearance_regions(
     block: TextBlock,
     padding: float = 0.5,
 ) -> list[tuple[float, float, float, float]]:
-    """Compute tight bounding boxes per visual span cluster with minimal padding.
+    """Compute tight bounding boxes per visual glyph cluster with minimal padding.
 
-    Groups spans by baseline alignment and horizontal proximity (BabelDOC / pdf2zh cluster pattern).
-    Prevents coarse bounding box unions from bridging across protected mathematical symbols,
-    division bars, or grouping braces.
+    Groups glyphs by baseline alignment and horizontal proximity (BabelDOC / pdf2zh cluster pattern).
+    Uses character-level bounding boxes for non-whitespace characters when available to prevent
+    trailing/leading space advance widths from bridging across protected formula symbols or inline variables.
     """
     if not block.spans:
         x0, y0, x1, y1 = block.bbox
         return [(x0 - padding, y0 - padding, x1 + padding, y1 + padding)]
 
-    spans = [s for s in block.spans if s.text.strip()]
-    if not spans:
+    # Collect meaningful character glyphs (excluding non-printing whitespace)
+    all_chars: list[Any] = []
+    for s in block.spans:
+        if s.chars:
+            all_chars.extend([c for c in s.chars if not c.char.isspace()])
+        elif s.text.strip():
+            all_chars.append(type("CharProxy", (), {"bbox": s.bbox, "char": s.text.strip()}))
+
+    if not all_chars:
         x0, y0, x1, y1 = block.bbox
         return [(x0 - padding, y0 - padding, x1 + padding, y1 + padding)]
 
-    # Cluster spans by baseline alignment (within 3.5pt) and horizontal proximity (within 6.0pt)
+    # Cluster characters by baseline alignment (within 3.5pt) and horizontal proximity (within 4.5pt)
     clusters: list[dict[str, Any]] = []
-    for s in spans:
-        s_box = s.bbox
-        s_mid_y = (s_box[1] + s_box[3]) / 2.0
+    for c in all_chars:
+        cb = c.bbox
+        c_mid_y = (cb[1] + cb[3]) / 2.0
         placed = False
         for cl in clusters:
             cl_mid_y = (cl["bbox"][1] + cl["bbox"][3]) / 2.0
-            if abs(s_mid_y - cl_mid_y) <= 3.5:
-                gap = max(0.0, max(s_box[0] - cl["bbox"][2], cl["bbox"][0] - s_box[2]))
-                if gap <= 6.0:
-                    cl["spans"].append(s)
+            if abs(c_mid_y - cl_mid_y) <= 3.5:
+                gap = max(0.0, max(cb[0] - cl["bbox"][2], cl["bbox"][0] - cb[2]))
+                if gap <= 4.5:
+                    cl["chars"].append(c)
                     cl["bbox"] = (
-                        min(cl["bbox"][0], s_box[0]),
-                        min(cl["bbox"][1], s_box[1]),
-                        max(cl["bbox"][2], s_box[2]),
-                        max(cl["bbox"][3], s_box[3]),
+                        min(cl["bbox"][0], cb[0]),
+                        min(cl["bbox"][1], cb[1]),
+                        max(cl["bbox"][2], cb[2]),
+                        max(cl["bbox"][3], cb[3]),
                     )
                     placed = True
                     break
         if not placed:
-            clusters.append({"spans": [s], "bbox": s_box})
+            clusters.append({"chars": [c], "bbox": cb})
 
     tight_rects: list[tuple[float, float, float, float]] = []
     for cl in clusters:
@@ -271,7 +278,7 @@ class ClearancePlanner:
 
         # Mutual interaction check: ensure approved candidate clearance rects do not overlap
         approved_ids = [b_id for b_id, dec in plan.decisions.items() if dec.is_approved]
-        mutual_tolerance = max(1.5, self.padding_pt * 2.5)
+        mutual_tolerance = max(2.5, self.padding_pt * 3.0)
         for i, id_a in enumerate(approved_ids):
             dec_a = plan.decisions[id_a]
             for id_b in approved_ids[i + 1 :]:
@@ -531,7 +538,7 @@ class ClearancePlanner:
                 # Not a background container: check if drawing intersects tight clearance lines
                 dw = zone.bbox[2] - zone.bbox[0]
                 dh = zone.bbox[3] - zone.bbox[1]
-                vector_tol = 1.0 if (dh <= 1.5 or dw <= 1.5) else 0.2
+                vector_tol = 1.2 if (dh <= 2.5 or dw <= 2.5) else 0.5
                 intersects_clearance = any(rects_intersect(line_rect, zone.bbox, tolerance=vector_tol) for line_rect in tight_line_rects)
                 if intersects_clearance:
                     return CollisionDetail(

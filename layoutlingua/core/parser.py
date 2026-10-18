@@ -48,7 +48,7 @@ FORMULA_FONT_PATTERN = re.compile(
 
 # Standard international mathematical functions pattern
 MATH_FUNC_PATTERN = re.compile(
-    r"\b(?:" + "|".join(sorted(_ISO_MATH_FUNCTIONS, key=len, reverse=True)) + r")\b",
+    r"(?:" + "|".join(sorted(_ISO_MATH_FUNCTIONS, key=len, reverse=True)) + r")",
     re.IGNORECASE,
 )
 
@@ -150,13 +150,15 @@ def _is_pure_formula_block(spans: list[GlyphSpan], config: ParserConfig = Parser
     if not full_text:
         return True
 
+    math_density, math_sym_count, prose_count = _compute_math_metrics(full_text, spans)
+
     # 1. Font metadata check: if all meaningful spans use recognized math/formula/symbol fonts
-    if all(s.is_math_or_symbol or bool(config.formula_font_pattern.search(s.font_name)) for s in meaningful_spans):
+    # A block containing natural language prose words (>= 1 prose token) is prose text, never a pure formula
+    if prose_count == 0 and all(s.is_math_or_symbol or bool(config.formula_font_pattern.search(s.font_name)) for s in meaningful_spans):
         return True
 
     # 2. Structural equation & token analysis
     has_rel = bool(MATH_RELATION_PATTERN.search(full_text))
-    math_density, math_sym_count, prose_count = _compute_math_metrics(full_text, spans)
 
     # Pure equation with mathematical relation and zero prose words
     if has_rel and prose_count == 0:
@@ -198,8 +200,6 @@ def _is_raw_line_math(line: dict, config: ParserConfig = ParserConfig()) -> bool
     ]
     if not meaningful:
         return False
-    if all(bool(config.formula_font_pattern.search(s.get("font", ""))) for s in meaningful):
-        return True
     from layoutlingua.processing.text_sanitizer import sanitize_extracted_text
 
     full_text = "".join(
@@ -210,6 +210,9 @@ def _is_raw_line_math(line: dict, config: ParserConfig = ParserConfig()) -> bool
     prose_tokens = _extract_prose_tokens(full_text)
     if prose_tokens:
         return False
+
+    if all(bool(config.formula_font_pattern.search(s.get("font", ""))) for s in meaningful):
+        return True
 
     has_rel = bool(MATH_RELATION_PATTERN.search(full_text))
     words = re.findall(r"\b[^\W\d_]+\b", full_text, re.UNICODE)
@@ -401,8 +404,9 @@ def parse_pdf(
                     curr_state = None
                     curr_lines: list[dict] = []
 
-                    # Only split by math modality if the raw block is tall enough to contain multi-line formulas + separate headings
-                    split_by_math = (b_bbox[3] - b_bbox[1] > config.min_block_height_for_split_pt)
+                    # Do not split paragraphs into disjoint horizontal strips by math lines;
+                    # inline formulas are preserved as unified text blocks and protected via FormulaIsolator.
+                    split_by_math = False
 
                     for line in lines:
                         l_spans = line.get("spans", [])
@@ -418,18 +422,30 @@ def parse_pdf(
                         line_math = _is_raw_line_math(line, config=config) if split_by_math else False
                         state = (predom_c, line_math)
 
+                        # Horizontal continuity check: do not split lines sharing the same physical row or overlapping vertically
+                        same_row = False
+                        if curr_lines:
+                            last_l = curr_lines[-1]
+                            l_b = line.get("bbox", (0.0, 0.0, 0.0, 0.0))
+                            last_b = last_l.get("bbox", (0.0, 0.0, 0.0, 0.0))
+                            y_overlap = min(l_b[3], last_b[3]) - max(l_b[1], last_b[1])
+                            l_mid_y = (l_b[1] + l_b[3]) / 2.0
+                            last_mid_y = (last_b[1] + last_b[3]) / 2.0
+                            if y_overlap > 1.0 or abs(l_mid_y - last_mid_y) <= 4.0:
+                                same_row = True
+
                         # Disjoint column check: do not merge lines across large horizontal gutters
                         col_break = False
-                        if curr_lines:
+                        if curr_lines and not same_row:
                             g_x0 = min(l.get("bbox", (0.0, 0.0, 0.0, 0.0))[0] for l in curr_lines)
                             g_x1 = max(l.get("bbox", (0.0, 0.0, 0.0, 0.0))[2] for l in curr_lines)
                             l_x0 = line.get("bbox", (0.0, 0.0, 0.0, 0.0))[0]
                             l_x1 = line.get("bbox", (0.0, 0.0, 0.0, 0.0))[2]
-                            if (l_x1 < g_x0 - 15.0) or (l_x0 > g_x1 + 15.0):
+                            if (l_x1 < g_x0 - 45.0) or (l_x0 > g_x1 + 45.0):
                                 col_break = True
 
-                        if (curr_state is None or state == curr_state) and not col_break:
-                            curr_state = state
+                        if (curr_state is None or state == curr_state or same_row) and not col_break:
+                            curr_state = state if not same_row else curr_state
                             curr_lines.append(line)
                         else:
                             line_color_groups.append(curr_lines)

@@ -151,6 +151,7 @@ function IntegrityStrip({
   onSelect,
   pages: pageList,
   counts,
+  rangeLabel,
 }: {
   known: (p: Page) => Page['status'] | 'pending'
   done: number
@@ -160,6 +161,7 @@ function IntegrityStrip({
   onSelect: (n: number) => void
   pages: Page[]
   counts: { blocks: number; cells: number; review: number; preserved: number }
+  rangeLabel?: string
 }) {
   const seg = { ok: 'bg-teal', warn: 'bg-amber', fallback: 'bg-red', pending: 'bg-line' }
   const isLarge = total > 24
@@ -168,7 +170,13 @@ function IntegrityStrip({
       <div className="w-[220px] shrink-0">
         <div className="mb-1.5 flex items-center justify-between text-[12px]">
           <span className="font-bold">Document integrity</span>
-          <span className="font-mono text-muted">{phase === 'idle' ? 'not started' : `${done}/${total} verified`}</span>
+          <span className="font-mono text-muted">
+            {phase === 'idle'
+              ? 'not started'
+              : rangeLabel
+              ? `${done}/${total} verified (${rangeLabel})`
+              : `${done}/${total} verified`}
+          </span>
         </div>
         {isLarge ? (
           <div className="h-2.5 w-full overflow-hidden rounded-[2px] bg-line flex">
@@ -794,6 +802,21 @@ export default function Workspace({
   const [src, setSrc] = useState(() => docInfo?.detectedLang === 'vi' ? 'Vietnamese' : 'English')
   const [tgt, setTgt] = useState(() => docInfo?.detectedLang === 'vi' ? 'English' : 'Vietnamese')
   const [pageRange, setPageRange] = useState('all')
+
+  const [rangeFrom, rangeTo] = useMemo(() => {
+    if (!pageRange || pageRange === 'all') return [1, totalPages]
+    const m = pageRange.match(/^(\d+)(?:\s*-\s*(\d+))?$/)
+    if (m) {
+      const f = parseInt(m[1], 10)
+      const t = m[2] ? parseInt(m[2], 10) : f
+      return [Math.max(1, Math.min(f, totalPages)), Math.max(1, Math.min(t, totalPages))]
+    }
+    return [1, totalPages]
+  }, [pageRange, totalPages])
+
+  const isFullDoc = rangeFrom === 1 && rangeTo === totalPages
+  const activeSelectedCount = Math.max(1, rangeTo - rangeFrom + 1)
+
   const [exportOpen, setExportOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -815,7 +838,7 @@ export default function Workspace({
       .then((pData) => {
         if (!active || !pData) return
         if (pData.status === 'done') {
-          setDone(totalPages)
+          setDone(isFullDoc ? totalPages : activeSelectedCount)
           setOverallPct(100)
           setBackendStage(stages.length)
           setPhase('done')
@@ -888,7 +911,7 @@ export default function Workspace({
             }
             if (pData.status === 'done' && active) {
               if (progressTimer) clearInterval(progressTimer)
-              setDone(totalPages)
+              setDone(isFullDoc ? totalPages : activeSelectedCount)
               setOverallPct(100)
               setBackendStage(stages.length)
               setPhase('done')
@@ -1002,7 +1025,19 @@ export default function Workspace({
   const stage = backendStage != null
     ? (phase === 'done' ? stages.length : backendStage)
     : (phase === 'done' ? stages.length : done === 0 ? 0 : done < Math.floor(totalPages / 3) ? 1 : done < Math.floor((totalPages * 2) / 3) ? 2 : 3)
-  const known = (p: Page) => (phase === 'idle' || p.n > done ? 'pending' : p.status)
+  const known = (p: Page) => {
+    if (phase === 'idle') return 'pending'
+    const inRange = isFullDoc || (p.n >= rangeFrom && p.n <= rangeTo)
+    if (!inRange) {
+      // Pages outside the active range are pristine from source
+      return 'ok'
+    }
+    if (phase === 'processing') {
+      const pageIndexInRange = p.n - rangeFrom + 1
+      if (pageIndexInRange > done) return 'pending'
+    }
+    return integrity?.page_statuses?.[p.n] || (p.status || 'ok')
+  }
 
   const backendIssues: Issue[] = useMemo(() => {
     if (integrity?.issues && Array.isArray(integrity.issues)) {
@@ -1020,7 +1055,7 @@ export default function Workspace({
   }, [integrity])
 
   const visibleIssues = docInfo?.id
-    ? backendIssues.filter((i) => i.page <= done && phase !== 'idle')
+    ? backendIssues.filter((i) => (isFullDoc ? i.page <= done : i.page >= rangeFrom && i.page <= rangeTo) && phase !== 'idle')
     : issues.filter((i) => i.page <= done && phase !== 'idle')
 
   const page = docPages[cur - 1] || docPages[0]
@@ -1203,15 +1238,25 @@ export default function Workspace({
               )}
             </div>
           </div>
-          <IntegrityStrip known={known} done={done} total={totalPages} phase={phase} current={cur} onSelect={select} pages={docPages} counts={counts} />
+          <IntegrityStrip
+            known={known}
+            done={isFullDoc ? done : Math.min(activeSelectedCount, done)}
+            total={isFullDoc ? totalPages : activeSelectedCount}
+            phase={phase}
+            current={cur}
+            onSelect={select}
+            pages={docPages}
+            counts={counts}
+            rangeLabel={isFullDoc ? undefined : `pp. ${rangeFrom}–${rangeTo}`}
+          />
         </div>
         {inspectorOpen && (
           <Inspector
             tab={tab}
             setTab={setTab}
             phase={phase}
-            done={done}
-            total={totalPages}
+            done={isFullDoc ? done : Math.min(activeSelectedCount, done)}
+            total={isFullDoc ? totalPages : activeSelectedCount}
             stage={stage}
             page={page}
             pageState={pageLabel(s)}
