@@ -279,10 +279,18 @@ class ClearancePlanner:
         # Mutual interaction check: ensure approved candidate clearance rects do not overlap
         approved_ids = [b_id for b_id, dec in plan.decisions.items() if dec.is_approved]
         mutual_tolerance = max(2.5, self.padding_pt * 3.0)
+        block_map = {b.block_id: b for b in candidate_blocks}
         for i, id_a in enumerate(approved_ids):
             dec_a = plan.decisions[id_a]
+            b_a = block_map.get(id_a)
+            mid_y_a = (b_a.bbox[1] + b_a.bbox[3]) / 2.0 if b_a else None
             for id_b in approved_ids[i + 1 :]:
                 dec_b = plan.decisions[id_b]
+                b_b = block_map.get(id_b)
+                mid_y_b = (b_b.bbox[1] + b_b.bbox[3]) / 2.0 if b_b else None
+                # Separate vertical lines with standard line-feed (> 10pt) cannot mutually collide
+                if mid_y_a is not None and mid_y_b is not None and abs(mid_y_a - mid_y_b) > 10.0:
+                    continue
                 # Check if any tight line rect of block A intersects any tight line rect of block B
                 overlap = any(
                     rects_intersect(ra, rb, tolerance=mutual_tolerance)
@@ -480,6 +488,13 @@ class ClearancePlanner:
         if page is not None and hasattr(page, "get_drawings"):
             try:
                 for d_idx, drawing in enumerate(page.get_drawings()):
+                    # Ignore pure white background fill rectangles (canvas erasers or label contrast boxes)
+                    d_type = drawing.get("type")
+                    d_fill = drawing.get("fill")
+                    d_color = drawing.get("color")
+                    if d_type == "f" and d_color is None and d_fill in ((1.0, 1.0, 1.0), [1.0, 1.0, 1.0], (1, 1, 1), [1, 1, 1]):
+                        continue
+
                     d_rect = drawing.get("rect")
                     if d_rect:
                         stroke_w = float(drawing.get("width") or 1.0)
@@ -554,12 +569,17 @@ class ClearancePlanner:
             if zone.zone_type == ExclusionZoneType.FORMULA:
                 # Distinguish genuine destructive 2D intrusion from natural adjacent neighbor boundary contact.
                 # In math textbooks and tables, labels naturally sit adjacent to math symbols (e.g. '=', '-', 'Δ').
-                # Clearance padding (self.padding_pt) on both text and formula produces a nominal ~1.0-2.0pt border overlap.
-                # A true destructive collision requires substantial 2D intrusion into the formula glyph region (> 2.5pt in both axes).
+                # Skip inline diacritics / accents / vector arrows (width <= 15pt) horizontally within the block
+                zw = zone.bbox[2] - zone.bbox[0]
+                if zw <= 15.0 and zone.bbox[0] >= block.bbox[0] - 1.0 and zone.bbox[2] <= block.bbox[2] + 1.0:
+                    continue
+
                 def has_destructive_formula_overlap(r1: tuple[float, float, float, float], r2: tuple[float, float, float, float]) -> bool:
                     x_ov = min(r1[2], r2[2]) - max(r1[0], r2[0])
                     y_ov = min(r1[3], r2[3]) - max(r1[1], r2[1])
-                    return (x_ov > 2.5) and (y_ov > 2.5)
+                    if x_ov <= 0.5 or y_ov <= 0.5:
+                        return False
+                    return (x_ov > 2.0 and y_ov > 2.0) or (x_ov > 10.0 and y_ov > 1.5)
 
                 intersects_line = any(has_destructive_formula_overlap(line_rect, zone.bbox) for line_rect in tight_line_rects)
                 # When tight_line_rects are available, they accurately represent the actual text glyphs.
@@ -571,22 +591,27 @@ class ClearancePlanner:
                         protected_object_id=zone.zone_id,
                         bbox=zone.bbox,
                         confidence=zone.confidence,
-                        description=f"Clearance or layout box collides with protected formula ({zone.zone_id}).",
+                        description=f"Clearance collides with protected formula ({zone.zone_id}).",
                     )
                 continue
 
             # Check 3: Image collision
             if zone.zone_type == ExclusionZoneType.IMAGE:
-                # Any image intersection is forbidden in 4C.1 fail-closed scope
-                intersects_line = any(rects_intersect(line_rect, zone.bbox) for line_rect in tight_line_rects)
-                intersects_box = rects_intersect(layout_box, zone.bbox)
+                # Require genuine intrusion into image pixels rather than sub-point clearance padding contact
+                def has_destructive_image_overlap(r1: tuple[float, float, float, float], r2: tuple[float, float, float, float]) -> bool:
+                    x_ov = min(r1[2], r2[2]) - max(r1[0], r2[0])
+                    y_ov = min(r1[3], r2[3]) - max(r1[1], r2[1])
+                    return (x_ov > 1.5) and (y_ov > 1.5)
+
+                intersects_line = any(has_destructive_image_overlap(line_rect, zone.bbox) for line_rect in tight_line_rects)
+                intersects_box = has_destructive_image_overlap(layout_box, zone.bbox) if not tight_line_rects else False
                 if intersects_line or intersects_box:
                     return CollisionDetail(
                         collision_type=ExclusionZoneType.IMAGE.value,
                         protected_object_id=zone.zone_id,
                         bbox=zone.bbox,
                         confidence=zone.confidence,
-                        description=f"Clearance or layout box intersects visual image ({zone.zone_id}).",
+                        description=f"Clearance intersects visual image ({zone.zone_id}).",
                     )
                 continue
 

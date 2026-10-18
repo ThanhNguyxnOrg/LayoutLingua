@@ -91,11 +91,18 @@ def _is_math_char(ch: str) -> bool:
     return False
 
 
+_VOWEL_PATTERN = re.compile(
+    r"[aeiouyàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹ]",
+    re.IGNORECASE,
+)
+
+
 def _extract_prose_tokens(text: str) -> list[str]:
     """Extract natural language prose words (language-agnostic across all Unicode scripts).
 
     A prose word consists of consecutive Unicode alphabetic letters >= 3 chars
-    that are NOT international mathematical function names.
+    that are NOT international mathematical function names, contain vowels,
+    and are not uppercase geometric variable clusters (e.g. ABC, XYZ).
     """
     # Strip superscripts, subscripts, fractions, degree marks, and mathematical symbols
     t_clean = re.sub(
@@ -106,7 +113,18 @@ def _extract_prose_tokens(text: str) -> list[str]:
     # Strip standard ISO math functions
     t_clean = MATH_FUNC_PATTERN.sub(" ", t_clean)
     raw_tokens = re.findall(r"\b[^\W\d_]{3,}\b", t_clean, re.UNICODE)
-    return [t for t in raw_tokens if t.lower() not in _ISO_MATH_FUNCTIONS]
+    valid_prose = []
+    for t in raw_tokens:
+        if t.lower() in _ISO_MATH_FUNCTIONS:
+            continue
+        # 2-4 letter uppercase Latin clusters are geometric vertices / matrices (e.g. ABC, BCD, XYZ)
+        if re.match(r"^[A-Z]{2,4}$", t):
+            continue
+        # Latin words without vowels are math variable products / differentials (e.g. bdx, xdx, uvw, vdu, udv)
+        if re.search(r"[a-zA-Z]", t) and not _VOWEL_PATTERN.search(t):
+            continue
+        valid_prose.append(t)
+    return valid_prose
 
 
 def _compute_math_metrics(text: str, spans: list[GlyphSpan]) -> tuple[float, int, int]:
@@ -185,7 +203,15 @@ def _is_pure_formula_block(spans: list[GlyphSpan], config: ParserConfig = Parser
         if re.search(r"[=≈≤≥<>±∓∫∑∏√!/\\+\\-∗;()\[\]{}|^_~…:≠]", full_text):
             return True
         tokens = [t for t in re.split(r"\s+", full_text) if t]
-        if tokens and all(len(t) <= 2 or t.isdigit() or t.startswith(".") for t in tokens):
+        def is_math_token(t: str) -> bool:
+            return (
+                len(t) <= 2
+                or t.isdigit()
+                or t.startswith(".")
+                or not bool(_VOWEL_PATTERN.search(t))
+                or bool(re.search(r"(?:dx|dy|dz|dt)$", t, re.I))
+            )
+        if tokens and all(is_math_token(t) for t in tokens):
             return True
 
     return False

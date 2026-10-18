@@ -26,10 +26,10 @@ LayoutLingua is designed according to **Deep Module principles**: exposing minim
         │                   │                   │                │
         └───────────────────┴─────────┬─────────┴────────────────┘
                                       │
-                         ┌────────────▼───────────┐
-                         │   DocumentAccumulator  │
-                         │(Atomic Staging Rollback│
-                         └────────────┬───────────┘
+                         ┌────────────▼────────────┐
+                         │   DocumentAccumulator   │
+                         │(Atomic Staging Rollback)│
+                         └────────────┬────────────┘
                                       │
                          ┌────────────▼───────────┐
                          │ Verified Translated PDF│
