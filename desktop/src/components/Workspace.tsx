@@ -199,7 +199,7 @@ function IntegrityStrip({
           </div>
         ))}
       </dl>
-      <span className="text-[11.5px] text-muted font-mono">Engine: PyMuPDF + Typeset</span>
+      <span className="text-[11.5px] text-muted font-mono" title="Pipeline: PyMuPDF Document IR → TypesetEngine v2.0.0">Engine: PyMuPDF + TypesetEngine v2.0.0</span>
     </section>
   )
 }
