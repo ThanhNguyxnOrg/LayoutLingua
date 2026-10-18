@@ -91,11 +91,11 @@ class TextFitTester:
         is_toc = bool(TOC_LEADER_PATTERN.match(text.strip()))
         is_single_line = (height <= 1.8 * orig_font_size) or is_toc
 
-        # For Table of Contents dot-leader lines and single-line labels, allow flexible font floor (down to 0.58x or 5.5pt)
+        # For Table of Contents dot-leader lines and single-line labels, allow flexible font floor (down to 0.50x or 5.0pt)
         # to prevent catastrophic 2-line wrapping in a 1-line bounding box.
-        effective_min_scale = min(options.min_font_scale, 0.58) if (is_single_line or is_toc) else options.min_font_scale
+        effective_min_scale = min(options.min_font_scale, 0.50) if (is_single_line or is_toc) else options.min_font_scale
         effective_min_pt = (
-            min(options.min_font_pt, 5.5)
+            min(options.min_font_pt, 5.0)
             if (is_single_line or is_toc) and options.min_font_pt <= 6.0
             else options.min_font_pt
         )

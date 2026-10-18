@@ -5,11 +5,19 @@ All notable changes to the LayoutLingua project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.1.0] - 2026-10-17
+## [2.0.0] - 2026-10-17
 
 ### Added
-- **TOC & Sibling List Font Harmonization (pdf2zh & BabelDOC Pattern)**:
-  - Harmonizes font sizes across sibling Table of Contents entries and numbered list items to prevent ragged font disparity (alternating between 12pt and 8pt).
+- **Cluster-Level Formula & Layout Clearance (pdf2zh & BabelDOC Pattern)**:
+  - Replaced coarse line-level union bounding boxes with cluster-level span grouping in `compute_tight_line_clearance_regions`.
+  - Prevents bounding boxes from straddling across mathematical grouping braces (Page 7) or fraction division lines and denominators (Pages 6 & 17).
+- **Non-Contracting Dynamic Layout Box Expansion**:
+  - Fixed `compute_expanded_layout_box` in `TypesetEngine` to never contract below original block width (`x1`) when obstacle regions appear at paragraph tails (e.g. Page 11).
+  - Constrained obstacle detection exclusively to the right of the block (`ox0 >= x1 - 5.0`).
+- **Elastic Single-Line Math Label Scaling**:
+  - Lowered minimum font floor for single-line math labels to 0.50x (5.0pt) in `TextFitTester`, allowing labels like Page 13 to fit horizontally without catastrophic vertical overflow.
+- **TOC & Sibling List Font Harmonization**:
+  - Harmonizes font sizes across sibling Table of Contents entries and numbered list items to prevent ragged font disparity.
   - Dynamically adapts dot leaders (`.....`) using the LaTeX `\dotfill` algorithm to ensure page numbers align cleanly to the right margin.
 - **True Bold Font Typography & Heading Casing Preservation**:
   - Bundled version-pinned `DejaVuSans-Bold.ttf` asset with complete Unicode glyph coverage for mathematical symbols and composite Vietnamese diacritics.
@@ -23,16 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed multi-platform CI test suite (`test.yml`) running 245 unit and integration tests across Ubuntu, Windows, and macOS with `pytest`.
   - Standardized automated merge and triage workflow (`auto-merge.yml`) powered by `ThanhNguyxnAgent` with 100% English messaging.
   - Automatic tagging and review assignment to `@ThanhNguyxnOrg/core` (`@RealThanhNguyxn`, `@ThanhNguyxn07`) for critical PRs.
-
-### Fixed
-- **False Formula Collision Rejections**:
-  - Resolved false collision warnings on compound blocks (e.g. Page 21) by inspecting span-level `tight_line_rects` rather than layout-wide bounding boxes.
-- **Single-Line Math Label Truncation**:
-  - Enabled elastic font scaling down to 0.58x (5.5pt) for single-line math labels (e.g. Page 23) to eliminate multi-line wrapping overflow warnings.
-- **Repository Auto-Merge Capability**:
-  - Enabled native GitHub pull request auto-merge on repository settings and cleanly merged all open Dependabot PRs.
-
-## [2.0.0] - 2026-10-16
 
 ### Added
 - **Native Desktop Application (Tauri 2.0 + React 19)**:

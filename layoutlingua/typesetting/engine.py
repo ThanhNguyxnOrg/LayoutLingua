@@ -121,7 +121,7 @@ def compute_expanded_layout_box(
                 if r_bbox and len(r_bbox) == 4:
                     rx0, ry0, rx1, ry1 = r_bbox
                     v_overlap = max(0.0, min(y1, ry1) - max(y0, ry0))
-                    if v_overlap > 2.0 and rx0 >= x0:
+                    if v_overlap > 2.0 and rx0 >= x1 - 5.0:
                         right_limit = min(right_limit, rx0 - 5.0)
 
     # 3. Collect obstacles from vector drawings on scratch_page (e.g. geometric diagrams)
@@ -131,7 +131,7 @@ def compute_expanded_layout_box(
                 dr = drw.get("rect")
                 if dr and (dr.width > 12.0 or dr.height > 12.0):
                     v_overlap = max(0.0, min(y1, dr.y1) - max(y0, dr.y0))
-                    if v_overlap > 2.0 and dr.x0 >= x0:
+                    if v_overlap > 2.0 and dr.x0 >= x1 - 5.0:
                         right_limit = min(right_limit, dr.x0 - 5.0)
         except Exception:
             pass
@@ -143,16 +143,13 @@ def compute_expanded_layout_box(
                 xref = img_info[0]
                 for r in scratch_page.get_image_rects(xref):
                     v_overlap = max(0.0, min(y1, r.y1) - max(y0, r.y0))
-                    if v_overlap > 2.0 and r.x0 >= x0:
+                    if v_overlap > 2.0 and r.x0 >= x1 - 5.0:
                         right_limit = min(right_limit, r.x0 - 5.0)
         except Exception:
             pass
 
-    expanded_x1 = max(x1, min(max_allowed_x1, right_limit))
-    # Never exceed right_limit if right_limit is valid
-    if right_limit > x0 + 10.0:
-        expanded_x1 = min(expanded_x1, right_limit)
-
+    # Never contract below original block width (x1)
+    expanded_x1 = max(x1, min(max_allowed_x1, max(x1, right_limit)))
     return (x0, y0, max(x0 + 10.0, expanded_x1), y1)
 
 

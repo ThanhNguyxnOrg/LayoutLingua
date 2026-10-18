@@ -100,56 +100,51 @@ def compute_tight_line_clearance_regions(
     block: TextBlock,
     padding: float = 0.5,
 ) -> list[tuple[float, float, float, float]]:
-    """Compute tight bounding boxes per line/span with minimal padding.
+    """Compute tight bounding boxes per visual span cluster with minimal padding.
 
-    Groups spans or characters belonging to the same text line, computes the tight union
-    bounding box of that line's glyphs, and adds a small safety padding (<= 0.5 pt).
-    This prevents redaction from clipping adjacent lines, formulas, or container borders.
+    Groups spans by baseline alignment and horizontal proximity (BabelDOC / pdf2zh cluster pattern).
+    Prevents coarse bounding box unions from bridging across protected mathematical symbols,
+    division bars, or grouping braces.
     """
     if not block.spans:
-        # Fallback to block bbox if spans are empty
         x0, y0, x1, y1 = block.bbox
         return [(x0 - padding, y0 - padding, x1 + padding, y1 + padding)]
 
-    # Group spans by line
-    line_groups: dict[str, list[Any]] = {}
-    for s_idx, span in enumerate(block.spans):
-        # 1. Try extracting line identifier from span_id pattern (e.g. p1_b0_l2_s0)
-        match = re.search(r"_l(\d+)_", span.span_id)
-        if match:
-            line_key = f"line_{match.group(1)}"
-        else:
-            # 2. Heuristic grouping by vertical baseline / origin (within 3 pt)
-            origin_y = span.origin[1] if span.origin != (0.0, 0.0) else span.bbox[1]
-            rounded_y = round(origin_y / 3.0) * 3.0
-            line_key = f"y_{rounded_y:.1f}"
+    spans = [s for s in block.spans if s.text.strip()]
+    if not spans:
+        x0, y0, x1, y1 = block.bbox
+        return [(x0 - padding, y0 - padding, x1 + padding, y1 + padding)]
 
-        line_groups.setdefault(line_key, []).append(span)
+    # Cluster spans by baseline alignment (within 3.5pt) and horizontal proximity (within 6.0pt)
+    clusters: list[dict[str, Any]] = []
+    for s in spans:
+        s_box = s.bbox
+        s_mid_y = (s_box[1] + s_box[3]) / 2.0
+        placed = False
+        for cl in clusters:
+            cl_mid_y = (cl["bbox"][1] + cl["bbox"][3]) / 2.0
+            if abs(s_mid_y - cl_mid_y) <= 3.5:
+                gap = max(0.0, max(s_box[0] - cl["bbox"][2], cl["bbox"][0] - s_box[2]))
+                if gap <= 6.0:
+                    cl["spans"].append(s)
+                    cl["bbox"] = (
+                        min(cl["bbox"][0], s_box[0]),
+                        min(cl["bbox"][1], s_box[1]),
+                        max(cl["bbox"][2], s_box[2]),
+                        max(cl["bbox"][3], s_box[3]),
+                    )
+                    placed = True
+                    break
+        if not placed:
+            clusters.append({"spans": [s], "bbox": s_box})
 
     tight_rects: list[tuple[float, float, float, float]] = []
-
-    for _, spans_in_line in line_groups.items():
-        char_boxes: list[tuple[float, float, float, float]] = []
-        for span in spans_in_line:
-            if not span.text.strip():
-                continue
-            if span.chars:
-                for c in span.chars:
-                    if c.char.strip() and c.bbox[2] > c.bbox[0] and c.bbox[3] > c.bbox[1]:
-                        char_boxes.append(c.bbox)
-            else:
-                if span.bbox[2] > span.bbox[0] and span.bbox[3] > span.bbox[1]:
-                    char_boxes.append(span.bbox)
-
-        if not char_boxes:
-            continue
-
-        lx0 = min(b[0] for b in char_boxes) - padding
-        ly0 = min(b[1] for b in char_boxes) - padding
-        lx1 = max(b[2] for b in char_boxes) + padding
-        ly1 = max(b[3] for b in char_boxes) + padding
-
-        # Ensure valid non-inverted bbox
+    for cl in clusters:
+        cb = cl["bbox"]
+        lx0 = cb[0] - padding
+        ly0 = cb[1] - padding
+        lx1 = cb[2] + padding
+        ly1 = cb[3] + padding
         if lx1 > lx0 and ly1 > ly0:
             tight_rects.append((lx0, ly0, lx1, ly1))
 
