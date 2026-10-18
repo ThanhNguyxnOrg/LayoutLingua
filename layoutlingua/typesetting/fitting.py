@@ -89,7 +89,7 @@ class TextFitTester:
         active_font = font_name or self.font_name
 
         is_toc = bool(TOC_LEADER_PATTERN.match(text.strip()))
-        is_single_line = (height <= 1.8 * orig_font_size) or is_toc
+        is_single_line = (height <= 2.2 * orig_font_size) or is_toc
 
         # For Table of Contents dot-leader lines and single-line labels, allow flexible font floor (down to 0.50x or 5.0pt)
         # to prevent catastrophic 2-line wrapping in a 1-line bounding box.
@@ -162,7 +162,7 @@ class TextFitTester:
             # Absorb minor vertical overflow (within 1.2 * min_font_size or 8% box height)
             slight_overflow_threshold = 1.2 * min_font_size
             if abs(rc_compact) <= slight_overflow_threshold:
-                soft_pad = min(height * 0.08, slight_overflow_threshold)
+                soft_pad = min(max(3.0, height * 0.15), slight_overflow_threshold)
                 soft_rect = pymupdf.Rect(x0, y0, x1, y1 + soft_pad)
                 rc_soft = self._page.insert_textbox(
                     soft_rect,

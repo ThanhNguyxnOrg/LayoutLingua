@@ -1068,14 +1068,18 @@ export default function Workspace({
         preserved: integrity.preserved_pages ?? 0,
       }
     }
-    const dp = docPages.filter((p) => p.n <= done && phase !== 'idle')
+    const dp = docPages.filter((p) => {
+      if (phase === 'idle') return false
+      if (isFullDoc) return p.n <= done
+      return p.n >= rangeFrom && p.n <= rangeTo && (p.n - rangeFrom + 1) <= done
+    })
     return {
       blocks: dp.reduce((a, p) => a + p.blockCount, 0),
       cells: dp.reduce((a, p) => a + p.cellCount, 0),
       review: visibleIssues.filter((i) => i.severity === 'warning').length,
       preserved: dp.filter((p) => p.status === 'fallback').length,
     }
-  }, [docPages, done, phase, visibleIssues, integrity])
+  }, [docPages, done, phase, visibleIssues, integrity, isFullDoc, rangeFrom, rangeTo])
 
   const docState: DocState = phase === 'processing' ? 'processing' : phase === 'done' ? (counts.review > 0 ? 'review' : 'done') : (phase === 'provider-error' || phase === 'rate-limited') ? 'failed' : 'not-started'
   const fitW = Math.max(160, Math.min(mode === 'side' ? (box.w - 64) / 2 : box.w - 48, ((box.h - 56) * 210) / 297))

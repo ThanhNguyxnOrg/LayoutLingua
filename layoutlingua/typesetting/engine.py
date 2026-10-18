@@ -95,7 +95,7 @@ def compute_expanded_layout_box(
     # In academic publications and multi-column books (BabelDOC layout preservation):
     # Multi-line paragraphs should not arbitrarily blow up to full page width into neighboring figures.
     # Allow at most 15% horizontal expansion for paragraphs, while single-line titles can use margin whitespace.
-    is_multiline_column = (orig_h > 26.0) and (orig_w < page_width * 0.70)
+    is_multiline_column = (orig_h > 42.0) and (orig_w < page_width * 0.70)
     if is_multiline_column:
         max_allowed_x1 = min(x0 + orig_w * 1.15, page_width - margin_padding)
     else:
@@ -148,9 +148,23 @@ def compute_expanded_layout_box(
         except Exception:
             pass
 
-    # Never contract below original block width (x1)
+    # 5. Vertical expansion: allow single/double line blocks (captions, headings) to expand vertically downward into whitespace
+    bottom_limit = y1
+    if orig_h <= 30.0:
+        max_allowed_y1 = y1 + orig_h * 1.5
+        bottom_limit = max_allowed_y1
+        for other in page_blocks:
+            if other.block_id == current_block_id:
+                continue
+            ox0, oy0, ox1, oy1 = other.bbox
+            h_overlap = max(0.0, min(x1, ox1) - max(x0, ox0))
+            if h_overlap > 2.0 and oy0 >= y1 - 2.0:
+                bottom_limit = min(bottom_limit, oy0 - 4.0)
+
+    # Never contract below original block width (x1) or height (y1)
     expanded_x1 = max(x1, min(max_allowed_x1, max(x1, right_limit)))
-    return (x0, y0, max(x0 + 10.0, expanded_x1), y1)
+    expanded_y1 = max(y1, bottom_limit)
+    return (x0, y0, max(x0 + 10.0, expanded_x1), expanded_y1)
 
 
 class TypesetEngine:

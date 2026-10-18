@@ -457,6 +457,12 @@ class ClearancePlanner:
                 for img_idx, img in enumerate(page.get_image_info()):
                     raw_bbox = img.get("bbox")
                     if raw_bbox:
+                        # Ignore tiny inline symbol icons (e.g. similarity icon ~ width <= 25pt, height <= 12pt)
+                        img_w = float(raw_bbox[2]) - float(raw_bbox[0])
+                        img_h = float(raw_bbox[3]) - float(raw_bbox[1])
+                        if img_w <= 25.0 and img_h <= 12.0:
+                            continue
+
                         zones.append(
                             ExclusionZone(
                                 zone_id=f"image_{img_idx}",
@@ -497,6 +503,16 @@ class ClearancePlanner:
 
                     d_rect = drawing.get("rect")
                     if d_rect:
+                        # Ignore tiny single-line mathematical radical strokes / tick marks (e.g. sqrt ticks dx <= 3.5pt, dy <= 16.0pt)
+                        d_items = drawing.get("items", [])
+                        if len(d_items) == 1 and d_items[0][0] == "l":
+                            if d_rect.width <= 3.5 and d_rect.height <= 16.0:
+                                continue
+
+                        # Ignore mathematical square root radical polygon drawings (e.g. standard 11-segment radical polygon <= 35pt height)
+                        if len(d_items) == 11 and d_type == "f" and d_rect.height <= 35.0:
+                            continue
+
                         stroke_w = float(drawing.get("width") or 1.0)
                         # Expand stroke bounds so horizontal/vertical lines have real visual geometry
                         half_w = max(stroke_w / 2.0, 0.5) if drawing.get("color") or drawing.get("type") in ("s", "fs") else 0.0
@@ -578,6 +594,11 @@ class ClearancePlanner:
                     x_ov = min(r1[2], r2[2]) - max(r1[0], r2[0])
                     y_ov = min(r1[3], r2[3]) - max(r1[1], r2[1])
                     if x_ov <= 0.5 or y_ov <= 0.5:
+                        return False
+                    # Allow minor vertical contact for underbrace/overbrace annotations (small subtext label below formula)
+                    r1_mid_y = (r1[1] + r1[3]) / 2.0
+                    r1_h = r1[3] - r1[1]
+                    if r1_mid_y > r2[3] - 2.0 and y_ov <= 3.0 and x_ov <= 40.0 and r1_h <= 14.0:
                         return False
                     return (x_ov > 2.0 and y_ov > 2.0) or (x_ov > 10.0 and y_ov > 1.5)
 

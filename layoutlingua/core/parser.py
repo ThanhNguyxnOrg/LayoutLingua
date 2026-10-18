@@ -114,8 +114,12 @@ def _extract_prose_tokens(text: str) -> list[str]:
     t_clean = MATH_FUNC_PATTERN.sub(" ", t_clean)
     raw_tokens = re.findall(r"\b[^\W\d_]{3,}\b", t_clean, re.UNICODE)
     valid_prose = []
+    _ALGEBRA_VARIABLE_WORDS = {
+        "abx", "bxdx", "axb", "cbx", "xab", "xbc", "cdx", "udv", "vdu", "cdu", "bdx", "xdx", "ydy", "zdz"
+    }
     for t in raw_tokens:
-        if t.lower() in _ISO_MATH_FUNCTIONS:
+        t_low = t.lower()
+        if t_low in _ISO_MATH_FUNCTIONS or t_low in _ALGEBRA_VARIABLE_WORDS:
             continue
         # 2-4 letter uppercase Latin clusters are geometric vertices / matrices (e.g. ABC, BCD, XYZ)
         if re.match(r"^[A-Z]{2,4}$", t):
@@ -215,6 +219,60 @@ def _is_pure_formula_block(spans: list[GlyphSpan], config: ParserConfig = Parser
             return True
 
     return False
+
+
+def _partition_lines_into_columns(lines: list[dict], min_gutter_pt: float = 20.0) -> list[list[dict]]:
+    """Partition lines of a raw block into distinct horizontal columns if multi-column table layout is present.
+
+    In technical and tabular PDFs (e.g. symbol tables, key-value indices), PyMuPDF frequently groups multiple
+    horizontal columns into a single raw block, causing reading order jumbling and layout collapse.
+    Following BabelDOC and PDFMathTranslate, we find unobstructed vertical whitespace gutters between columns.
+    """
+    if len(lines) <= 1:
+        return [lines]
+
+    intervals: list[tuple[float, float]] = []
+    for l in lines:
+        b = l.get("bbox")
+        if b and (b[2] > b[0]):
+            intervals.append((float(b[0]), float(b[2])))
+    if not intervals:
+        return [lines]
+
+    intervals.sort(key=lambda it: it[0])
+    merged: list[tuple[float, float]] = [intervals[0]]
+    for cur in intervals[1:]:
+        prev = merged[-1]
+        if cur[0] <= prev[1] + 2.0:
+            merged[-1] = (prev[0], max(prev[1], cur[1]))
+        else:
+            merged.append(cur)
+
+    cut_points: list[float] = []
+    for i in range(len(merged) - 1):
+        gap = merged[i + 1][0] - merged[i][1]
+        if gap >= min_gutter_pt:
+            cut_points.append((merged[i][1] + merged[i + 1][0]) / 2.0)
+
+    if not cut_points:
+        return [lines]
+
+    columns: list[list[dict]] = [[] for _ in range(len(cut_points) + 1)]
+    for l in lines:
+        b = l.get("bbox", (0.0, 0.0, 0.0, 0.0))
+        mid_x = (b[0] + b[2]) / 2.0
+        col_idx = 0
+        for cp in cut_points:
+            if mid_x >= cp:
+                col_idx += 1
+            else:
+                break
+        columns[col_idx].append(l)
+
+    non_empty = [c for c in columns if c]
+    for col in non_empty:
+        col.sort(key=lambda l: l.get("bbox", (0.0, 0.0, 0.0, 0.0))[1])
+    return non_empty if non_empty else [lines]
 
 
 def _is_raw_line_math(line: dict, config: ParserConfig = ParserConfig()) -> bool:
@@ -425,63 +483,64 @@ def parse_pdf(
                         l_spans = line.get("spans", [])
                         l_spans.sort(key=lambda s: s.get("bbox", (0.0, 0.0, 0.0, 0.0))[0])
 
-                    # Group lines with matching predominant colors and matching math/prose modality
-                    line_color_groups: list[list[dict]] = []
-                    curr_state = None
-                    curr_lines: list[dict] = []
+                    # Partition lines into distinct vertical column lanes (BabelDOC / pdf2zh architecture)
+                    column_lanes = _partition_lines_into_columns(lines)
 
-                    # Do not split paragraphs into disjoint horizontal strips by math lines;
-                    # inline formulas are preserved as unified text blocks and protected via FormulaIsolator.
+                    # Group lines with matching predominant colors and matching math/prose modality
+                    line_color_groups: list[tuple[int, list[dict]]] = []
                     split_by_math = False
 
-                    for line in lines:
-                        l_spans = line.get("spans", [])
-                        predom_c = None
-                        for s in l_spans:
-                            txt = s.get("text") or ("".join(c.get("c", "") for c in s.get("chars", [])) if "chars" in s else "")
-                            if txt.strip():
-                                predom_c = s.get("color", 0)
-                                break
-                        if predom_c is None and l_spans:
-                            predom_c = l_spans[0].get("color", 0)
+                    for col_idx, col_lines in enumerate(column_lanes):
+                        curr_state = None
+                        curr_lines: list[dict] = []
+                        for line in col_lines:
+                            l_spans = line.get("spans", [])
+                            predom_c = None
+                            for s in l_spans:
+                                txt = s.get("text") or ("".join(c.get("c", "") for c in s.get("chars", [])) if "chars" in s else "")
+                                if txt.strip():
+                                    predom_c = s.get("color", 0)
+                                    break
+                            if predom_c is None and l_spans:
+                                predom_c = l_spans[0].get("color", 0)
 
-                        line_math = _is_raw_line_math(line, config=config) if split_by_math else False
-                        state = (predom_c, line_math)
+                            line_math = _is_raw_line_math(line, config=config) if split_by_math else False
+                            state = (predom_c, line_math)
 
-                        # Horizontal continuity check: do not split lines sharing the same physical row or overlapping vertically
-                        same_row = False
+                            # Horizontal continuity check: do not split lines sharing the same physical row or overlapping vertically
+                            same_row = False
+                            if curr_lines:
+                                last_l = curr_lines[-1]
+                                l_b = line.get("bbox", (0.0, 0.0, 0.0, 0.0))
+                                last_b = last_l.get("bbox", (0.0, 0.0, 0.0, 0.0))
+                                y_overlap = min(l_b[3], last_b[3]) - max(l_b[1], last_b[1])
+                                l_mid_y = (l_b[1] + l_b[3]) / 2.0
+                                last_mid_y = (last_b[1] + last_b[3]) / 2.0
+                                if y_overlap > 1.0 or abs(l_mid_y - last_mid_y) <= 4.0:
+                                    same_row = True
+
+                            # Disjoint column check: do not merge lines across large horizontal gutters
+                            col_break = False
+                            if curr_lines and not same_row:
+                                g_x0 = min(l.get("bbox", (0.0, 0.0, 0.0, 0.0))[0] for l in curr_lines)
+                                g_x1 = max(l.get("bbox", (0.0, 0.0, 0.0, 0.0))[2] for l in curr_lines)
+                                l_x0 = line.get("bbox", (0.0, 0.0, 0.0, 0.0))[0]
+                                l_x1 = line.get("bbox", (0.0, 0.0, 0.0, 0.0))[2]
+                                if (l_x1 < g_x0 - 45.0) or (l_x0 > g_x1 + 45.0):
+                                    col_break = True
+
+                            if (curr_state is None or state == curr_state or same_row) and not col_break:
+                                curr_state = state if not same_row else curr_state
+                                curr_lines.append(line)
+                            else:
+                                line_color_groups.append((col_idx, curr_lines))
+                                curr_lines = [line]
+                                curr_state = state
+
                         if curr_lines:
-                            last_l = curr_lines[-1]
-                            l_b = line.get("bbox", (0.0, 0.0, 0.0, 0.0))
-                            last_b = last_l.get("bbox", (0.0, 0.0, 0.0, 0.0))
-                            y_overlap = min(l_b[3], last_b[3]) - max(l_b[1], last_b[1])
-                            l_mid_y = (l_b[1] + l_b[3]) / 2.0
-                            last_mid_y = (last_b[1] + last_b[3]) / 2.0
-                            if y_overlap > 1.0 or abs(l_mid_y - last_mid_y) <= 4.0:
-                                same_row = True
+                            line_color_groups.append((col_idx, curr_lines))
 
-                        # Disjoint column check: do not merge lines across large horizontal gutters
-                        col_break = False
-                        if curr_lines and not same_row:
-                            g_x0 = min(l.get("bbox", (0.0, 0.0, 0.0, 0.0))[0] for l in curr_lines)
-                            g_x1 = max(l.get("bbox", (0.0, 0.0, 0.0, 0.0))[2] for l in curr_lines)
-                            l_x0 = line.get("bbox", (0.0, 0.0, 0.0, 0.0))[0]
-                            l_x1 = line.get("bbox", (0.0, 0.0, 0.0, 0.0))[2]
-                            if (l_x1 < g_x0 - 45.0) or (l_x0 > g_x1 + 45.0):
-                                col_break = True
-
-                        if (curr_state is None or state == curr_state or same_row) and not col_break:
-                            curr_state = state if not same_row else curr_state
-                            curr_lines.append(line)
-                        else:
-                            line_color_groups.append(curr_lines)
-                            curr_lines = [line]
-                            curr_state = state
-
-                    if curr_lines:
-                        line_color_groups.append(curr_lines)
-
-                    for sub_idx, sub_lines in enumerate(line_color_groups):
+                    for sub_idx, (col_idx, sub_lines) in enumerate(line_color_groups):
                         spans: list[GlyphSpan] = []
                         sub_min_x0 = b_bbox[0]
                         sub_min_y0 = b_bbox[1]
@@ -594,7 +653,7 @@ def parse_pdf(
                         if not any(s.text.strip() for s in spans):
                             continue
 
-                        suffix = f"_{sub_idx}" if len(line_color_groups) > 1 else ""
+                        suffix = f"_{col_idx}_{sub_idx}" if len(column_lanes) > 1 else (f"_{sub_idx}" if len(line_color_groups) > 1 else "")
                         block_id = f"p{page_num}_block_{block_idx}{suffix}"
                         is_formula = _is_pure_formula_block(spans, config=config)
                         text_block = TextBlock(
