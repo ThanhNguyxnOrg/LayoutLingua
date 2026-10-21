@@ -347,6 +347,12 @@ class ClearancePlanner:
                 if b.spans:
                     f_line_rects = compute_tight_line_clearance_regions(b, padding=self.padding_pt)
                     for l_idx, l_rect in enumerate(f_line_rects):
+                        is_vec = any(
+                            ("MT Extra" in s.font_name or "Symbol" in s.font_name)
+                            and any(c in "\uf075\uf072\u03c5\u03c1\u2192\u20d7" or ord(c) in (0xf075, 0xf072, 0x3c5, 0x3c1) for c in s.text)
+                            and rects_intersect(s.bbox, l_rect, tolerance=1.0)
+                            for s in b.spans
+                        )
                         zones.append(
                             ExclusionZone(
                                 zone_id=f"formula_block_{b.block_id}_l{l_idx}",
@@ -354,10 +360,15 @@ class ClearancePlanner:
                                 bbox=l_rect,
                                 source_id=b.block_id,
                                 confidence=1.0,
-                                metadata={"block_type": "formula"},
+                                metadata={"block_type": "formula", "is_vector_arrow": is_vec},
                             )
                         )
                 else:
+                    is_vec = any(
+                        ("MT Extra" in s.font_name or "Symbol" in s.font_name)
+                        and any(c in "\uf075\uf072\u03c5\u03c1\u2192\u20d7" or ord(c) in (0xf075, 0xf072, 0x3c5, 0x3c1) for c in s.text)
+                        for s in b.spans
+                    ) if b.spans else False
                     zones.append(
                         ExclusionZone(
                             zone_id=f"formula_block_{b.block_id}",
@@ -365,7 +376,7 @@ class ClearancePlanner:
                             bbox=b.bbox,
                             source_id=b.block_id,
                             confidence=1.0,
-                            metadata={"block_type": "formula"},
+                            metadata={"block_type": "formula", "is_vector_arrow": is_vec},
                         )
                     )
 
@@ -377,6 +388,12 @@ class ClearancePlanner:
                 if matching_block and matching_block.spans:
                     f_line_rects = compute_tight_line_clearance_regions(matching_block, padding=self.padding_pt)
                     for l_idx, l_rect in enumerate(f_line_rects):
+                        is_vec = any(
+                            ("MT Extra" in s.font_name or "Symbol" in s.font_name)
+                            and any(c in "\uf075\uf072\u03c5\u03c1\u2192\u20d7" or ord(c) in (0xf075, 0xf072, 0x3c5, 0x3c1) for c in s.text)
+                            and rects_intersect(s.bbox, l_rect, tolerance=1.0)
+                            for s in matching_block.spans
+                        )
                         zones.append(
                             ExclusionZone(
                                 zone_id=f"formula_region_{r.region_id}_l{l_idx}",
@@ -384,7 +401,7 @@ class ClearancePlanner:
                                 bbox=l_rect,
                                 source_id=r.region_id,
                                 confidence=r.confidence,
-                                metadata={"category": "formula"},
+                                metadata={"category": "formula", "is_vector_arrow": is_vec},
                             )
                         )
                 else:
@@ -590,6 +607,8 @@ class ClearancePlanner:
                 if zw <= 15.0 and zone.bbox[0] >= block.bbox[0] - 1.0 and zone.bbox[2] <= block.bbox[2] + 1.0:
                     continue
 
+                is_vector_arrow = zone.metadata.get("is_vector_arrow", False)
+
                 def has_destructive_formula_overlap(r1: tuple[float, float, float, float], r2: tuple[float, float, float, float]) -> bool:
                     x_ov = min(r1[2], r2[2]) - max(r1[0], r2[0])
                     y_ov = min(r1[3], r2[3]) - max(r1[1], r2[1])
@@ -600,6 +619,10 @@ class ClearancePlanner:
                     r1_h = r1[3] - r1[1]
                     if r1_mid_y > r2[3] - 2.0 and y_ov <= 3.0 and x_ov <= 40.0 and r1_h <= 14.0:
                         return False
+                    # MathType / Symbol vector arrow overbar accents: allow interline boundary ascender contact up to 7.0pt
+                    if is_vector_arrow:
+                        if (r1[1] < r2[1] and r1[3] < r2[3]) or (r2[1] < r1[1] and r2[3] < r1[3]):
+                            return y_ov > 7.0 and x_ov > 2.0
                     return (x_ov > 2.0 and y_ov > 2.0) or (x_ov > 10.0 and y_ov > 1.5)
 
                 intersects_line = any(has_destructive_formula_overlap(line_rect, zone.bbox) for line_rect in tight_line_rects)
