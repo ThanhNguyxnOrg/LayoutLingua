@@ -60,6 +60,8 @@ All notable changes to **LayoutLingua** are documented in this file.
 - **Symbol table row separation**: geometric row-obstacle guards stop adjacent table rows from merging vertically.
 - **Flicker-free live preview**: stable run-scoped page keys — completed pages never unmount while later pages translate.
 - **Export size & speed**: save-once + `subsetFonts()` + garbage-collected output — full 96-page document **46MB → ~1.5MB**, export < 1s. ⚡
+- **🧮 Word-level formula pinning ported to the Python engine**: word tokens classified with the TS rules (`vflag` fonts, 2D sub/superscript adjacency, contextual italic recovery) and a token-flow typesetting path that freezes original math glyphs while drawing translated prose into the gaps — inline formulas render in position on the desktop engine (the shattered `f ′ x 0` fragments are gone). Includes sequential baseline-row clustering and strictly intra-line adjacency.
+- **🔌 Google mirror stack + per-segment requests**: `client=at` mirrors with the AndroidTranslate UA tier first; delimiter packing replaced by segment-level requests (Google mangles the formula placeholders of every segment after the first — A/B verified).
 - **Honest provider behaviour on both engines** 🤝: selecting **Argos Translate** without its offline runtime now fails explicitly instead of silently falling back to Google Translate RPC (web engine returns a 400 with guidance; the desktop engine raises the same error) — the offline privacy promise is never faked. The Settings card is labelled `DESKTOP ONLY` in the browser.
 - **Desktop export slimming**: the Python accumulator subsets embedded fonts and garbage-collects the output — 96-page export **53.9MB → ~1.4MB**, matching the web engine.
 

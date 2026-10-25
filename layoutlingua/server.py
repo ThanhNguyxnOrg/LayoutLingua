@@ -864,12 +864,38 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 )
                 page_w = float(page_ir.geometry.width) if page_ir else 595.0
                 page_h = float(page_ir.geometry.height) if page_ir else 842.0
+
+                # Navigation links: source GoTo annotations become #page=N uris
+                goto_links: list[dict[str, Any]] = []
+                try:
+                    nav_doc = pymupdf.open(stream=session.get("source_pdf_bytes") or b"", filetype="pdf")
+                    if 0 <= page_num - 1 < len(nav_doc):
+                        for lnk in nav_doc[page_num - 1].get_links():
+                            if lnk.get("kind") == pymupdf.LINK_GOTO and lnk.get("page") is not None:
+                                goto_links.append(lnk)
+                    nav_doc.close()
+                except Exception:
+                    goto_links = []
+
+                def _overlaps_link(bx: tuple[float, float, float, float]) -> Optional[int]:
+                    bx0, by0, bx1, by1 = bx
+                    for lnk in goto_links:
+                        r = lnk.get("from")
+                        if r is None:
+                            continue
+                        overlap_x = min(bx1, r.x1) - max(bx0, r.x0)
+                        overlap_y = min(by1, r.y1) - max(by0, r.y0)
+                        if overlap_x > 1 and overlap_y > 1:
+                            return int(lnk["page"]) + 1
+                    return None
+
                 if page_ir is not None:
                     for b in page_ir.blocks:
                         try:
                             bx0, by0, bx1, by1 = b.bbox
                         except Exception:
                             continue
+                        nav_target = _overlaps_link((float(bx0), float(by0), float(bx1), float(by1)))
                         blocks_out.append({
                             "id": b.block_id,
                             "kind": b.block_type,
@@ -885,6 +911,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                             "translatedText": b.text,
                             "fontScale": 1.0,
                             "preserved": True,
+                            **({"uri": f"#page={nav_target}"} if nav_target else {}),
                         })
                 self._send_json({
                     "page": page_num,
