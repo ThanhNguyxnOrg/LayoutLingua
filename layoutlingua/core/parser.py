@@ -74,6 +74,19 @@ class ParserConfig:
     min_math_density_ratio: float = 0.55
 
 
+_NORMALIZER_MANAGERSingleton = None
+
+
+def _get_normalizer_manager():
+    """Lazily construct the text normalizer chain (VNI/TCVN3 legacy decode + NFC)."""
+    global _NORMALIZER_MANAGERSingleton
+    if _NORMALIZER_MANAGERSingleton is None:
+        from layoutlingua.processing.normalizers.manager import TextNormalizationManager
+
+        _NORMALIZER_MANAGERSingleton = TextNormalizationManager()
+    return _NORMALIZER_MANAGERSingleton
+
+
 def _is_math_char(ch: str) -> bool:
     """Check if a character is a mathematical symbol, Greek letter, or operator (language-agnostic)."""
     cat = unicodedata.category(ch)
@@ -580,6 +593,13 @@ def parse_pdf(
                                     from layoutlingua.processing.text_sanitizer import sanitize_extracted_text
 
                                     s_text = sanitize_extracted_text(s_text)
+                                    # Decode legacy Vietnamese font encodings (VNI-Times /
+                                    # TCVN3) into Unicode NFC — the same decode the TS
+                                    # engine applies; without it VNI sections extract as
+                                    # 'cô soá' / 'ñ' and never match prose classification.
+                                    s_text = _get_normalizer_manager().normalize_text(
+                                        s_text, font_name=str(s.get("font", ""))
+                                    ).text
 
                                 # Preserve word separation across line breaks within a block
                                 is_last_span_in_line = (span_idx == len(line_spans) - 1)
