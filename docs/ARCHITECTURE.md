@@ -36,29 +36,27 @@ LayoutLingua follows John Ousterhout's **Deep Module** design principle: each co
 
 ---
 
-## 2. 🖥 Two Synchronized Runtimes
+## 2. 🖥 Single Runtime — One Engine, One UI
 
-LayoutLingua ships **one React UI** on top of **two engines sharing an identical REST contract**:
+LayoutLingua ships **one runtime**: the Python engine is the whole backend, and `desktop/src/` is the single copy of the React UI that the Tauri shell builds and serves.
 
-| | 🌐 **Web Stack** | 🖥️ **Desktop Stack** |
-|:---|:---|:---|
-| **Shell** | Browser tab | Tauri v2 native window (`desktop/src-tauri/`) |
-| **UI bundle** | `src/` (Vite served by `server.ts`) | `desktop/src/` (Vite `:5173`, Tauri dev/build) |
-| **Engine** | TypeScript MuPDF + pdf-lib (`server.ts` → `src/engine/pdfTranslator.ts`) on `:3000` | Python engine (`layoutlingua/server.py` — PyMuPDF TypesetEngine) on `127.0.0.1:8765` |
-| **Session store** | `.cache/sessions/<sha256>/` | OS cache dir via `platformdirs` (`…/layoutlingua/Cache/sessions/`) |
-| **Lifecycle** | `npm run dev` / `npm start` | Tauri auto-spawns the Python sidecar (`CREATE_NO_WINDOW`), kills it on exit |
+| | 🖥️ LayoutLingua Desktop |
+|:---|:---|
+| **Shell** | Tauri v2 native window (`desktop/src-tauri/`) |
+| **UI bundle** | `desktop/src/` (Vite `:5173` during development, bundled by `npm run tauri build`) |
+| **Engine** | `layoutlingua/server.py` — PyMuPDF vector core on `http://127.0.0.1:8765` |
+| **Session store** | OS cache dir via `platformdirs` (`…/layoutlingua/Cache/sessions/`) |
+| **Lifecycle** | Tauri auto-spawns the Python sidecar (`CREATE_NO_WINDOW`), kills it on exit; `start_app.bat` does the same for portable builds |
 
-> ✅ **Parity matrix** — both engines implement: `session-status` resume, content-hash upload dedupe, `cancel` (keeps translated pages), `page-preview?format=meta` block metadata, disk-persisted sessions, and the full export contract. See the [README API section](../README.md#-rest-api--dual-engine-contract).
+> ✅ **Provider honesty**: every provider must be genuinely available at translate time — Gemini requires its API key, OpenAI-compatible requires a key or a local endpoint, and Argos requires the `argostranslate` runtime. A missing dependency stops the job with an explicit error instead of silently falling back to another provider.
 
 ---
-
 ## 3. 📂 Repository Directory Layout
 
 ```text
 LayoutLingua/
 ├── README.md                         # 🏠 Documentation hub — links to every doc in docs/
-├── server.ts                         # 🌐 Express full-stack server, REST endpoints & .cache/sessions store
-├── src/                              # 🎨 Web UI + TS translation engine
+├── desktop/                          # 🖥️ Tauri v2 desktop stack
 │   ├── App.tsx                       # Root application shell, navigation rail & modal orchestration
 │   ├── main.tsx                      # React 19 entry point
 │   ├── index.css                     # Tailwind CSS v4 design tokens & studio typography
@@ -108,7 +106,7 @@ LayoutLingua/
 
 ## 4. 🔬 Deep Module Specifications
 
-### 🧩 Module A: `analyzePdfPageLayout` (`src/engine/pdfTranslator.ts`)
+### 🧩 Module A: `analyzePdfPageLayout` (`layoutlingua/`)
 - **Responsibility**: Extracts structured characters from a MuPDF page, normalizes legacy encodings, partitions tokens into `ProseGroup`s vs. `MathObstacle`s / `LinkObstacle`s, and computes pixel-exact horizontal clearances.
 - **Pipeline Stages**:
   1. **🔍 Structured Text Walk**: Walks `page.toStructuredText('preserve-whitespace')` to capture every glyph's quad (`x0, y0, x1, y1`), baseline origin (`ox, oy`), font name, weight/style flags (`bold, italic, serif, mono`), size, and RGB fill color.
@@ -119,7 +117,7 @@ LayoutLingua/
   6. **📡 Pixmap Ray-Cast Clearance**: Renders a 1x RGB pixmap of the page and scans horizontally left and right from each `ProseSpan` to find the exact clearance (`leftClearanceX`, `rightClearanceX`) before hitting ink from diagrams, braces, or adjacent columns.
   7. **🧱 Multi-Line Paragraph Merging (`canMerge`)**: Merges consecutive `ProseSpan`s into `ProseGroup`s when style, color, background, column alignment, and line-width fill ratio match—while refusing to merge across horizontal table borders or parallel formula table rows.
 
-### 🌍 Module B: `translateBatchWithFormulaShield` (`src/engine/pdfTranslator.ts`)
+### 🌍 Module B: `translateBatchWithFormulaShield` (`layoutlingua/`)
 - **Responsibility**: Translates an array of `ProseGroup` strings while guaranteeing 100% invariance of inline mathematical expressions and domain terminology.
 - **Pipeline Stages**:
   1. **🔠 ALL-CAPS Heading Recasing**: Converts ALL-CAPS headings to sentence case before NMT so subword BPE tokenizers never truncate uppercase endings, then restores uppercase after translation.
@@ -128,7 +126,7 @@ LayoutLingua/
   4. **🔀 Multi-Provider Dispatch**: Routes batches through Gemini 2.5 Flash, OpenAI-compatible endpoints, or multi-mirror Google Translate (`client=at` POST + `client=gtx` GET) with SHA-256 in-memory caching.
   5. 🩹 **Self-Healing Token Restoration (`restoreFormulas`)**: Repairs any NMT spacing or bracket mutations (`[M0]`, `【M 0】` $\rightarrow$ `⟦M0⟧`) and restores exact formula strings.
 
-### 🖋️ Module C: `translateAndTypesetPage` (`src/engine/pdfTranslator.ts`)
+### 🖋️ Module C: `translateAndTypesetPage` (`layoutlingua/`)
 - **Responsibility**: Executes Two-Pass Selective Erasure and Adaptive Vector Typesetting onto a `pdf-lib` `PDFPage`.
 - **🧽 Pass 1 (Selective Prose Erasure)**:
   - Draws background-matched rectangles (`sampleBackgroundRGB`) over each `ProseSpan` of every translated `ProseGroup`, clipped strictly by neighboring `MathObstacle`s so adjacent fraction bars, integrals, and curly braces are never touched.
@@ -137,7 +135,7 @@ LayoutLingua/
   - **➡️ Single-Line Spans (`spans.length === 1`)**: Uses bidirectional clearance (`availLeftShift` + `rightClearanceX`), 2-line compact wrapping when unobstructed below, or anisotropic `Tz` horizontal condensation (`82%–100%` for multi-word text, **`72%` for a single word** — a lone word has no wrap points and may ride the same 72–78% squeeze the TOC/multi-line paths use) combined with vertical font scaling.
   - **📚 Multi-Line Paragraphs (`spans.length > 1`)**: Binary-searches font scale from `1.0` down to `effectiveMinScale`, falling back to horizontal condensation (`Tz` at `92%`, `86%`, `80%`) so all translated lines fit within `maxBottomY` without ever dropping or truncating lines.
 
-### 💾 Module D: Dual-Layer Session Persistence (`server.ts` & `src/services/history.ts`)
+### 💾 Module D: Dual-Layer Session Persistence (`layoutlingua/server.py` & desktop IndexedDB)
 - **🗄️ Backend Disk Store (`.cache/sessions/<docId>/`)**:
   - Keyed by the 12-character SHA-256 content hash of the uploaded PDF (or the client-provided `X-Doc-Id`).
   - Stores `source.pdf`, `translated.pdf`, and `state.json` (`page_results`, `progress`, `integrity`, `page_dimensions`).

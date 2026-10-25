@@ -1,5 +1,0 @@
-{
-  "name": "LayoutLingua — Layout-Aware Document Translation",
-  "description": "LayoutLingua translates PDF documents while preserving original page geometry, mathematical equations, table grid structures, and navigation links.",
-  "requestFramePermissions": []
-}

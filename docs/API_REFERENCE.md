@@ -16,17 +16,16 @@
 
 <p>
   <img src="https://img.shields.io/badge/🔌_API-REST_+_Binary_Streams-0D9488?style=for-the-badge" alt="REST API" />
-  <img src="https://img.shields.io/badge/🌐_Web_Engine-:3000_(server.ts)-0284C7?style=for-the-badge" alt="Web Engine" />
+  <img src="https://img.shields.io/badge/🖥️_Engine-Python_::8765-FFC131?style=for-the-badge" alt="Engine" />
   <img src="https://img.shields.io/badge/🐍_Desktop_Engine-:8765_(server.py)-FFC131?style=for-the-badge" alt="Python Engine" />
   <img src="https://img.shields.io/badge/✅_Contract-100%25_Parity-22C55E?style=for-the-badge" alt="Parity" />
 </p>
 
-All backend routes are served under `/api/*` by **either** engine:
+All backend routes are served under `/api/*` by the LayoutLingua engine:
 
-- 🌐 **Web stack**: `server.ts` (Express + MuPDF WASM + pdf-lib) on `http://localhost:3000`
-- 🖥️ **Desktop stack**: `layoutlingua/server.py` (Python + PyMuPDF) on `http://127.0.0.1:8765`
+- 🖥️ **Engine**: `layoutlingua/server.py` (Python + PyMuPDF vector core) on `http://127.0.0.1:8765` — the single backend serving the React desktop UI.
 
-> ✅ Both engines implement the **same contract** below — the React UI runs unchanged on top of either one.
+> ✅ Every endpoint below is the live contract of that engine.
 
 ---
 
@@ -201,14 +200,15 @@ Discovers models from any OpenAI-compatible endpoint (`/v1/models`).
 
 ---
 
-## 🧭 Engine Parity Notes
+## 🧭 Runtime Notes
 
-| Capability | 🌐 `server.ts` | 🐍 `server.py` |
-|:---|:---:|:---:|
-| Upload + content-hash dedupe (`X-Doc-Id`) | ✅ | ✅ |
-| `session-status` disk recovery | ✅ `.cache/sessions/<sha256>/` | ✅ OS cache dir (`platformdirs`) |
-| Live progress + integrity telemetry | ✅ | ✅ |
-| `cancel` keeping translated pages | ✅ | ✅ |
-| `page-preview?format=meta` block metadata | ✅ | ✅ |
-| Bilingual interleaved + Markdown export | ✅ | ✅ |
-| Segment cache | In-memory SHA-256 map | SQLite persistent store |
+| Capability | Implementation |
+|:---|:---|
+| Upload + content-hash dedupe (`X-Doc-Id`) | ✅ OS cache dir sessions |
+| `session-status` disk recovery | ✅ restart-proof (`source.pdf` / `translated.pdf` / `meta.json`) |
+| Live progress + integrity telemetry | ✅ per-page stages, ETA, issues |
+| `cancel` keeping translated pages | ✅ partial output committed |
+| `page-preview?format=meta` block metadata | ✅ DocumentIR blocks |
+| Provider honesty | ✅ missing key/runtime stops the job explicitly |
+| Bilingual interleaved + Markdown export | ✅ |
+| Segment cache | ✅ SQLite persistent store |
