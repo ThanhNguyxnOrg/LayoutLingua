@@ -416,7 +416,7 @@ export default function SettingsModal({
                 rows={3}
                 value={settings.customGlossary || ''}
                 onChange={(e) => setSettings({ ...settings, customGlossary: e.target.value })}
-                placeholder={"e.g.\nTheorem = Tiên đề thực nghiệm\nEigenvalue = Giá trị đặc trưng"}
+                placeholder={"e.g.\nTheorem = <target-language term>\nEigenvalue = <target-language term>"}
                 className="w-full rounded-md border border-line-strong p-2.5 font-mono text-[12.5px] focus:border-teal focus:ring-1 focus:ring-teal bg-white"
               />
             </div>

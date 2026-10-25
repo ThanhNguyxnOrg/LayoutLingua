@@ -5,21 +5,6 @@ const REPO = 'ThanhNguyxnOrg/LayoutLingua'
 const REPO_URL = `https://github.com/${REPO}`
 const APP_VERSION = '2.0.0'
 
-const CREDITS: Array<{ name: string; note: string; url: string }> = [
-  { name: 'PDFMathTranslate (pdf2zh)', note: 'Formula shielding & layout patterns', url: 'https://github.com/Byaidu/PDFMathTranslate' },
-  { name: 'BabelDOC', note: 'Typesetting & clearance patterns', url: 'https://github.com/funstory-ai/BabelDOC' },
-  { name: 'MinerU', note: 'Document layout model concepts', url: 'https://github.com/opendatalab/MinerU' },
-  { name: 'Marker', note: 'Structured extraction patterns', url: 'https://github.com/VikParuchuri/marker' },
-  { name: 'DocLayout-YOLO', note: 'Vision layout detection', url: 'https://github.com/opendatalab/DocLayout-YOLO' },
-  { name: 'franc', note: 'Statistical language detection', url: 'https://github.com/wooorm/franc' },
-  { name: 'PyMuPDF', note: 'Desktop engine vector core', url: 'https://pymupdf.readthedocs.io/' },
-  { name: 'MuPDF (WASM)', note: 'Web engine vector core', url: 'https://mupdf.com/' },
-  { name: 'pdf-lib', note: 'PDF writing & annotation', url: 'https://github.com/Hopding/pdf-lib' },
-  { name: 'DejaVu Fonts', note: 'Unicode typography bundle', url: 'https://dejavu-fonts.github.io/' },
-  { name: 'Tauri', note: 'Native desktop shell', url: 'https://tauri.app/' },
-  { name: 'React & Tailwind CSS', note: 'UI foundation', url: 'https://react.dev/' },
-]
-
 export default function CreditsModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -43,7 +28,7 @@ export default function CreditsModal({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="credits-title"
-        className="w-[620px] max-w-full rounded-xl border border-line bg-white shadow-2xl overflow-hidden"
+        className="w-[520px] max-w-full rounded-xl border border-line bg-white shadow-2xl overflow-hidden"
       >
         <div className="flex items-center justify-between border-b border-line px-6 py-4 bg-canvas/40">
           <div className="flex items-center gap-2.5">
@@ -61,7 +46,7 @@ export default function CreditsModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="p-6 space-y-5 max-h-[72vh] overflow-y-auto">
+        <div className="p-6 space-y-5">
           <div className="flex items-center gap-3 rounded-lg border border-line bg-canvas/30 px-4 py-3.5">
             <img src="/logo.png" alt="LayoutLingua Logo" className="size-10 rounded-lg object-contain shadow-2xs ring-1 ring-line-strong/40" />
             <div className="min-w-0 flex-1">
@@ -70,27 +55,6 @@ export default function CreditsModal({ onClose }: { onClose: () => void }) {
               </p>
               <p className="text-[12px] text-muted">Layout-aware academic PDF translation · MIT License</p>
             </div>
-          </div>
-
-          <div>
-            <h3 className="mb-2.5 text-[13px] font-bold uppercase tracking-wider text-muted">
-              Built on open source
-            </h3>
-            <ul className="grid grid-cols-1 gap-1.5">
-              {CREDITS.map((c) => (
-                <li key={c.name}>
-                  <a
-                    href={c.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between rounded-lg border border-line/60 bg-canvas/30 px-3.5 py-2 text-[13px] transition-colors hover:border-teal/50 hover:bg-teal-soft/20"
-                  >
-                    <span className="font-bold text-ink">{c.name}</span>
-                    <span className="truncate pl-3 text-[11.5px] text-muted">{c.note}</span>
-                  </a>
-                </li>
-              ))}
-            </ul>
           </div>
 
           <div className="rounded-lg border border-teal/30 bg-teal-soft/40 p-4">
