@@ -18,25 +18,47 @@ fn ensure_backend_running() {
         return;
     }
 
-    // 2. Candidate commands across Windows, macOS, Linux
+    // 2. Anchor candidate commands to the repo root inferred from this exe's
+    //    location (…/desktop/src-tauri/target/release/ -> 4 levels up), so the
+    //    engine spawns correctly no matter the working directory the app was
+    //    launched from (double-click, start_app.bat, or cargo run).
+    let mut roots: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        for anc in exe.ancestors().skip(1) {
+            if anc.join(".venv").is_dir() || anc.join("layoutlingua").is_dir() {
+                roots.push(anc.to_path_buf());
+            }
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd.clone());
+        if let Some(parent) = cwd.parent() {
+            roots.push(parent.to_path_buf());
+        }
+    }
+
     let mut candidate_commands: Vec<(String, Vec<String>)> = Vec::new();
 
     #[cfg(target_os = "windows")]
     {
+        for root in &roots {
+            let r = root.display().to_string();
+            candidate_commands.push((format!("{r}/.venv/Scripts/python.exe"), vec!["-m".into(), "layoutlingua.server".into()]));
+            candidate_commands.push((format!("{r}/binaries/layoutlingua-engine-x86_64-pc-windows-msvc.exe"), vec![]));
+        }
         candidate_commands.push(("layoutlingua-engine.exe".into(), vec![]));
-        candidate_commands.push(("../binaries/layoutlingua-engine-x86_64-pc-windows-msvc.exe".into(), vec![]));
-        candidate_commands.push((".venv/Scripts/python.exe".into(), vec!["-m".into(), "layoutlingua.server".into()]));
-        candidate_commands.push(("../.venv/Scripts/python.exe".into(), vec!["-m".into(), "layoutlingua.server".into()]));
         candidate_commands.push(("python.exe".into(), vec!["-m".into(), "layoutlingua.server".into()]));
         candidate_commands.push(("python".into(), vec!["-m".into(), "layoutlingua.server".into()]));
     }
 
     #[cfg(not(target_os = "windows"))]
     {
+        for root in &roots {
+            let r = root.display().to_string();
+            candidate_commands.push((format!("{r}/.venv/bin/python"), vec!["-m".into(), "layoutlingua.server".into()]));
+            candidate_commands.push((format!("{r}/binaries/layoutlingua-engine"), vec![]));
+        }
         candidate_commands.push(("./layoutlingua-engine".into(), vec![]));
-        candidate_commands.push(("../binaries/layoutlingua-engine".into(), vec![]));
-        candidate_commands.push((".venv/bin/python".into(), vec!["-m".into(), "layoutlingua.server".into()]));
-        candidate_commands.push(("../.venv/bin/python".into(), vec!["-m".into(), "layoutlingua.server".into()]));
         candidate_commands.push(("python3".into(), vec!["-m".into(), "layoutlingua.server".into()]));
     }
 
