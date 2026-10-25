@@ -1,5 +1,19 @@
 # 🤝 Contributing to LayoutLingua (`CONTRIBUTING.md`)
 
+<p align="center">
+  <a href="../README.md">🏠 README</a> ·
+  <a href="ARCHITECTURE.md">🏛 Architecture</a> ·
+  <a href="ALGORITHM.md">🧮 Algorithms</a> ·
+  <a href="API_REFERENCE.md">🔌 API</a> ·
+  <a href="CHANGELOG.md">📜 Changelog</a> ·
+  <a href="CONTEXT.md">🧭 Context</a> ·
+  <a href="CONTRIBUTING.md">🤝 Contributing</a> ·
+  <a href="CODE_OF_CONDUCT.md">🌈 Conduct</a> ·
+  <a href="SECURITY.md">🔐 Security</a>
+</p>
+
+---
+
 <p>
   <img src="https://img.shields.io/badge/🙌_PRs-Welcome-10B981?style=for-the-badge" alt="PRs Welcome" />
   <img src="https://img.shields.io/badge/🚫_Code_Policy-Zero_Hardcode-EF4444?style=for-the-badge" alt="Zero Hardcode Policy" />
@@ -29,7 +43,7 @@ Thank you for contributing to **LayoutLingua**! 🎉 To keep the PDF translation
 - When adding domain terms to `src/engine/glossaries/`, keep all 16 `academic_math_en_*.json` files synchronized so English-pivot translation works identically across all 272 language pairs.
 
 ### 🔁 Rule 4: Two-Engine Parity
-- REST contract changes (`server.ts`) must be mirrored in `layoutlingua/server.py` (and vice versa) so the React UI runs unchanged on both engines — see the parity matrix in the [README](README.md#-rest-api--dual-engine-contract).
+- REST contract changes (`server.ts`) must be mirrored in `layoutlingua/server.py` (and vice versa) so the React UI runs unchanged on both engines — see the parity matrix in the [README](../README.md#-rest-api--dual-engine-contract).
 
 ---
 

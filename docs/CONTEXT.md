@@ -1,5 +1,19 @@
 # LayoutLingua Domain Context & Ubiquitous Language
 
+<p align="center">
+  <a href="../README.md">🏠 README</a> ·
+  <a href="ARCHITECTURE.md">🏛 Architecture</a> ·
+  <a href="ALGORITHM.md">🧮 Algorithms</a> ·
+  <a href="API_REFERENCE.md">🔌 API</a> ·
+  <a href="CHANGELOG.md">📜 Changelog</a> ·
+  <a href="CONTEXT.md">🧭 Context</a> ·
+  <a href="CONTRIBUTING.md">🤝 Contributing</a> ·
+  <a href="CODE_OF_CONDUCT.md">🌈 Conduct</a> ·
+  <a href="SECURITY.md">🔐 Security</a>
+</p>
+
+---
+
 This document serves as the single source of truth for ubiquitous domain terminology, core rules, and system concepts for **LayoutLingua**.
 
 ---

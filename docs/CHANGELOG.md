@@ -1,5 +1,19 @@
 # 📜 Changelog (`CHANGELOG.md`)
 
+<p align="center">
+  <a href="../README.md">🏠 README</a> ·
+  <a href="ARCHITECTURE.md">🏛 Architecture</a> ·
+  <a href="ALGORITHM.md">🧮 Algorithms</a> ·
+  <a href="API_REFERENCE.md">🔌 API</a> ·
+  <a href="CHANGELOG.md">📜 Changelog</a> ·
+  <a href="CONTEXT.md">🧭 Context</a> ·
+  <a href="CONTRIBUTING.md">🤝 Contributing</a> ·
+  <a href="CODE_OF_CONDUCT.md">🌈 Conduct</a> ·
+  <a href="SECURITY.md">🔐 Security</a>
+</p>
+
+---
+
 <p>
   <img src="https://img.shields.io/badge/📜_Changelog-Keep_a_Changelog_1.1.0-0D9488?style=for-the-badge" alt="Keep a Changelog" />
   <img src="https://img.shields.io/badge/🔢_Versioning-SemVer_2.0.0-0284C7?style=for-the-badge" alt="SemVer" />
@@ -48,7 +62,8 @@ All notable changes to **LayoutLingua** are documented in this file.
 - **Export size & speed**: save-once + `subsetFonts()` + garbage-collected output — full 96-page document **46MB → ~1.5MB**, export < 1s. ⚡
 
 ### 🧹 Changed
-- Documentation consolidated into a **self-contained README hub** (algorithms + REST API folded in); repo trimmed to pure source — no runtime caches, archives, or scratch files.
+- **📚 Documentation Hub**: the repo carries only `README.md` at the root — every deep-dive (Architecture, Algorithms, API Reference, Context, Changelog, Contributing, Conduct, Security) lives in `docs/` with cross-linked navigation back to the hub.
+- Repo trimmed to pure source — no runtime caches, archives, drop archives, or scratch files.
 - Full **245-test** pytest suite, strict TypeScript across web + desktop, CI matrix on Ubuntu / Windows / macOS.
 
 ---

@@ -1,5 +1,19 @@
 # 🌈 Contributor Covenant Code of Conduct (`CODE_OF_CONDUCT.md`)
 
+<p align="center">
+  <a href="../README.md">🏠 README</a> ·
+  <a href="ARCHITECTURE.md">🏛 Architecture</a> ·
+  <a href="ALGORITHM.md">🧮 Algorithms</a> ·
+  <a href="API_REFERENCE.md">🔌 API</a> ·
+  <a href="CHANGELOG.md">📜 Changelog</a> ·
+  <a href="CONTEXT.md">🧭 Context</a> ·
+  <a href="CONTRIBUTING.md">🤝 Contributing</a> ·
+  <a href="CODE_OF_CONDUCT.md">🌈 Conduct</a> ·
+  <a href="SECURITY.md">🔐 Security</a>
+</p>
+
+---
+
 <p>
   <img src="https://img.shields.io/badge/🤝_Contributor_Covenant-v2.1-0D9488?style=for-the-badge" alt="Contributor Covenant 2.1" />
   <img src="https://img.shields.io/badge/🔬_Community-Open_&_Respectful-8B5CF6?style=for-the-badge" alt="Community" />

@@ -170,13 +170,16 @@ flowchart TB
     TYPE -->|Live Page Commit| PG
 ```
 
-Everything is documented right here in this README — no external doc tree to chase. 🗺️ Companion files at the repo root:
+Every deep-dive lives in [`docs/`](docs/) — this README is the hub that links them all, and each doc links back here. 🗺️
 
-- 📘 **[ARCHITECTURE.md](ARCHITECTURE.md)** — Deep Module specifications, data structures, and state lifecycle.
-- 🧭 **[CONTEXT.md](CONTEXT.md)** — Ubiquitous domain language and coordinate system conventions.
-- 📜 **[CHANGELOG.md](CHANGELOG.md)** — Release history and verification milestones.
-- 🤝 **[CONTRIBUTING.md](CONTRIBUTING.md)** — Engineering standards & PR checklist.
-- 🔐 **[SECURITY.md](SECURITY.md)** — Privacy guarantees & vulnerability reporting.
+- 📘 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Deep Module specifications, data structures, and state lifecycle.
+- 🧮 **[docs/ALGORITHM.md](docs/ALGORITHM.md)** — Mathematical formulations: `vflag` pinning, ray-cast clearance, table guards, anisotropic `Tz` fitting.
+- 🔌 **[docs/API_REFERENCE.md](docs/API_REFERENCE.md)** — Full dual-engine REST contract with payload schemas.
+- 🧭 **[docs/CONTEXT.md](docs/CONTEXT.md)** — Ubiquitous domain language and coordinate system conventions.
+- 📜 **[docs/CHANGELOG.md](docs/CHANGELOG.md)** — Release history and verification milestones.
+- 🤝 **[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)** — Engineering standards & PR checklist.
+- 🌈 **[docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md)** — Community expectations.
+- 🔐 **[docs/SECURITY.md](docs/SECURITY.md)** — Privacy guarantees & vulnerability reporting.
 
 ---
 
@@ -295,9 +298,9 @@ PORT=3000
 ## 🤝 Contributing & Governance
 
 We welcome contributions to layout algorithms, font bundles, and academic glossaries! Please review:
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — Engineering standards (strict zero-hardcode policy) and verification workflow.
-- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** — Community expectations.
-- **[SECURITY.md](SECURITY.md)** — Vulnerability reporting and local-first privacy guarantees.
+- **[CONTRIBUTING.md](docs/CONTRIBUTING.md)** — Engineering standards (strict zero-hardcode policy) and verification workflow.
+- **[CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md)** — Community expectations.
+- **[SECURITY.md](docs/SECURITY.md)** — Vulnerability reporting and local-first privacy guarantees.
 
 ---
 

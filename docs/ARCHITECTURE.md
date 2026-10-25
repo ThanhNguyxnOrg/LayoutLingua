@@ -1,5 +1,19 @@
 # 🏛 System Architecture (`ARCHITECTURE.md`)
 
+<p align="center">
+  <a href="../README.md">🏠 README</a> ·
+  <a href="ARCHITECTURE.md">🏛 Architecture</a> ·
+  <a href="ALGORITHM.md">🧮 Algorithms</a> ·
+  <a href="API_REFERENCE.md">🔌 API</a> ·
+  <a href="CHANGELOG.md">📜 Changelog</a> ·
+  <a href="CONTEXT.md">🧭 Context</a> ·
+  <a href="CONTRIBUTING.md">🤝 Contributing</a> ·
+  <a href="CODE_OF_CONDUCT.md">🌈 Conduct</a> ·
+  <a href="SECURITY.md">🔐 Security</a>
+</p>
+
+---
+
 <p>
   <img src="https://img.shields.io/badge/🏛️_Architecture-Deep_Modules-0D9488?style=for-the-badge" alt="Deep Modules" />
   <img src="https://img.shields.io/badge/⚡_Runtime-Node.js_+_MuPDF_WASM-0284C7?style=for-the-badge" alt="Runtime" />
@@ -34,7 +48,7 @@ LayoutLingua ships **one React UI** on top of **two engines sharing an identical
 | **Session store** | `.cache/sessions/<sha256>/` | OS cache dir via `platformdirs` (`…/layoutlingua/Cache/sessions/`) |
 | **Lifecycle** | `npm run dev` / `npm start` | Tauri auto-spawns the Python sidecar (`CREATE_NO_WINDOW`), kills it on exit |
 
-> ✅ **Parity matrix** — both engines implement: `session-status` resume, content-hash upload dedupe, `cancel` (keeps translated pages), `page-preview?format=meta` block metadata, disk-persisted sessions, and the full export contract. See the [README API section](README.md#-rest-api--dual-engine-contract).
+> ✅ **Parity matrix** — both engines implement: `session-status` resume, content-hash upload dedupe, `cancel` (keeps translated pages), `page-preview?format=meta` block metadata, disk-persisted sessions, and the full export contract. See the [README API section](../README.md#-rest-api--dual-engine-contract).
 
 ---
 
@@ -42,6 +56,7 @@ LayoutLingua ships **one React UI** on top of **two engines sharing an identical
 
 ```text
 LayoutLingua/
+├── README.md                         # 🏠 Documentation hub — links to every doc in docs/
 ├── server.ts                         # 🌐 Express full-stack server, REST endpoints & .cache/sessions store
 ├── src/                              # 🎨 Web UI + TS translation engine
 │   ├── App.tsx                       # Root application shell, navigation rail & modal orchestration
@@ -77,8 +92,16 @@ LayoutLingua/
 │   ├── typesetting/                  # TypesetEngine, DocumentAccumulator, fitting telemetry
 │   └── processing/                   # Page ranges, TOC translation, Markdown export, telemetry
 ├── tests/                            # 🧪 245 automated engine tests (pytest)
-└── docs/
-    └── assets/                       # 🖼️ Logo & demo screenshots (docs live in README.md)
+└── docs/                             # 📚 Documentation tree (README.md at root is the hub)
+    ├── ARCHITECTURE.md               # 🏛 Deep Module specifications & two-runtime design
+    ├── ALGORITHM.md                  # 🧮 vflag pinning, ray-cast clearance, anisotropic Tz
+    ├── API_REFERENCE.md              # 🔌 Dual-engine REST contract & payload schemas
+    ├── CONTEXT.md                    # 🧭 Ubiquitous domain language
+    ├── CHANGELOG.md                  # 📜 Release history
+    ├── CONTRIBUTING.md               # 🤝 Engineering standards & PR checklist
+    ├── CODE_OF_CONDUCT.md            # 🌈 Community covenant
+    ├── SECURITY.md                   # 🔐 Privacy guarantees & reporting
+    └── assets/                       # 🖼️ Logo & demo screenshots
 ```
 
 ---
