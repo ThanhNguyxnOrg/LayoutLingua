@@ -1,169 +1,97 @@
-# LayoutLingua Architecture & Deep Module System
+# System Architecture (`ARCHITECTURE.md`)
 
-This document outlines the architectural design, core seams, and deep-module contracts of **LayoutLingua v2.0.0**.
-
-LayoutLingua is designed according to **Deep Module principles**: exposing minimal, highly leverageable interfaces to callers while concentrating complex layout preservation, mathematical symbol shielding, neural translation orchestration, and vector document regeneration inside self-contained modules with high internal locality.
-
----
-
-## 1. System High-Level Topology
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Tauri 2.0 Desktop Client                        │
-│             (React 19 + TypeScript + Tailwind CSS Frontend)            │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ HTTP / REST & SSE Stream (Port 8765)
-┌───────────────────────────────────▼────────────────────────────────────┐
-│                  LayoutLingua Headless Core Server                     │
-│                (Fast Python HTTP Bridge & IPC Engine)                  │
-└───────┬───────────────────┬───────────────────┬────────────────┬───────┘
-        │                   │                   │                │
-┌───────▼────────┐  ┌───────▼────────┐  ┌───────▼────────┐  ┌────▼───────┐
-│ DocumentParser │  │FormulaIsolator │  │TranslationSvc  │  │TypesetEng  │
-│  (PyMuPDF IR)  │  │(TeX & Shield)  │  │ (Cache & NMT)  │  │(Clearance) │
-└───────┬────────┘  └───────┬────────┘  └───────┬────────┘  └────┬───────┘
-        │                   │                   │                │
-        └───────────────────┴─────────┬─────────┴────────────────┘
-                                      │
-                         ┌────────────▼────────────┐
-                         │   DocumentAccumulator   │
-                         │(Atomic Staging Rollback)│
-                         └────────────┬────────────┘
-                                      │
-                         ┌────────────▼───────────┐
-                         │ Verified Translated PDF│
-                         │(Vector Graphics Intact)│
-                         └────────────────────────┘
-```
+<p>
+  <img src="https://img.shields.io/badge/Architecture-Deep%20Modules-0D9488?style=for-the-badge" alt="Deep Modules" />
+  <img src="https://img.shields.io/badge/Runtime-Node.js%20%2B%20MuPDF%20WASM-0284C7?style=for-the-badge" alt="Runtime" />
+  <img src="https://img.shields.io/badge/Frontend-React%2019%20%2B%20Tailwind%20v4-3178C6?style=for-the-badge" alt="Frontend" />
+  <img src="https://img.shields.io/badge/Persistence-Disk%20SHA256%20%2B%20IndexedDB-8B5CF6?style=for-the-badge" alt="Persistence" />
+</p>
 
 ---
 
-## 2. Core Deep Modules & Interfaces
+## 1. Architectural Philosophy
 
-### 2.1. DocumentParser (`layoutlingua.core.parser`)
+LayoutLingua follows John Ousterhout's **Deep Module** design principle: each core subsystem exposes a minimal, declarative interface while encapsulating complex geometric, typographic, and linguistic machinery internally.
 
-- **Role**: Ingests raw PDF documents and extracts visual geometry, font metrics, reading order, and character origins into an immutable, decoupled intermediate representation (`DocumentIR`).
-- **Seam**:
-  ```python
-  def parse_pdf(file_path: str | Path, ...) -> DocumentIR: ...
-  ```
-- **Depth & Leverage**:
-  - Encapsulates low-level PyMuPDF text stream quirks, character-level bounding boxes, font descriptor flags, and color space encodings.
-  - Normalizes coordinate conventions to top-left origin (points).
-  - Performs **Horizontal Baseline Fragment Merging** (SOTA pattern inspired by MinerU and Marker) to reassemble fragmented inline math symbols on the same baseline into coherent sentences without splitting columns.
-  - Pluggable vision layout detection: seamlessly attaches `DocLayout-YOLO` ONNX models when available without forcing heavy PyTorch dependencies.
-
-### 2.2. FormulaIsolator (`layoutlingua.processing.formula.isolator`)
-
-- **Role**: Automatically detects, tokenizes, and isolates mathematical formulas, Greek characters, and TeX symbols so that neural translation engines never corrupt or hallucinate equations.
-- **Seam**:
-  ```python
-  class FormulaIsolator:
-      def isolate_block(self, block: TextBlock) -> TextSegment: ...
-      def restore_translation(self, segment: TextSegment, translated_text: str) -> str: ...
-      def verify_tokens(self, original_text: str, translated_text: str) -> TokenVerificationResult: ...
-  ```
-- **Depth & Leverage**:
-  - Hides complex regex heuristics for ISO/MathML operators, Computer Modern (`CM[^R]`) and AMS font detection.
-  - Converts math expressions into opaque XML tokens (`<b0></b0>`, `<b1></b1>`) or bracketed sentinels (`⟦LL_FORMULA_N⟧`) that withstand LLM syntax manipulation.
-  - Automatically heals damaged closing tags, attached punctuation, and malformed whitespace generated by noisy neural translation models.
-
-### 2.3. TranslationService (`layoutlingua.translation.service`)
-
-- **Role**: Coordinates multi-provider neural machine translation, rate-limit resilience, concurrent batching, and persistent on-disk caching.
-- **Seam**:
-  ```python
-  class TranslationService:
-      def translate_job(self, job: TranslationJob, on_progress: Callable) -> TranslationJobResult: ...
-      def resume_job(self, job_id: str, on_progress: Callable) -> TranslationJobResult: ...
-      def cancel_job(self, job_id: str) -> None: ...
-  ```
-- **Adapters**:
-  - `GoogleRpcTranslationProvider`: Zero-setup, built-in Google Translate RPC engine with intelligent batch packing and anti-throttling backoff.
-  - `OpenAITranslationProvider`: Universal provider supporting OpenAI (GPT-4o/o3-mini), Groq, DeepSeek, and local LLMs (Ollama, LM Studio, vLLM).
-  - `GeminiTranslationProvider`: Google AI Studio native SDK integration with privacy disclosure tracking.
-  - `ArgosTranslationProvider`: 100% offline, on-device neural translation using OpenNMT with zero external network connectivity.
-- **Persistent Segment Cache**:
-  - SQLite backend (`translations.db`) keyed by SHA-256 fingerprint (`source_lang + target_lang + provider + masked_text`).
-  - Ensures zero duplicate API costs and instant resumption upon session interruption.
-
-### 2.4. TypesetEngine (`layoutlingua.typesetting.engine`)
-
-- **Role**: Performs layout-aware text clearance, precision binary search font downscaling, dynamic lineheight computation, and selective PDF redaction.
-- **Seam**:
-  ```python
-  class TypesetEngine:
-      def stage_page_transaction(
-          self,
-          source_doc: pymupdf.Document,
-          page_ir: PageIR,
-          document_ir: DocumentIR,
-          translated_segments: dict[str, str],
-          force_fallback: bool = False,
-      ) -> PageTransactionResult: ...
-  ```
-- **Depth & Innovations**:
-  - **Cluster-Level Clearance** (`ClearancePlanner`): Replaces coarse line-level union bounding boxes with spatial baseline/proximity span clusters. Prevents clearance rectangles from straddling across grouping braces (e.g., multi-line curly braces) or fraction division bars.
-  - **Non-Contracting Layout Box Expansion** (`compute_expanded_layout_box`): Expands text boundaries into available right-margin whitespace without ever contracting below the original text width ($x_1$), protecting multi-line paragraphs against premature overflow.
-  - **Adaptive Font Downscaling & Elastic Floors** (`TextFitTester`): Precision binary search fitting with dynamic line-height calculation and elastic floors down to 0.50x (5.0pt) for single-line math labels and Table of Contents entries.
-  - **True Bold Font Typography**: Dynamically maps bold spans to embedded `DejaVuSans-Bold.ttf` with complete Unicode glyph coverage for mathematical symbols and composite Vietnamese diacritics.
-
-### 2.5. DocumentAccumulator (`layoutlingua.typesetting.accumulator`)
-
-- **Role**: Assembles multi-page documents under transactional guarantees, preserving background vector drawings and document bookmarks.
-- **Seam**:
-  ```python
-  class DocumentAccumulator:
-      def commit_page(self, tx_result: PageTransactionResult) -> None: ...
-      def commit_pristine_source_page(self, source_page_index: int) -> None: ...
-      def finish(self, translated_toc: list | None = None) -> bytes: ...
-  ```
-- **Depth & Guarantees**:
-  - **Zero Corruption Guarantee**: If a page transaction fails or encounters a critical error, it rolls back cleanly to a pristine clone of the source page, ensuring 100% vector graphic and text integrity.
-  - **TOC Translation & Re-anchoring**: Automatically updates internal destination coordinates and page references for Table of Contents bookmarks across both monolingual and bilingual modes.
+### Core Invariants
+1. **Zero Hardcoded Linguistic Heuristics**: Word classification, formula isolation, paragraph merging, and language detection rely strictly on **font-table flags (`vflag`)**, **2D coordinate geometry**, **Unicode general categories (`\p{Lu}`, `\p{Ll}`, `\p{Lo}`)**, and **statistical trigram profiles (`franc-min`)**.
+2. **Non-Destructive Vector Preservation**: Native PDF vector streams (diagrams, fraction bars, radical signs, integral symbols, curly braces, and table borders) are never parsed into lossy intermediate formats; only verified prose bounding boxes (`ProseSpan`s) are masked during Pass 1.
+3. **Flicker-Free Incremental Streaming**: Each translated page is committed atomically to the session buffer and tagged in `completed_pages`. Already-rendered pages in the React workspace remain mounted with stable keys (`runId + targetLang`) while subsequent pages process.
 
 ---
 
-## 3. Data Invariants & Flow
+## 2. Repository Directory Layout
 
-```
-[Raw PDF Source]
-       │
-       ▼
- 1. DocumentParser.parse_pdf()
-       │ ──> Produces immutable DocumentIR (blocks, spans, geometry)
-       ▼
- 2. extract_document_segments()
-       │ ──> Filters preserved/formula blocks
-       │ ──> Isolates formulas via FormulaIsolator
-       ▼
- 3. TranslationService.translate_job()
-       │ ──> Checks Persistent Segment Cache (SHA-256)
-       │ ──> Dispatches cache misses via Concurrent Pool
-       │ ──> Applies Academic Terminology Glossary
-       │ ──> Restores formula tokens via FormulaIsolator.restore_translation()
-       ▼
- 4. TypesetEngine.stage_page_transaction()
-       │ ──> Computes cluster-level clearance exclusion zones
-       │ ──> Tests binary search font fitting with elastic floors
-       │ ──> Clears original glyphs using selective fill=False redaction
-       │ ──> Inserts translated text with bold font resolution
-       ▼
- 5. DocumentAccumulator.commit_page()
-       │ ──> Commits staged page or cleanly rolls back to source page
-       ▼
- 6. DocumentAccumulator.finish()
-       │ ──> Re-links TOC bookmarks & emits final vector PDF bytes
-       ▼
-[Verified Output PDF]
+```text
+LayoutLingua/
+├── server.ts                         # Express full-stack server, REST endpoints & .cache/sessions store
+├── src/
+│   ├── App.tsx                       # Root application shell, navigation rail & modal orchestration
+│   ├── main.tsx                      # React 19 entry point
+│   ├── index.css                     # Tailwind CSS v4 design tokens & studio typography
+│   ├── components/
+│   │   ├── OpenScreen.tsx            # Document preflight, drag-and-drop upload & Recent Documents
+│   │   ├── Workspace.tsx             # Dual-view canvas (Side-by-Side / Overlay), Inspector & Progress
+│   │   ├── PdfPage.tsx               # High-DPI PNG page renderer, block hover & hyperlink overlays
+│   │   ├── HistoryScreen.tsx         # Searchable recent document history with auto-recovery
+│   │   ├── ExportDialog.tsx          # Monolingual PDF, Bilingual Interleaved PDF & Markdown export
+│   │   ├── SettingsModal.tsx         # Provider configuration (Google NMT, Gemini, OpenAI/Ollama)
+│   │   ├── HelpModal.tsx             # Keyboard shortcuts & pipeline reference
+│   │   ├── data.ts                   # Shared TypeScript interfaces & 17-language registry
+│   │   ├── shell.tsx                 # AppHeader & NavRail components
+│   │   ├── ui.tsx                    # Studio UI primitives (Buttons, Badges, Notices)
+│   │   └── icons.tsx                 # Vector SVG icon library
+│   ├── engine/
+│   │   ├── pdfTranslator.ts          # Core MuPDF + pdf-lib layout analyzer, math isolator & typesetter
+│   │   └── glossaries/               # 16 bidirectional academic math JSON glossaries (en <-> 16 langs)
+│   └── services/
+│       ├── api.ts                    # API URL resolver
+│       ├── history.ts                # localStorage + IndexedDB binary PDF cache & session recovery
+│       └── settings.ts               # Persistent translation & typography settings
+└── docs/
+    ├── ALGORITHM.md                  # Mathematical & geometric algorithm specifications
+    ├── API_REFERENCE.md              # REST API endpoints & schemas
+    └── adr/                          # Architectural Decision Records (0001 - 0003)
 ```
 
 ---
 
-## 4. Testability & Quality Verification
+## 3. Deep Module Specifications
 
-All modules are designed for direct testability at their external interfaces:
-- **Unit & Integration Suite**: 245 automated tests running in `< 20s` across Ubuntu, Windows, and macOS.
-- **Visual Inspection**: Alpha Blend Overlay (0% to 100% opacity slider) and Synchronized Dual View in the desktop client allow real-time comparison of source and translated layouts.
-- **Quality Diagnostic Telemetry**: One-click structured diagnostic export ("Copy log") provides instant markdown telemetry on all block fitting decisions, font shrink ratios, and collision safeguards.
+### Module A: `analyzePdfPageLayout` (`src/engine/pdfTranslator.ts`)
+- **Responsibility**: Extracts structured characters from a MuPDF page, normalizes legacy encodings, partitions tokens into `ProseGroup`s vs. `MathObstacle`s / `LinkObstacle`s, and computes pixel-exact horizontal clearances.
+- **Pipeline Stages**:
+  1. **Structured Text Walk**: Walks `page.toStructuredText('preserve-whitespace')` to capture every glyph's quad (`x0, y0, x1, y1`), baseline origin (`ox, oy`), font name, weight/style flags (`bold, italic, serif, mono`), size, and RGB fill color.
+  2. **Superscript Degree Normalization**: Normalizes raised degree glyphs (`MT Extra 0xF06F`, `Symbol 0xF0B0`, `°`, `º`) onto their preceding token's baseline so `60°` and `n°` remain 1D inline tokens.
+  3. **2D Sub/Superscript Separation**: Extracts characters with `size < 8.5pt` as immediate `MathObstacle`s and marks horizontally/vertically adjacent main tokens with `hasAdjSubSup = true`.
+  4. **Baseline Row & Column Run Grouping**: Groups main characters into baseline rows ($\Delta oy \le 2.2\text{pt}$), detects full-row Table-of-Contents dot leaders (`.....`), and splits multi-column runs at horizontal gaps ($> \max(14\text{pt}, 1.4 \times \text{size})$).
+  5. **Word Tokenization & Contextual Pass**: Applies `isMathWordToken` followed by a 5-rule contextual pass (`lineIsMostlyItalic`, ALL-CAPS heading recovery, 1D variable lists, and opening parenthetical variables).
+  6. **Pixmap Ray-Cast Clearance**: Renders a 1x RGB pixmap of the page and scans horizontally left and right from each `ProseSpan` to find the exact clearance (`leftClearanceX`, `rightClearanceX`) before hitting ink from diagrams, braces, or adjacent columns.
+  7. **Multi-Line Paragraph Merging (`canMerge`)**: Merges consecutive `ProseSpan`s into `ProseGroup`s when style, color, background, column alignment, and line-width fill ratio match—while refusing to merge across horizontal table borders or parallel formula table rows.
+
+### Module B: `translateBatchWithFormulaShield` (`src/engine/pdfTranslator.ts`)
+- **Responsibility**: Translates an array of `ProseGroup` strings while guaranteeing 100% invariance of inline mathematical expressions and domain terminology.
+- **Pipeline Stages**:
+  1. **ALL-CAPS Heading Recasing**: Converts ALL-CAPS headings to sentence case before NMT so subword BPE tokenizers never truncate uppercase endings, then restores uppercase after translation.
+  2. **Formula & Glossary Shielding (`shieldFormulas`)**: Replaces user custom glossary terms, standalone academic glossary headings, and inline mathematical expressions with opaque `⟦M0⟧`, `⟦M1⟧` tokens.
+  3. **Target-Language Short-Circuit (`isAlreadyInTargetLanguage`)**: Uses `franc-min` trigram detection to skip blocks already written in the target language.
+  4. **Multi-Provider Dispatch**: Routes batches through Gemini 2.5 Flash, OpenAI-compatible endpoints, or multi-mirror Google Translate (`client=at` POST + `client=gtx` GET) with SHA-256 in-memory caching.
+  5. **Self-Healing Token Restoration (`restoreFormulas`)**: Repairs any NMT spacing or bracket mutations (`[M0]`, `【M 0】` $\rightarrow$ `⟦M0⟧`) and restores exact formula strings.
+
+### Module C: `translateAndTypesetPage` (`src/engine/pdfTranslator.ts`)
+- **Responsibility**: Executes Two-Pass Selective Erasure and Adaptive Vector Typesetting onto a `pdf-lib` `PDFPage`.
+- **Pass 1 (Selective Prose Erasure)**:
+  - Draws background-matched rectangles (`sampleBackgroundRGB`) over each `ProseSpan` of every translated `ProseGroup`, clipped strictly by neighboring `MathObstacle`s so adjacent fraction bars, integrals, and curly braces are never touched.
+- **Pass 2 (Adaptive Vector Typesetting)**:
+  - **TOC Entries (`kind === 'toc'`)**: Renders the translated title at left alignment, right-aligns the page number at `sp.x1`, and dynamically fills the gap with `. . .` leaders (`\dotfill`).
+  - **Single-Line Spans (`spans.length === 1`)**: Uses bidirectional clearance (`availLeftShift` + `rightClearanceX`), 2-line compact wrapping when unobstructed below, or anisotropic `Tz` horizontal condensation (`82%–100%`) combined with vertical font scaling.
+  - **Multi-Line Paragraphs (`spans.length > 1`)**: Binary-searches font scale from `1.0` down to `effectiveMinScale`, falling back to horizontal condensation (`Tz` at `92%`, `86%`, `80%`) so all translated lines fit within `maxBottomY` without ever dropping or truncating lines.
+
+### Module D: Dual-Layer Session Persistence (`server.ts` & `src/services/history.ts`)
+- **Backend Disk Store (`.cache/sessions/<docId>/`)**:
+  - Keyed by the 12-character SHA-256 content hash of the uploaded PDF.
+  - Stores `source.pdf`, `translated.pdf`, and `state.json` (`page_results`, `progress`, `integrity`, `page_dimensions`).
+  - Automatically recovers sessions across server restarts via `findPersistedSession`.
+- **Frontend IndexedDB Store (`layoutlingua_pdf_cache_v1`)**:
+  - Caches the raw `ArrayBuffer` of every opened PDF in browser IndexedDB.
+  - `restoreOrVerifyRecentDoc` queries `/api/session-status` before opening any Recent Document and transparently re-uploads the cached binary if the server cache was cleared.

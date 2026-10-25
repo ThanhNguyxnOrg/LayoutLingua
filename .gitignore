@@ -23,11 +23,13 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Application Runtime Output
+# Application Runtime Output & Session Cache
+.cache/
 output/
 tmp/
 scratch/
 translated/
+public/assets/aistudio/
 *.log
 pdf-translate.log
 *.zip
