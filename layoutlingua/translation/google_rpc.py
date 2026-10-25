@@ -270,27 +270,64 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
         s_lang = self._normalize_lang_code(request.source_language, "auto")
         t_lang = self._normalize_lang_code(request.target_language, "vi")
 
-        # One segment per request. Packing multiple segments with a delimiter
-        # corrupts formula placeholders: Google mangles or substitutes the
-        # <bN></bN> tags of every segment after the first (verified A/B), which
-        # is the root cause of shattered inline formulas. Segment-level requests
-        # preserve the placeholders exactly (A/B verified). The rate limiter in
-        # TranslationService paces the extra round-trips.
+        # TS-parity newline packing: batch segments under a character budget,
+        # join with newlines (newlines inside each segment are flattened first),
+        # and send ONE request per batch. Google translates line-by-line so the
+        # <bN></bN> placeholders survive intact - unlike a custom delimiter,
+        # which Google mangles (verified A/B). On line-count mismatch or failure,
+        # fall back to per-segment requests for that batch only, then fail-closed
+        # to the masked source. This cuts request volume ~15x versus per-segment,
+        # keeping the free RPC far away from HTTP 429.
+        BATCH_CHAR_LIMIT = 2400
+
+        segments = [seg for seg in request.segments if seg.masked_text.strip()]
         for seg in request.segments:
-            raw_text = seg.masked_text
-            if not raw_text.strip():
-                translations[seg.segment_id] = raw_text
-                continue
+            if not seg.masked_text.strip():
+                translations[seg.segment_id] = seg.masked_text
+
+        p_pos = 0
+        n = len(segments)
+        while p_pos < n:
+            p_end = p_pos
+            char_count = 0
+            while p_end < n and (
+                char_count + len(segments[p_end].masked_text) < BATCH_CHAR_LIMIT
+                or p_end == p_pos
+            ):
+                char_count += len(segments[p_end].masked_text) + 12
+                p_end += 1
+
+            batch = segments[p_pos:p_end]
+            query = "\n".join(seg.masked_text.replace("\n", " ") for seg in batch)
+            batch_ok = False
             try:
-                translations[seg.segment_id] = self._translate_single(raw_text, s_lang, t_lang)
+                joined = self._translate_single(query, s_lang, t_lang)
+                lines = [ln.strip() for ln in joined.split("\n")]
+                if len(lines) == len(batch):
+                    for seg, line in zip(batch, lines):
+                        translations[seg.segment_id] = _sanitize_translated_tokens(line)
+                    batch_ok = True
             except RateLimitError:
                 raise
             except Exception:
-                # One more retry after a brief pause; fail-closed to the masked source
-                try:
-                    time.sleep(0.5)
-                    translations[seg.segment_id] = self._translate_single(raw_text, s_lang, t_lang)
-                except Exception:
-                    translations[seg.segment_id] = raw_text
+                batch_ok = False
+
+            if not batch_ok:
+                # Per-segment retry for this batch only (TS last-resort path)
+                for seg in batch:
+                    single = seg.masked_text.replace("\n", " ")
+                    try:
+                        translations[seg.segment_id] = self._translate_single(single, s_lang, t_lang)
+                    except RateLimitError:
+                        raise
+                    except Exception:
+                        try:
+                            time.sleep(0.5)
+                            translations[seg.segment_id] = self._translate_single(single, s_lang, t_lang)
+                        except Exception:
+                            # Fail-closed: retain the masked source text
+                            translations[seg.segment_id] = seg.masked_text
+
+            p_pos = p_end
 
         return BatchTranslationResult(translations=translations)
