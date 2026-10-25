@@ -29,6 +29,7 @@ type Props = {
   showMarks?: boolean
   docId?: string
   version?: number
+  onNavigatePage?: (pageNum: number) => void
 }
 
 export default function PdfPage({
@@ -42,6 +43,7 @@ export default function PdfPage({
   showMarks = true,
   docId,
   version,
+  onNavigatePage,
 }: Props) {
   const [imgFailed, setImgFailed] = useState(false)
   const [blocks, setBlocks] = useState<LayoutBlockMeta[]>([])
@@ -147,13 +149,21 @@ export default function PdfPage({
             const isHovered = showMarks && hoveredBlock?.id === blk.id
 
             if (blk.uri) {
+              const goToMatch = blk.uri.match(/^#page=(\d+)$/i)
+              const targetPageNum = goToMatch ? parseInt(goToMatch[1], 10) : null
               return (
                 <a
                   key={blk.id}
                   href={blk.uri}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={blk.uri}
+                  target={targetPageNum ? undefined : '_blank'}
+                  rel={targetPageNum ? undefined : 'noopener noreferrer'}
+                  title={targetPageNum ? `Go to Page ${targetPageNum}` : blk.uri}
+                  onClick={(e) => {
+                    if (targetPageNum && onNavigatePage) {
+                      e.preventDefault()
+                      onNavigatePage(targetPageNum)
+                    }
+                  }}
                   onMouseEnter={() => showMarks && setHoveredBlock(blk)}
                   onMouseLeave={() =>
                     showMarks && setHoveredBlock((prev) => (prev?.id === blk.id ? null : prev))
@@ -204,7 +214,11 @@ export default function PdfPage({
           <div className="flex items-center justify-between gap-2 font-mono text-[10px] text-teal-soft">
             <span>
               {hoveredBlock.uri
-                ? `🔗 HYPERLINK PRESERVED · ${hoveredBlock.uri}`
+                ? hoveredBlock.uri.startsWith('#page=')
+                  ? `🔗 NAVIGATION LINK PRESERVED · Jump to Page ${hoveredBlock.uri.slice(6)} (${Math.round(
+                      hoveredBlock.fontScale * 100
+                    )}%)`
+                  : `🔗 HYPERLINK PRESERVED · ${hoveredBlock.uri}`
                 : hoveredBlock.preserved
                 ? '🔒 FROZEN MATH IR (100% VECTOR PRESERVED)'
                 : `✓ TRANSLATED ${hoveredBlock.kind.toUpperCase()} · SCALE ${Math.round(

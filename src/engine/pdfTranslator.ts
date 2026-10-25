@@ -1,7 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import {
+  PDFDict,
   PDFDocument,
+  PDFHexString,
+  PDFName,
   PDFNumber,
   PDFOperator,
   PDFOperatorNames,
@@ -143,6 +146,7 @@ export interface ProseGroup {
   mono: boolean
   color: [number, number, number]
   bgColor: [number, number, number]
+  uri?: string
 }
 
 // Symbol Private Use Area (PUA \uF020..\uF0FF) to Unicode mapping
@@ -525,23 +529,24 @@ function isMathWordToken(
     return true
   }
 
-  // If a token has an adjacent subscript/superscript or vector arrow (like a^x, log_a, P_n., M_0, x_1, \vec{A}), it is 100% math!
-  if (hasAdjacentSubSup) {
-    return true
-  }
-
-  // Allow numbered list prefixes ("1.", "2.", "I.", "a)"), bracketed citations ("[1]", "[2]"), and author initials ("I.", "L.") to stay with prose
-  if (/^(?:\d{1,2}\.|[IVX]{1,4}\.|[a-d]\)|\[\d+\]|\p{Lu}\.)$/iu.test(trimmed)) {
-    return false
-  }
-
   // If it has VNI font and decodes to diacritics without explicit math operators, it is prose
   if (hasVniFont && MULTILINGUAL_SCRIPT_RE.test(trimmed) && !EXPLICIT_MATH_SYMBOL_RE.test(trimmed)) {
     return false
   }
 
   // Any word containing non-ASCII natural language script characters (CJK, Cyrillic, Latin diacritics) without explicit math operators is natural prose
+  // (Must be checked before hasAdjacentSubSup so natural words like "nếu" standing next to lim_{x->a} are never misclassified as subscripted math variables)
   if (MULTILINGUAL_SCRIPT_RE.test(trimmed) && !EXPLICIT_MATH_SYMBOL_RE.test(trimmed)) {
+    return false
+  }
+
+  // If an ASCII/Symbol token has an adjacent subscript/superscript or vector arrow (like a^x, log_a, P_n., M_0, x_1, \vec{A}), it is 100% math!
+  if (hasAdjacentSubSup) {
+    return true
+  }
+
+  // Allow numbered list prefixes ("1.", "2.", "I.", "a)"), bracketed citations ("[1]", "[2]"), and author initials ("I.", "L.") to stay with prose
+  if (/^(?:\d{1,2}\.|[IVX]{1,4}\.|[a-d]\)|\[\d+\]|\p{Lu}\.)$/iu.test(trimmed)) {
     return false
   }
 
@@ -566,8 +571,11 @@ function isMathWordToken(
     return true
   }
 
-  // Prime derivatives like f', y', y'', Cu', aa', bb', ab', ba', dd', f''(x)
-  if (/^[A-Za-z0-9()]+['’′″]+[A-Za-z0-9(),;.]*$/.test(trimmed) && !/^\p{Lu}\p{Ll}{2,}['’]s$/iu.test(trimmed)) {
+  // Prime derivatives like f', y', y'', Cu', aa', bb', ab', ba', dd', f''(x) or function notation f(x), g(x), P(x)
+  if (
+    (/^[A-Za-z0-9()]+['’′″]+[A-Za-z0-9(),;.]*$/.test(trimmed) && !/^\p{Lu}\p{Ll}{2,}['’]s$/iu.test(trimmed)) ||
+    /^[A-Za-z]{1,3}\([A-Za-z0-9,.;:\s+'’′+-]*\)[,.;:]?$/.test(trimmed)
+  ) {
     return true
   }
 
@@ -679,28 +687,44 @@ function sampleBackgroundRGB(
   y1: number
 ): [number, number, number] {
   const pts: Array<[number, number]> = [
-    [x0 - 2, (y0 + y1) / 2],
-    [x1 + 2, (y0 + y1) / 2],
-    [(x0 + x1) / 2, y0 - 2],
-    [(x0 + x1) / 2, y1 + 2],
-    [x0 + 2, y0 - 2],
-    [x1 - 2, y0 - 2],
+    [x0 - 3, (y0 + y1) / 2],
+    [x1 + 3, (y0 + y1) / 2],
+    [(x0 + x1) / 2, y0 - 3],
+    [(x0 + x1) / 2, y1 + 3],
+    [x0 + 2, y0 - 3],
+    [x1 - 2, y0 - 3],
+    [x0 + 2, y1 + 3],
+    [x1 - 2, y1 + 3],
+    [x0 - 4, y0 - 2],
+    [x1 + 4, y0 - 2],
+    [x0 - 4, y1 + 2],
+    [x1 + 4, y1 + 2],
   ]
 
   const colors: Array<[number, number, number]> = []
+  let nearWhiteCount = 0
   for (const [px, py] of pts) {
     const ix = Math.max(0, Math.min(pixW - 1, Math.round(px)))
     const iy = Math.max(0, Math.min(pixH - 1, Math.round(py)))
     const idx = (iy * pixW + ix) * nComp
-    colors.push([samples[idx] / 255, samples[idx + 1] / 255, samples[idx + 2] / 255])
+    const r = samples[idx] / 255
+    const g = samples[idx + 1] / 255
+    const b = samples[idx + 2] / 255
+    if (r > 0.94 && g > 0.94 && b > 0.94) nearWhiteCount++
+    colors.push([r, g, b])
   }
 
-  // Pick median RGB component-wise to ignore stray glyph anti-aliasing pixels
+  // If at least 25% of perimeter samples are pure white paper, snap to [1, 1, 1] so glyph anti-aliasing never produces a gray rectangle
+  if (nearWhiteCount >= Math.ceil(pts.length * 0.25)) {
+    return [1, 1, 1]
+  }
+
+  // Otherwise pick the 80th-percentile brightest RGB component-wise to ignore dark ink strokes
   const rs = colors.map((c) => c[0]).sort((a, b) => a - b)
   const gs = colors.map((c) => c[1]).sort((a, b) => a - b)
   const bs = colors.map((c) => c[2]).sort((a, b) => a - b)
-  const mid = Math.floor(colors.length / 2)
-  return [rs[mid], gs[mid], bs[mid]]
+  const hi = Math.min(colors.length - 1, Math.floor(colors.length * 0.8))
+  return [rs[hi], gs[hi], bs[hi]]
 }
 
 function boxesOverlap(a: BBox, b: BBox, pad = 0): boolean {
@@ -714,7 +738,7 @@ function boxesOverlap(a: BBox, b: BBox, pad = 0): boolean {
 
 // Formula & Glossary Shielding inside Prose Spans (matches existing ⟦M0⟧ tokens first so they are never double-wrapped!)
 const INLINE_MATH_SHIELD_REGEX =
-  /(⟦M\d+⟧|\$[^$]+\$|\\[a-zA-Z]+(?:\{[^}]*\})+|\b[A-Za-z]['’′]+|\b(?:[A-Za-z]|\d+)°|[α-ωΑ-Ω]|\b(?:[A-Za-z]\d+|[A-Za-z]_[A-Za-z0-9]+(?:\^[A-Za-z0-9]+)?|[A-Za-z]!)\b|[|]?[A-Za-z0-9_'’′]+[|]?\s*[=<>≠≤≥±]+\s*[A-Za-z0-9_'’′!.…+\-*/^()]+|\[\d+(?:,\s*\d+)*\])/g
+  /(⟦M\d+⟧|\$[^$]+\$|\\[a-zA-Z]+(?:\{[^}]*\})+|[|]?[A-Za-z0-9_'’′()]+\s*[=<>≠≤≥±]+\s*[A-Za-z0-9_'’′!.…+\-*/^()]+|\b[fghFGH]\([a-zA-Z0-9,\s+-]+\)|[([]\s*[a-zA-Z0-9+-]+\s*[;,]\s*[a-zA-Z0-9+-]+\s*[)\]]|\b[A-Za-z]['’′]+|\b(?:[A-Za-z]|\d+)°|[α-ωΑ-Ω]|\b(?:[A-Za-z]\d+|[A-Za-z]_[A-Za-z0-9]+(?:\^[A-Za-z0-9]+)?|[A-Za-z]!)\b|\[\d+(?:,\s*\d+)*\])/g
 
 // Multilingual Academic Glossary Manager (ported from ThanhNguyxnOrg/LayoutLingua/layoutlingua/translation/glossary.py)
 // Loads JSON glossaries from src/engine/glossaries/academic_math_en_{lang}.json with bidirectional & English-pivot support.
@@ -1199,7 +1223,23 @@ export async function translateBatchWithFormulaShield(
   const glossarySl = sl === 'auto' ? detectLanguageFromText(texts.join(' ')) : sl
 
   const allCapsFlags = texts.map((t) => isAllCapsHeadingText(t))
-  const preparedTexts = texts.map((t, idx) => (allCapsFlags[idx] ? recaseAllCapsForNmt(t) : t))
+  // Detach leading structural Roman numeral or hierarchical section numbering (e.g. "I. ", "VI. ", "1.2. ")
+  // so NMT translates the heading/bookmark body cleanly without misinterpreting "I." or "V." as pronouns/abbreviations
+  const STRUCTURAL_PREFIX_RE =
+    /^(\s*(?:(?:I{1,3}|IV|VI{0,3}|IX|X{1,3}|XI{1,3}|XIV|XVI{0,3}|XIX|XX)\.|\d+(?:\.\d+)*\.|[a-d]\))\s+)(.+)$/su
+  const detachedPrefixes: string[] = new Array(texts.length).fill('')
+  const strippedInputs = texts.map((t, idx) => {
+    const m = t.match(STRUCTURAL_PREFIX_RE)
+    if (m && /\p{L}{2,}/u.test(m[2])) {
+      detachedPrefixes[idx] = m[1]
+      return m[2]
+    }
+    return t
+  })
+
+  const preparedTexts = strippedInputs.map((t, idx) =>
+    allCapsFlags[idx] ? recaseAllCapsForNmt(t) : t
+  )
   const shieldedItems = preparedTexts.map((t) =>
     shieldFormulas(t, tl, options?.customGlossary, glossarySl)
   )
@@ -1209,13 +1249,13 @@ export async function translateBatchWithFormulaShield(
   const pendingIndices: number[] = []
 
   for (let i = 0; i < shieldedItems.length; i++) {
-    if (isAlreadyInTargetLanguage(texts[i], glossarySl, tl)) {
-      results[i] = texts[i]
+    if (isAlreadyInTargetLanguage(strippedInputs[i], glossarySl, tl)) {
+      results[i] = strippedInputs[i]
       continue
     }
     const maskedTrim = shieldedItems[i].masked.trim()
     const cacheKey = `${sl}|${tl}|${maskedTrim}`
-    if (/^(?:[\dIVXLC]+\.\s*|[a-zA-Z][.)]\s*)?⟦M\d+⟧[.!:;,]?$/i.test(maskedTrim)) {
+    if (/^(?:[\dIVXLCDM]+\.\s*|[a-zA-Z][.)]\s*)?⟦M\d+⟧[.!:;,]?$/i.test(maskedTrim)) {
       results[i] = restoreFormulas(maskedTrim, shieldedItems[i].tokens)
     } else if (translationCache.has(cacheKey)) {
       results[i] = restoreFormulas(translationCache.get(cacheKey)!, shieldedItems[i].tokens)
@@ -1224,11 +1264,21 @@ export async function translateBatchWithFormulaShield(
     }
   }
 
-  if (pendingIndices.length === 0) {
-    return results.map((tr, idx) => {
-      const glossed = applyMultilingualGlossary(texts[idx], tr, glossarySl, tl, options?.customGlossary)
-      return allCapsFlags[idx] ? glossed.toUpperCase() : glossed
+  const finalizeResults = () =>
+    results.map((tr, idx) => {
+      const glossed = applyMultilingualGlossary(
+        strippedInputs[idx],
+        tr,
+        glossarySl,
+        tl,
+        options?.customGlossary
+      )
+      const cased = allCapsFlags[idx] ? glossed.toUpperCase() : glossed
+      return detachedPrefixes[idx] ? `${detachedPrefixes[idx]}${cased}` : cased
     })
+
+  if (pendingIndices.length === 0) {
+    return finalizeResults()
   }
 
   const geminiKey = options?.geminiKey || process.env.GEMINI_API_KEY || ''
@@ -1290,10 +1340,7 @@ export async function translateBatchWithFormulaShield(
   // 1. Try Gemini API if explicitly selected
   if (options?.provider === 'gemini' && geminiKey) {
     if (await translateIndicesWithGemini(pendingIndices)) {
-      return results.map((tr, idx) => {
-        const glossed = applyMultilingualGlossary(texts[idx], tr, sl, tl, options?.customGlossary)
-        return allCapsFlags[idx] ? glossed.toUpperCase() : glossed
-      })
+      return finalizeResults()
     }
   }
 
@@ -1337,16 +1384,7 @@ export async function translateBatchWithFormulaShield(
               translationCache.set(cacheKey, trStr)
               results[origIdx] = restoreFormulas(trStr, shieldedItems[origIdx].tokens)
             }
-            return results.map((tr, idx) => {
-              const glossed = applyMultilingualGlossary(
-                texts[idx],
-                tr,
-                sl,
-                tl,
-                options?.customGlossary
-              )
-              return allCapsFlags[idx] ? glossed.toUpperCase() : glossed
-            })
+            return finalizeResults()
           }
         }
       }
@@ -1410,10 +1448,7 @@ export async function translateBatchWithFormulaShield(
     pPos = pEnd
   }
 
-  return results.map((tr, idx) => {
-    const glossed = applyMultilingualGlossary(texts[idx], tr, glossarySl, tl, options?.customGlossary)
-    return allCapsFlags[idx] ? glossed.toUpperCase() : glossed
-  })
+  return finalizeResults()
 }
 
 /**
@@ -1435,17 +1470,40 @@ export function analyzePdfPageLayout(
   const pageW = bounds[2] - bounds[0]
   const pageH = bounds[3] - bounds[1]
 
-  const nativeLinks: Array<{ bbox: BBox; uri: string }> = []
+  const nativeLinks: Array<{ bbox: BBox; uri: string; isExternal: boolean }> = []
   try {
     const rawLinks = page.getLinks?.() || []
     for (const lnk of rawLinks) {
       const lb = lnk.getBounds?.()
-      const uri = String(lnk.getURI?.() || '').trim()
-      if (Array.isArray(lb) && lb.length >= 4 && uri && /^https?:\/\/|^mailto:/i.test(uri)) {
-        nativeLinks.push({
-          bbox: { x: lb[0], y: lb[1], w: Math.max(4, lb[2] - lb[0]), h: Math.max(4, lb[3] - lb[1]) },
-          uri,
-        })
+      const rawUri = String(lnk.getURI?.() || '').trim()
+      if (!Array.isArray(lb) || lb.length < 4 || !rawUri) continue
+      const bbox: BBox = {
+        x: lb[0],
+        y: lb[1],
+        w: Math.max(4, lb[2] - lb[0]),
+        h: Math.max(4, lb[3] - lb[1]),
+      }
+      if (/^https?:\/\/|^mailto:/i.test(rawUri)) {
+        nativeLinks.push({ bbox, uri: rawUri, isExternal: true })
+      } else {
+        // Internal document navigation link (GoTo page destination)
+        let targetPage = -1
+        const pageMatch = rawUri.match(/^#(?:page=)?(\d+)\b/i)
+        if (pageMatch) {
+          targetPage = parseInt(pageMatch[1], 10)
+        } else {
+          try {
+            const resolvedIdx = mupdfDoc.resolveLink?.(rawUri)
+            if (typeof resolvedIdx === 'number' && resolvedIdx >= 0) {
+              targetPage = resolvedIdx + 1
+            }
+          } catch {
+            // Ignore unresolvable named destination
+          }
+        }
+        if (targetPage >= 1) {
+          nativeLinks.push({ bbox, uri: `#page=${targetPage}`, isExternal: false })
+        }
       }
     }
   } catch {
@@ -1725,31 +1783,41 @@ export function analyzePdfPageLayout(
         const wx1 = Math.max(...wChars.map((c) => c.x1))
         const wy1 = Math.max(...wChars.map((c) => c.y1))
 
+        const isNaturalScriptWord =
+          MULTILINGUAL_SCRIPT_RE.test(txt) && !EXPLICIT_MATH_SYMBOL_RE.test(txt)
+
         // Check if any subscript/superscript char or vector arrow (MT Extra / Symbol) is horizontally & vertically adjacent to this word
+        // (Natural script words with diacritics/CJK/Cyrillic are never subscripted math variables)
         const hasAdjSubSup =
-          subSupChars.some(
+          !isNaturalScriptWord &&
+          (subSupChars.some(
             (sc) =>
               sc.x0 >= wx0 - 3 &&
               sc.x1 <= wx1 + 9 &&
               sc.y0 >= wy0 - 8 &&
               sc.y1 <= wy1 + 10
           ) ||
-          rawChars.some(
-            (rc) =>
-              /mt extra|symbol/i.test(rc.font) &&
-              rc.x0 >= wx0 - 3 &&
-              rc.x1 <= wx1 + 4 &&
-              rc.y0 >= wy0 - 9 &&
-              rc.y1 <= wy1 + 4 &&
-              Math.abs(rc.oy - wChars[0].oy) >= 1.5
-          )
+            rawChars.some(
+              (rc) =>
+                /mt extra|symbol/i.test(rc.font) &&
+                rc.x0 >= wx0 - 3 &&
+                rc.x1 <= wx1 + 4 &&
+                rc.y0 >= wy0 - 9 &&
+                rc.y1 <= wy1 + 4 &&
+                Math.abs(rc.oy - wChars[0].oy) >= 1.5
+            ))
 
         const first = wChars[0]
         const wBox: BBox = { x: wx0, y: wy0, w: wx1 - wx0, h: wy1 - wy0 }
-        const overlapsNativeLink = nativeLinks.some((nl) => boxesOverlap(wBox, nl.bbox, 1))
+        const overlapsExternalLink = nativeLinks.some(
+          (nl) => nl.isExternal && boxesOverlap(wBox, nl.bbox, 1)
+        )
         const isBlueHyperlinkColor =
-          first.color[2] >= 0.75 && first.color[0] <= 0.2 && first.color[1] <= 0.25
-        const isHyperlink = overlapsNativeLink || isBlueHyperlinkColor
+          !isNaturalScriptWord &&
+          first.color[2] >= 0.75 &&
+          first.color[0] <= 0.2 &&
+          first.color[1] <= 0.25
+        const isHyperlink = overlapsExternalLink || isBlueHyperlinkColor
 
         wordTokens.push({
           text: txt,
@@ -1941,7 +2009,84 @@ export function analyzePdfPageLayout(
             }
           }
 
-          // 4. Single-letter 1D ASCII tokens (a, b, c, d, n, r, R, S, etc.), primed/degree 1D variables (d', n°), or 1D Greek letters (α, β, γ) without 2D sub/superscripts
+          const is1DInlineToken = (t: WordToken): boolean => {
+            const c = t.text.replace(/^[,.;:()[\]{}]+|[,.;:()[\]{}]+$/g, '').trim()
+            return (
+              !t.hasAdjSubSup &&
+              !hasNonGreekSymbol(t) &&
+              !/[″≤≥≠±∓×÷∑∏∫√∞∂∇∈∉⊂⊃⊆⊇∪∩∀∃⇔⇒→←↔]/.test(t.text) &&
+              /^[a-zA-Z0-9=<>+\-*/^(),.;:[\]'’′°]+$/.test(t.text.trim()) &&
+              !MATH_FUNCTION_NAMES.has(c.toLowerCase()) &&
+              !/^[A-Z]{2,4}$/.test(c)
+            )
+          }
+
+          // 4. Multi-character 1D expressions or short 1D inline equation/interval sequences inside a prose sentence
+          // (e.g. "4=04; 8=08", "1!=1", "y=f(x)", "y = f(x)", "x = a", "(a; b)", "[a; b]", "a=d'")
+          // Evaluated BEFORE single-letter variable recovery so spaced equations like "y = f(x)" are matched as a complete unit!
+          if (proseWordCount >= 2 && wt.isMath && is1DInlineToken(wt)) {
+            const prevProse = i > 0 && !wordTokens[i - 1].isMath
+            let seqEnd = i
+            while (
+              seqEnd + 1 < wordTokens.length &&
+              seqEnd - i < 2 &&
+              is1DInlineToken(wordTokens[seqEnd + 1]) &&
+              (wordTokens[seqEnd + 1].isMath ||
+                /^[A-Za-z]{1,3}\([A-Za-z0-9,.;:\s+'’′+-]*\)[,.;:]?$/.test(
+                  wordTokens[seqEnd + 1].text.trim()
+                ))
+            ) {
+              seqEnd++
+            }
+            const combined1D = wordTokens
+              .slice(i, seqEnd + 1)
+              .map((w) => w.text.trim())
+              .join(' ')
+            const is1DEquationOrInterval =
+              /^(?:[a-zA-Z0-9_'’′()]+\s*=\s*[a-zA-Z0-9_'’′!()+-]+|[fghFGH]\([a-zA-Z0-9,\s+-]+\)|[([]\s*[a-zA-Z0-9+-]+\s*[;,]\s*[a-zA-Z0-9+-]+\s*[)\]][,.;:]?)$/.test(
+                combined1D
+              )
+            const isStandaloneEqBetween1D =
+              cleanTxt === '=' &&
+              prevProse &&
+              i > 0 &&
+              is1DInlineToken(wordTokens[i - 1]) &&
+              i + 1 < wordTokens.length &&
+              is1DInlineToken(wordTokens[i + 1])
+            const nextAfterSeqProse =
+              seqEnd + 1 < wordTokens.length && !wordTokens[seqEnd + 1].isMath
+            const adjSymMath =
+              (i > 0 &&
+                wordTokens[i - 1].isMath &&
+                (hasNonGreekSymbol(wordTokens[i - 1]) || wordTokens[i - 1].hasAdjSubSup)) ||
+              (seqEnd + 1 < wordTokens.length &&
+                wordTokens[seqEnd + 1].isMath &&
+                (hasNonGreekSymbol(wordTokens[seqEnd + 1]) ||
+                  wordTokens[seqEnd + 1].hasAdjSubSup ||
+                  EXPLICIT_MATH_SYMBOL_RE.test(wordTokens[seqEnd + 1].text)))
+
+            if (
+              !adjSymMath &&
+              (isStandaloneEqBetween1D ||
+                (seqEnd === i &&
+                  !/^[a-zA-Z]$/.test(cleanTxt) &&
+                  !/[=<>+-]$/.test(cleanTxt) &&
+                  !/^[a-z]{2,3}$/.test(cleanTxt) &&
+                  ((prevProse && (nextAfterSeqProse || proseWordCount >= 2)) ||
+                    (i === 0 && nextAfterSeqProse && proseWordCount >= 3))) ||
+                (is1DEquationOrInterval &&
+                  ((prevProse && (nextAfterSeqProse || proseWordCount >= 3)) ||
+                    (i === 0 && nextAfterSeqProse && proseWordCount >= 3))))
+            ) {
+              for (let mIdx = i; mIdx <= seqEnd; mIdx++) {
+                wordTokens[mIdx].isMath = false
+              }
+              i = seqEnd
+              continue
+            }
+          }
+
+          // 5. Single-letter 1D ASCII tokens (a, b, c, d, n, r, R, S, etc.), primed/degree 1D variables (d', n°), or 1D Greek letters (α, β, γ) without 2D sub/superscripts
           if (/^(?:[a-zA-Z]['’′°]?|[α-ωΑ-Ω])$/.test(cleanTxt)) {
             if (wt.hasAdjSubSup) continue
             const isGreekOrPrime = /^[α-ωΑ-Ω]$/.test(cleanTxt) || /['’′°]$/.test(cleanTxt)
@@ -1999,37 +2144,6 @@ export function analyzePdfPageLayout(
               wt.isMath = false
             }
             continue
-          }
-
-          if (proseWordCount < 2) continue
-
-          // 5. Multi-character 1D expressions inside a prose sentence (e.g. "4=04; 8=08", "1!=1", "y=f(x)", "a=d'")
-          if (
-            wt.isMath &&
-            !wt.hasSymbolFont &&
-            !wt.hasAdjSubSup &&
-            !/[″≤≥≠±∓×÷∑∏∫√∞∂∇⇔⇒→]/.test(wt.text) &&
-            !/[=<>+-]$/.test(cleanTxt) &&
-            !MATH_FUNCTION_NAMES.has(cleanTxt.toLowerCase()) &&
-            !/^[A-Z]{2,4}$/.test(cleanTxt) &&
-            !/^[a-z]{2,3}$/.test(cleanTxt)
-          ) {
-            const prevProse = i > 0 && !wordTokens[i - 1].isMath
-            const nextProse = i < wordTokens.length - 1 && !wordTokens[i + 1].isMath
-            const adjSymMath =
-              (i > 0 &&
-                wordTokens[i - 1].isMath &&
-                (hasNonGreekSymbol(wordTokens[i - 1]) || wordTokens[i - 1].hasAdjSubSup)) ||
-              (i < wordTokens.length - 1 &&
-                wordTokens[i + 1].isMath &&
-                (hasNonGreekSymbol(wordTokens[i + 1]) || wordTokens[i + 1].hasAdjSubSup))
-            if (
-              !adjSymMath &&
-              ((prevProse && (nextProse || proseWordCount >= 2)) ||
-                (i === 0 && nextProse && proseWordCount >= 3))
-            ) {
-              wt.isMath = false
-            }
           }
         }
       }
@@ -2145,10 +2259,10 @@ export function analyzePdfPageLayout(
       const oyOverlap = Math.min(sp.y1, mo.bbox.y + mo.bbox.h) - Math.max(sp.y0, mo.bbox.y)
       if (oyOverlap > 1.2) {
         if (mo.bbox.x >= sp.x0 + 2 && mo.bbox.x + mo.bbox.w > sp.x1 - 2) {
-          maxRight = Math.min(maxRight, Math.max(sp.x1, mo.bbox.x - 1.5))
+          maxRight = Math.min(maxRight, Math.max(sp.x1, mo.bbox.x - 0.8))
         }
         if (mo.bbox.x + mo.bbox.w <= sp.x0 + 2) {
-          minLeft = Math.max(minLeft, Math.min(sp.x0, mo.bbox.x + mo.bbox.w + 1.8))
+          minLeft = Math.max(minLeft, Math.min(sp.x0, mo.bbox.x + mo.bbox.w + 0.8))
         }
       }
     }
@@ -2275,7 +2389,10 @@ export function analyzePdfPageLayout(
       Math.abs(sp.x0 - targetGroup.x0) <= 46 &&
       (Math.abs(sp.rightClearanceX - targetGroup.rightClearanceX) <= 45 ||
         (sp.rightClearanceX < targetGroup.rightClearanceX &&
-          sp.rightClearanceX - sp.x0 >= pageW * 0.45)) &&
+          (sp.rightClearanceX - sp.x0 >= pageW * 0.45 ||
+            (Math.abs(sp.x0 - targetGroup.x0) <= 18 &&
+              lastSpan.x1 - lastSpan.x0 >= pageW * 0.42 &&
+              sp.rightClearanceX - sp.x0 >= 40)))) &&
       !(lastSpan.rightClearanceX < pageW * 0.65 && lastSpan.x1 - lastSpan.x0 < pageW * 0.35) &&
       lastSpan.x1 - lastSpan.x0 >=
         Math.max(
@@ -2328,7 +2445,23 @@ export function analyzePdfPageLayout(
                 Math.abs(mo1.bbox.x - mo2.bbox.x) <= 30
             )
         )
+      // Do not vertically merge across lines that are split horizontally into multiple prose fragments
+      // (merging left fragment of line 1 with line 2 would skip the right fragment of line 1 and scramble reading order)
+      const lastRowHasSiblingProse = proseSpans.some(
+        (other) =>
+          other !== lastSpan &&
+          Math.abs(other.oy - lastSpan.oy) <= 2.5 &&
+          Math.abs(other.x0 - lastSpan.x0) < pageW * 0.65
+      )
+      const spRowHasSiblingProse = proseSpans.some(
+        (other) =>
+          other !== sp &&
+          Math.abs(other.oy - sp.oy) <= 2.5 &&
+          Math.abs(other.x0 - sp.x0) < pageW * 0.65
+      )
       const hitsMath =
+        lastRowHasSiblingProse ||
+        spRowHasSiblingProse ||
         hasNewLeftSymbolRow ||
         hasDistinctRightFormulaRows ||
         mathObstacles.some(
@@ -2407,6 +2540,40 @@ export function analyzePdfPageLayout(
         mono: sp.mono,
         color: sp.color,
         bgColor: sp.bgColor,
+      })
+    }
+  }
+
+  // Attach native hyperlink URIs (both internal #page=N GoTo links and external URLs) to overlapping ProseGroups
+  for (const group of proseGroups) {
+    const gBox: BBox = {
+      x: group.x0,
+      y: group.y0,
+      w: group.x1 - group.x0,
+      h: group.y1 - group.y0,
+    }
+    const matchedLink = nativeLinks.find((nl) => boxesOverlap(gBox, nl.bbox, 2))
+    if (matchedLink) {
+      group.uri = matchedLink.uri
+    } else if (group.kind === 'toc' && group.spans[0]?.tocPageNum) {
+      const parsedPage = parseInt(group.spans[0].tocPageNum, 10)
+      if (!Number.isNaN(parsedPage) && parsedPage >= 1) {
+        group.uri = `#page=${parsedPage}`
+      }
+    }
+  }
+
+  // Also include any standalone nativeLinks that did not overlap a ProseGroup or existing linkObstacle
+  for (const nl of nativeLinks) {
+    const onGroup = proseGroups.some((g) =>
+      boxesOverlap({ x: g.x0, y: g.y0, w: g.x1 - g.x0, h: g.y1 - g.y0 }, nl.bbox, 2)
+    )
+    const onLinkObs = linkObstacles.some((lo) => boxesOverlap(lo.bbox, nl.bbox, 2))
+    if (!onGroup && !onLinkObs) {
+      linkObstacles.push({
+        bbox: nl.bbox,
+        text: nl.uri,
+        uri: nl.uri,
       })
     }
   }
@@ -2542,25 +2709,8 @@ let cachedCjkFontBuffer: Buffer | null = null
 
 function loadSystemFontBuffers(): Record<string, Buffer> {
   if (cachedFontFiles) return cachedFontFiles
-  const base = '/usr/share/fonts/truetype/liberation'
   const dejavuDir = 'node_modules/dejavu-fonts-ttf/ttf'
-  if (fs.existsSync(`${base}/LiberationSerif-Regular.ttf`)) {
-    cachedFontFiles = {
-      serifRegular: fs.readFileSync(`${base}/LiberationSerif-Regular.ttf`),
-      serifBold: fs.readFileSync(`${base}/LiberationSerif-Bold.ttf`),
-      serifItalic: fs.readFileSync(`${base}/LiberationSerif-Italic.ttf`),
-      serifBoldItalic: fs.readFileSync(`${base}/LiberationSerif-BoldItalic.ttf`),
-      sansRegular: fs.readFileSync(`${base}/LiberationSans-Regular.ttf`),
-      sansBold: fs.readFileSync(`${base}/LiberationSans-Bold.ttf`),
-      sansItalic: fs.readFileSync(`${base}/LiberationSans-Italic.ttf`),
-      monoRegular: fs.readFileSync(`${base}/LiberationMono-Regular.ttf`),
-    }
-    if (fs.existsSync(`${dejavuDir}/DejaVuSans.ttf`)) {
-      cachedFontFiles.unicodeSansRegular = fs.readFileSync(`${dejavuDir}/DejaVuSans.ttf`)
-      cachedFontFiles.unicodeSansBold = fs.readFileSync(`${dejavuDir}/DejaVuSans-Bold.ttf`)
-    }
-    return cachedFontFiles
-  }
+  const base = '/usr/share/fonts/truetype/liberation'
   if (fs.existsSync(`${dejavuDir}/DejaVuSans.ttf`)) {
     cachedFontFiles = {
       serifRegular: fs.readFileSync(`${dejavuDir}/DejaVuSerif.ttf`),
@@ -2571,6 +2721,21 @@ function loadSystemFontBuffers(): Record<string, Buffer> {
       sansBold: fs.readFileSync(`${dejavuDir}/DejaVuSans-Bold.ttf`),
       sansItalic: fs.readFileSync(`${dejavuDir}/DejaVuSans-Oblique.ttf`),
       monoRegular: fs.readFileSync(`${dejavuDir}/DejaVuSansMono.ttf`),
+      unicodeSansRegular: fs.readFileSync(`${dejavuDir}/DejaVuSans.ttf`),
+      unicodeSansBold: fs.readFileSync(`${dejavuDir}/DejaVuSans-Bold.ttf`),
+    }
+    return cachedFontFiles
+  }
+  if (fs.existsSync(`${base}/LiberationSerif-Regular.ttf`)) {
+    cachedFontFiles = {
+      serifRegular: fs.readFileSync(`${base}/LiberationSerif-Regular.ttf`),
+      serifBold: fs.readFileSync(`${base}/LiberationSerif-Bold.ttf`),
+      serifItalic: fs.readFileSync(`${base}/LiberationSerif-Italic.ttf`),
+      serifBoldItalic: fs.readFileSync(`${base}/LiberationSerif-BoldItalic.ttf`),
+      sansRegular: fs.readFileSync(`${base}/LiberationSans-Regular.ttf`),
+      sansBold: fs.readFileSync(`${base}/LiberationSans-Bold.ttf`),
+      sansItalic: fs.readFileSync(`${base}/LiberationSans-Italic.ttf`),
+      monoRegular: fs.readFileSync(`${base}/LiberationMono-Regular.ttf`),
     }
     return cachedFontFiles
   }
@@ -2711,6 +2876,126 @@ async function pickFontForText(
   return bundle.cjkRegular
 }
 
+type ProseRedactionBox = {
+  rx: number
+  topY: number
+  rw: number
+  botY: number
+  rh: number
+  ry: number
+  bgColor: [number, number, number]
+}
+
+/**
+ * Builds obstacle-clipped redaction rectangles for every prose span that still needs
+ * translation. Groups already written in the target language are left untouched.
+ */
+function buildProseRedactionBoxes(
+  proseGroups: ReturnType<typeof analyzePdfPageLayout>['proseGroups'],
+  mathObstacles: ReturnType<typeof analyzePdfPageLayout>['mathObstacles'],
+  pageH: number,
+  sourceLang: string,
+  targetLang: string
+): ProseRedactionBox[] {
+  const boxes: ProseRedactionBox[] = []
+  for (const group of proseGroups) {
+    if (isAlreadyInTargetLanguage(group.sourceText, sourceLang, targetLang)) continue
+    for (const sp of group.spans) {
+      const hasExtendedDiacritics = MULTILINGUAL_SCRIPT_RE.test(sp.text)
+      let padLeft = Math.max(1.5, sp.size * 0.1)
+      let padRight = Math.max(1.5, sp.size * 0.1)
+      let padTop = hasExtendedDiacritics ? Math.max(2.6, sp.size * 0.3) : Math.max(2.0, sp.size * 0.21)
+      let padBottom = hasExtendedDiacritics ? Math.max(2.0, sp.size * 0.2) : Math.max(1.8, sp.size * 0.16)
+
+      for (const mo of mathObstacles) {
+        const horizOverlap =
+          Math.min(sp.x1 + padRight, mo.bbox.x + mo.bbox.w) - Math.max(sp.x0 - padLeft, mo.bbox.x)
+        if (horizOverlap > 1) {
+          const moBottom = mo.bbox.y + mo.bbox.h
+          if (moBottom <= sp.y0 + 1.5 && sp.y0 - moBottom < padTop) {
+            padTop = Math.max(0, sp.y0 - moBottom - 0.3)
+          }
+          if (mo.bbox.y >= sp.y1 - 1.5 && mo.bbox.y - sp.y1 < padBottom) {
+            padBottom = Math.max(0, mo.bbox.y - sp.y1 - 0.3)
+          }
+        }
+        const vertOverlap =
+          Math.min(sp.y1 + padBottom, mo.bbox.y + mo.bbox.h) - Math.max(sp.y0 - padTop, mo.bbox.y)
+        if (vertOverlap > 1) {
+          const moRight = mo.bbox.x + mo.bbox.w
+          if (moRight <= sp.x0 + 1.5 && sp.x0 - moRight < padLeft) {
+            padLeft = Math.max(0, sp.x0 - moRight - 0.4)
+          }
+          if (mo.bbox.x >= sp.x1 - 1.5 && mo.bbox.x - sp.x1 < padRight) {
+            padRight = Math.max(0, mo.bbox.x - sp.x1 - 0.4)
+          }
+        }
+      }
+
+      const rx = Math.max(0, sp.x0 - padLeft)
+      const rw = Math.max(2, sp.x1 - sp.x0 + padLeft + padRight)
+      const topY = Math.max(0, sp.y0 - padTop)
+      const botY = Math.min(pageH, sp.y1 + padBottom)
+      const rh = Math.max(2, botY - topY)
+      const ry = pageH - botY
+      boxes.push({ rx, topY, rw, botY, rh, ry, bgColor: sp.bgColor })
+    }
+  }
+  return boxes
+}
+
+/**
+ * Physically redacts source prose glyphs from the ORIGINAL document with MuPDF's native
+ * redaction pipeline (black_boxes=false, image_method=0, line_art_method=1, text_method=0)
+ * on a private copy of the document, so the surviving page content (frozen math formulas,
+ * form XObjects, decorations) stays fully self-consistent in MuPDF's own output file.
+ *
+ * Returns the redacted document bytes for pdf-lib to load, plus the 0-based page indices
+ * whose redaction failed — those pages must fall back to paint-over rectangles during
+ * typesetting (`paintOverProse`).
+ */
+export async function redactSourceProsePages(
+  sourcePdfBytes: Buffer,
+  pageIndices: number[],
+  sourceLang: string,
+  targetLang: string
+): Promise<{ bytes: Buffer | null; failedPages: number[] }> {
+  try {
+    const mupdf = await getMupdf()
+    const doc = mupdf.Document.openDocument(sourcePdfBytes, 'application/pdf')
+    const pdf = doc.asPDF?.()
+    if (!pdf) return { bytes: null, failedPages: [...pageIndices] }
+    const failedPages: number[] = []
+    let redactedAny = false
+    for (const pageIndex of pageIndices) {
+      try {
+        const { proseGroups, mathObstacles, pageH } = analyzePdfPageLayout(mupdf, doc, pageIndex)
+        const boxes = buildProseRedactionBoxes(
+          proseGroups,
+          mathObstacles,
+          pageH,
+          sourceLang,
+          targetLang
+        )
+        if (boxes.length === 0) continue
+        const page = pdf.loadPage(pageIndex)
+        for (const rb of boxes) {
+          const annot = page.createAnnotation('Redact')
+          annot.setRect([rb.rx, rb.topY, rb.rx + rb.rw, rb.botY])
+        }
+        page.applyRedactions(false, 0, 1, 0)
+        redactedAny = true
+      } catch {
+        failedPages.push(pageIndex)
+      }
+    }
+    if (!redactedAny) return { bytes: null, failedPages: failedPages.length ? failedPages : [...pageIndices] }
+    const out = pdf.saveToBuffer('compress')
+    return { bytes: Buffer.from(out.asUint8Array()), failedPages }  } catch {
+    return { bytes: null, failedPages: [...pageIndices] }
+  }
+}
+
 /**
  * Translates and typesets a single page in-place on `pdfDoc`, preserving all vector equations and graphics.
  */
@@ -2730,6 +3015,7 @@ export async function translateAndTypesetPage(
     openaiModel?: string
     minFontShrink?: number
     customGlossary?: string
+    paintOverProse?: boolean
   }
 ): Promise<PageTranslationResult> {
   const mupdf = await getMupdf()
@@ -2754,29 +3040,50 @@ export async function translateAndTypesetPage(
   const issues: PageTranslationResult['issues'] = []
   let scaledBlocksCount = 0
 
-  // Register clickable PDF /Link annotations & interactive UI link blocks for preserved hyperlinks
-  linkObstacles.forEach((lo, idx) => {
+  const registerPdfLinkAnnotation = (bbox: BBox, uri: string) => {
     try {
-      const linkAnnot = pdfDoc.context.obj({
-        Type: 'Annot',
-        Subtype: 'Link',
-        Rect: [
-          lo.bbox.x,
-          pageH - (lo.bbox.y + lo.bbox.h),
-          lo.bbox.x + lo.bbox.w,
-          pageH - lo.bbox.y,
-        ],
-        Border: [0, 0, 0],
-        A: {
-          Type: 'Action',
-          S: 'URI',
-          URI: PDFString.of(lo.uri),
-        },
-      })
-      pdfPage.node.addAnnot(pdfDoc.context.register(linkAnnot))
+      const rect = [
+        bbox.x,
+        pageH - (bbox.y + bbox.h),
+        bbox.x + bbox.w,
+        pageH - bbox.y,
+      ]
+      const pageMatch = uri.match(/^#page=(\d+)$/i)
+      if (pageMatch) {
+        const targetPageNum = parseInt(pageMatch[1], 10)
+        if (targetPageNum >= 1 && targetPageNum <= pdfDoc.getPageCount()) {
+          const targetPageRef = pdfDoc.getPage(targetPageNum - 1).ref
+          const goToAnnot = pdfDoc.context.obj({
+            Type: 'Annot',
+            Subtype: 'Link',
+            Rect: rect,
+            Border: [0, 0, 0],
+            Dest: [targetPageRef, PDFName.of('XYZ'), null, null, null],
+          })
+          pdfPage.node.addAnnot(pdfDoc.context.register(goToAnnot))
+        }
+      } else if (/^https?:\/\/|^mailto:/i.test(uri)) {
+        const linkAnnot = pdfDoc.context.obj({
+          Type: 'Annot',
+          Subtype: 'Link',
+          Rect: rect,
+          Border: [0, 0, 0],
+          A: {
+            Type: 'Action',
+            S: 'URI',
+            URI: PDFString.of(uri),
+          },
+        })
+        pdfPage.node.addAnnot(pdfDoc.context.register(linkAnnot))
+      }
     } catch {
       // Ignore PDF annotation registration errors
     }
+  }
+
+  // Register clickable PDF /Link annotations & interactive UI link blocks for preserved standalone hyperlinks
+  linkObstacles.forEach((lo, idx) => {
+    registerPdfLinkAnnotation(lo.bbox, lo.uri)
 
     blockMetas.push({
       id: `p${pageIndex + 1}_lnk${idx + 1}`,
@@ -2832,82 +3139,58 @@ export async function translateAndTypesetPage(
   )
 
   // 2. Two-Pass Rendering Architecture (matching LayoutLingua renderer.py & PDFMathTranslate):
-  // PASS 1: Redact all constituent prose spans across the entire page first so no background rectangle ever overwrites translated descenders/glyphs of adjacent blocks.
-  for (let i = 0; i < proseGroups.length; i++) {
-    if (preservedTargetGroups[i]) continue
-    const group = proseGroups[i]
-    for (const sp of group.spans) {
-      const hasExtendedDiacritics = MULTILINGUAL_SCRIPT_RE.test(sp.text)
-      let padLeft = Math.max(1.2, sp.size * 0.08)
-      let padRight = Math.max(1.2, sp.size * 0.08)
-      let padTop = hasExtendedDiacritics ? Math.max(2.6, sp.size * 0.30) : Math.max(2.0, sp.size * 0.21)
-      let padBottom = hasExtendedDiacritics ? Math.max(2.0, sp.size * 0.20) : Math.max(1.8, sp.size * 0.16)
-
-      for (const mo of mathObstacles) {
-        const horizOverlap =
-          Math.min(sp.x1 + padRight, mo.bbox.x + mo.bbox.w) - Math.max(sp.x0 - padLeft, mo.bbox.x)
-        if (horizOverlap > 1) {
-          const moBottom = mo.bbox.y + mo.bbox.h
-          if (moBottom <= sp.y0 + 1.5 && sp.y0 - moBottom < padTop) {
-            padTop = Math.max(0, sp.y0 - moBottom - 0.3)
-          }
-          if (mo.bbox.y >= sp.y1 - 1.5 && mo.bbox.y - sp.y1 < padBottom) {
-            padBottom = Math.max(0, mo.bbox.y - sp.y1 - 0.3)
-          }
-        }
-        const vertOverlap =
-          Math.min(sp.y1 + padBottom, mo.bbox.y + mo.bbox.h) - Math.max(sp.y0 - padTop, mo.bbox.y)
-        if (vertOverlap > 1) {
-          const moRight = mo.bbox.x + mo.bbox.w
-          if (moRight <= sp.x0 + 1.5 && sp.x0 - moRight < padLeft) {
-            padLeft = Math.max(0, sp.x0 - moRight - 0.4)
-          }
-          if (mo.bbox.x >= sp.x1 - 1.5 && mo.bbox.x - sp.x1 < padRight) {
-            padRight = Math.max(0, mo.bbox.x - sp.x1 - 0.4)
-          }
-        }
-      }
-
-      const rx = Math.max(0, sp.x0 - padLeft)
-      const rw = Math.max(2, sp.x1 - sp.x0 + padLeft + padRight)
-      const topY = Math.max(0, sp.y0 - padTop)
-      const botY = Math.min(pageH, sp.y1 + padBottom)
-      const rh = Math.max(2, botY - topY)
-      const ry = pageH - botY
-
+  // PASS 1 happened in `redactSourceProsePages`, which physically removed the source prose
+  // glyphs from this page's content stream via MuPDF's native redaction pipeline while
+  // keeping the page resources self-consistent (frozen math forms intact). When that
+  // pre-pass could not run for this page (`paintOverProse`), fall back to painting
+  // background-matched rectangles so the original glyphs stay covered instead.
+  if (options?.paintOverProse) {
+    const paintRects = buildProseRedactionBoxes(
+      proseGroups,
+      mathObstacles,
+      pageH,
+      sourceLang,
+      targetLang
+    )
+    for (const rb of paintRects) {
       pdfPage.drawRectangle({
-        x: rx,
-        y: ry,
-        width: rw,
-        height: rh,
-        color: rgb(sp.bgColor[0], sp.bgColor[1], sp.bgColor[2]),
+        x: rb.rx,
+        y: rb.ry,
+        width: rb.rw,
+        height: rb.rh,
+        color: rgb(rb.bgColor[0], rb.bgColor[1], rb.bgColor[2]),
         borderWidth: 0,
       })
     }
   }
 
-  // PASS 2: Typeset translated text for each ProseGroup after all background redactions are complete.
+  // PASS 2: Typeset translated text for each ProseGroup after all redactions are complete.
   for (let i = 0; i < proseGroups.length; i++) {
     const group = proseGroups[i]
     const trText = (translatedTexts[i] || group.sourceText).trim()
     group.translatedText = trText
+    const groupBBox: BBox = {
+      x: group.x0,
+      y: group.y0,
+      w: group.x1 - group.x0,
+      h: group.y1 - group.y0,
+    }
+    if (group.uri) {
+      registerPdfLinkAnnotation(groupBBox, group.uri)
+    }
 
     if (preservedTargetGroups[i]) {
       blockMetas.push({
         id: group.id,
         kind: group.kind,
-        bbox: {
-          x: group.x0,
-          y: group.y0,
-          w: group.x1 - group.x0,
-          h: group.y1 - group.y0,
-        },
+        bbox: groupBBox,
         pageW,
         pageH,
         sourceText: group.sourceText,
         translatedText: trText,
         fontScale: 1.0,
         preserved: true,
+        uri: group.uri,
       })
       continue
     }
@@ -2933,12 +3216,16 @@ export async function translateAndTypesetPage(
       if (rawTitleW > maxTitleW) {
         const effectiveMinScale = Math.min(minShrink, 0.5)
         const reqTotalScale = maxTitleW / Math.max(1, rawTitleW)
-        // Use PDF Tz horizontal condensation down to 78% first so the vertical font height stays at 100% (matching sibling TOC rows!)
-        const tzFactor = Math.max(0.78, Math.min(1.0, reqTotalScale))
+        // Use PDF Tz horizontal condensation down to 78% first (and down to 65% if vertical scale reaches floor)
+        let tzFactor = Math.max(0.78, Math.min(1.0, reqTotalScale))
+        let neededVertScale = reqTotalScale / tzFactor
+        if (neededVertScale < effectiveMinScale) {
+          tzFactor = Math.max(0.65, Math.min(1.0, reqTotalScale / effectiveMinScale))
+          neededVertScale = reqTotalScale / tzFactor
+        }
         horizScalePct = tzFactor * 100
-        const neededVertScale = reqTotalScale / tzFactor
         appliedScale = Math.max(effectiveMinScale, Math.min(1.0, neededVertScale))
-        if (neededVertScale < effectiveMinScale) overflowFallback = true
+        if (neededVertScale < effectiveMinScale - 0.01) overflowFallback = true
         fontSize = group.size * appliedScale
         renderedTitleW = safeWidthOfText(font, trText, fontSize) * tzFactor
       }
@@ -3013,11 +3300,13 @@ export async function translateAndTypesetPage(
       } else {
         // Check if 2-line compact wrapping is possible when unobstructed below
         let minBelowY = pageH - 20
+        const spMidY = (sp.y0 + sp.y1) / 2
         for (const mo of mathObstacles) {
           const hOverlap =
             Math.min(drawX + clearanceW, mo.bbox.x + mo.bbox.w) - Math.max(drawX, mo.bbox.x)
-          if (hOverlap > 2 && mo.bbox.y >= sp.y1 - 1) {
-            minBelowY = Math.min(minBelowY, mo.bbox.y)
+          const moMidY = mo.bbox.y + mo.bbox.h / 2
+          if (hOverlap > 2 && moMidY > spMidY + 4 && mo.bbox.y + mo.bbox.h > sp.y1 + 1) {
+            minBelowY = Math.min(minBelowY, Math.max(sp.y1, mo.bbox.y))
           }
         }
         for (let j = 0; j < proseGroups.length; j++) {
@@ -3025,13 +3314,36 @@ export async function translateAndTypesetPage(
           const og = proseGroups[j]
           const ogEffectiveRight = Math.max(og.x1, Math.min(og.rightClearanceX, og.x0 + 140))
           const hOverlap = Math.min(drawX + clearanceW, ogEffectiveRight) - Math.max(drawX, og.x0)
-          if (hOverlap > 2 && og.y0 >= sp.y1 - 1) {
-            minBelowY = Math.min(minBelowY, og.y0)
+          const ogMidY = (og.y0 + og.y1) / 2
+          if (hOverlap > 2 && ogMidY > spMidY + 4 && og.y1 > sp.y1 + 1) {
+            minBelowY = Math.min(minBelowY, Math.max(sp.y1, og.y0))
           }
         }
         const vertGapBelow = minBelowY - sp.y1
         const singleLineScale = clearanceW / Math.max(1, fullW)
-        const hasInternalSpace = /\S\s+\S/.test(trText)
+
+        const drawSingleLineCondensed = () => {
+          // Anisotropic single-line fit: combine PDF Tz horizontal condensation (down to 82% normally, or down to 64% for tight inline slots) with vertical font scale
+          let tzFactor = Math.max(0.82, Math.min(1.0, singleLineScale))
+          let neededVertScale = singleLineScale / tzFactor
+          if (neededVertScale < effectiveMinScale) {
+            tzFactor = Math.max(0.64, Math.min(1.0, singleLineScale / effectiveMinScale))
+            neededVertScale = singleLineScale / tzFactor
+          }
+          appliedScale = Math.max(effectiveMinScale, Math.min(1.0, neededVertScale))
+          const renderedW = fullW * appliedScale * tzFactor
+          if (renderedW > clearanceW * 1.08 + 2.5) overflowFallback = true
+          const fontSize = group.size * appliedScale
+          const baselinePdfY = pageH - sp.oy
+          drawTextWithHorizScale(pdfPage, trText, {
+            x: drawX,
+            y: baselinePdfY,
+            size: fontSize,
+            font,
+            color: fgColor,
+            horizScalePct: tzFactor * 100,
+          })
+        }
 
         if (singleLineScale < 0.78 && vertGapBelow >= group.size * 0.95 && clearanceW >= 42) {
           // Find the highest scale in [effectiveMinScale, 0.90] that wraps cleanly into <= 2 lines
@@ -3066,79 +3378,52 @@ export async function translateAndTypesetPage(
               })
             }
           } else {
-            // Anisotropic single-line fit: combine PDF Tz horizontal condensation (down to 82%,
-            // or 72% for a single word which has no wrap points) with vertical font scale
-            const tzFloor = hasInternalSpace ? 0.82 : 0.72
-            const tzFactor = Math.max(tzFloor, Math.min(1.0, singleLineScale))
-            const neededVertScale = singleLineScale / tzFactor
-            appliedScale = Math.max(effectiveMinScale, Math.min(1.0, neededVertScale))
-            if (neededVertScale < effectiveMinScale) overflowFallback = true
-            const fontSize = group.size * appliedScale
-            const baselinePdfY = pageH - sp.oy
-            drawTextWithHorizScale(pdfPage, trText, {
-              x: drawX,
-              y: baselinePdfY,
-              size: fontSize,
-              font,
-              color: fgColor,
-              horizScalePct: tzFactor * 100,
-            })
+            drawSingleLineCondensed()
           }
         } else {
-          // Anisotropic single-line fit: combine PDF Tz horizontal condensation (down to 82%,
-          // or 72% for a single word which has no wrap points) with vertical font scale
-          const tzFloor = hasInternalSpace ? 0.82 : 0.72
-          const tzFactor = Math.max(tzFloor, Math.min(1.0, singleLineScale))
-          const neededVertScale = singleLineScale / tzFactor
-          appliedScale = Math.max(effectiveMinScale, Math.min(1.0, neededVertScale))
-          if (neededVertScale < effectiveMinScale) overflowFallback = true
-          const fontSize = group.size * appliedScale
-          const baselinePdfY = pageH - sp.oy
-          drawTextWithHorizScale(pdfPage, trText, {
-            x: drawX,
-            y: baselinePdfY,
-            size: fontSize,
-            font,
-            color: fgColor,
-            horizScalePct: tzFactor * 100,
-          })
+          drawSingleLineCondensed()
         }
       }
     } else {
       // Multi-line paragraph or display heading block (supports first-line indent, last-line obstacle inset, and strict vertical clearance)
       const rightMarginLimit = Math.max(group.x1, pageW - Math.min(36, Math.max(18, pageW * 0.05)))
+      const numOrigLines = group.spans.length
+      const nonLastSpans = numOrigLines > 1 ? group.spans.slice(0, -1) : group.spans
+      const nonLastRightClearance = Math.min(...nonLastSpans.map((s) => s.rightClearanceX))
       const rawBoxW = Math.max(
         group.x1 - group.x0,
-        Math.min(group.rightClearanceX - group.x0, (group.x1 - group.x0) * 1.45)
+        Math.min(nonLastRightClearance - group.x0, (group.x1 - group.x0) * 1.45)
       )
       const boxW = Math.max(40, Math.min(rawBoxW, rightMarginLimit - group.x0))
       const boxH = group.y1 - group.y0
-      const numOrigLines = group.spans.length
       const firstLineIndent =
         group.spans[0].x0 > group.x0 + 3 && group.spans[0].x0 - group.x0 < boxW * 0.45
           ? group.spans[0].x0 - group.x0
           : 0
       const lastSpan = group.spans[numOrigLines - 1]
       const lastLineMaxW =
-        lastSpan && lastSpan.rightClearanceX < group.rightClearanceX - 8
-          ? Math.max(40, Math.min(boxW, lastSpan.rightClearanceX - group.x0))
+        lastSpan && lastSpan.rightClearanceX - group.x0 < boxW - 6
+          ? Math.max(36, Math.min(boxW, lastSpan.rightClearanceX - group.x0))
           : boxW
 
       // Check vertical obstacle clearance directly below this multi-line group
       let minBelowY = pageH - 16
+      const lastSpanMidY = lastSpan ? (lastSpan.y0 + lastSpan.y1) / 2 : (group.y0 + group.y1) / 2
       for (const mo of mathObstacles) {
         const hOverlap =
           Math.min(group.x0 + boxW, mo.bbox.x + mo.bbox.w) - Math.max(group.x0, mo.bbox.x)
-        if (hOverlap > 2 && mo.bbox.y >= group.y1 - 1.5) {
-          minBelowY = Math.min(minBelowY, mo.bbox.y)
+        const moMidY = mo.bbox.y + mo.bbox.h / 2
+        if (hOverlap > 2 && moMidY > lastSpanMidY + 4 && mo.bbox.y + mo.bbox.h > group.y1 + 1) {
+          minBelowY = Math.min(minBelowY, Math.max(group.y1, mo.bbox.y))
         }
       }
       for (let j = 0; j < proseGroups.length; j++) {
         if (j === i) continue
         const og = proseGroups[j]
         const hOverlap = Math.min(group.x0 + boxW, og.x1) - Math.max(group.x0, og.x0)
-        if (hOverlap > 2 && og.y0 >= group.y1 - 1.5) {
-          minBelowY = Math.min(minBelowY, og.y0)
+        const ogMidY = (og.y0 + og.y1) / 2
+        if (hOverlap > 2 && ogMidY > lastSpanMidY + 4 && og.y1 > group.y1 + 1) {
+          minBelowY = Math.min(minBelowY, Math.max(group.y1, og.y0))
         }
       }
 
@@ -3181,8 +3466,10 @@ export async function translateAndTypesetPage(
           group.spans[0].oy +
           (lines.length - 1) * Math.min(candStep, testSize * 1.28) +
           testSize * 0.22
-        const fitsVertically =
-          lines.length <= numOrigLines || projectedBottomY <= maxBottomY
+        const hasRightObstacleOnLastLine = lastLineMaxW < boxW - 6
+        const fitsVertically = hasRightObstacleOnLastLine
+          ? lines.length <= numOrigLines
+          : lines.length <= numOrigLines || projectedBottomY <= maxBottomY
         const fitsHorizontally = lines.every((ln, idx) => {
           const lineMaxW =
             idx === 0
@@ -3304,18 +3591,14 @@ export async function translateAndTypesetPage(
     blockMetas.push({
       id: group.id,
       kind: group.kind,
-      bbox: {
-        x: group.x0,
-        y: group.y0,
-        w: group.x1 - group.x0,
-        h: group.y1 - group.y0,
-      },
+      bbox: groupBBox,
       pageW,
       pageH,
       sourceText: group.sourceText,
       translatedText: trText,
       fontScale: Number(appliedScale.toFixed(2)),
       preserved: false,
+      uri: group.uri,
     })
   }
 
@@ -3329,6 +3612,128 @@ export async function translateAndTypesetPage(
     status: issues.length > 0 ? 'warn' : 'ok',
     blocks: blockMetas,
     issues,
+  }
+}
+
+/**
+ * Decodes a PDFString or PDFHexString outline title into Unicode (handling UTF-16BE, UTF-16LE, UTF-8, PDFDocEncoding, and legacy VNI).
+ */
+function decodePdfOutlineTitle(titleObj: PDFString | PDFHexString): string {
+  try {
+    const bytes = titleObj.asBytes()
+    if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+      return titleObj.decodeText()
+    }
+    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+      return new TextDecoder('utf-16le').decode(bytes.subarray(2))
+    }
+    if (bytes.some((b) => b >= 0x80)) {
+      try {
+        const utf8 = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+        if (utf8.trim()) return utf8
+      } catch {
+        // Fall through to PDFDocEncoding / VNI
+      }
+    }
+    const raw = titleObj.decodeText()
+    if (/[A-Za-z][ÆæØøŒœŸÿ©®™µ¶]|[a-zA-Z][ùúûõïäëâêÙÚÛÕÏÄËÂÊ]/.test(raw)) {
+      return decodeVniToUnicode(raw)
+    }
+    return raw
+  } catch {
+    return titleObj.decodeText()
+  }
+}
+
+/**
+ * Traverses and translates the PDF Document Catalog `/Outlines` (Bookmark / Table of Contents sidebar tree) in-place.
+ */
+export async function translatePdfOutlines(
+  pdfDoc: PDFDocument,
+  sourceLang: string,
+  targetLang: string,
+  options?: {
+    provider?: string
+    geminiKey?: string
+    geminiModel?: string
+    openaiKey?: string
+    openaiEndpoint?: string
+    openaiModel?: string
+    customGlossary?: string
+  }
+): Promise<number> {
+  try {
+    const outlinesRef = pdfDoc.catalog.get(PDFName.of('Outlines'))
+    if (!outlinesRef) return 0
+    const outlinesDict = pdfDoc.context.lookupMaybe(outlinesRef, PDFDict)
+    if (!outlinesDict) return 0
+
+    const items: Array<{ dict: PDFDict; title: string }> = []
+    const visited = new Set<any>()
+
+    const walk = (refOrObj: any) => {
+      if (!refOrObj || visited.has(refOrObj)) return
+      visited.add(refOrObj)
+      const dict = pdfDoc.context.lookupMaybe(refOrObj, PDFDict)
+      if (!dict || visited.has(dict)) return
+      visited.add(dict)
+
+      const titleEntry = dict.get(PDFName.of('Title'))
+      if (titleEntry) {
+        const lookedUp = pdfDoc.context.lookup(titleEntry)
+        if (lookedUp instanceof PDFString || lookedUp instanceof PDFHexString) {
+          const decoded = decodePdfOutlineTitle(lookedUp).trim()
+          if (decoded) {
+            items.push({ dict, title: decoded })
+          }
+        }
+      }
+
+      const firstChild = dict.get(PDFName.of('First'))
+      if (firstChild) walk(firstChild)
+
+      const nextSibling = dict.get(PDFName.of('Next'))
+      if (nextSibling) walk(nextSibling)
+    }
+
+    const rootFirst = outlinesDict.get(PDFName.of('First'))
+    if (rootFirst) walk(rootFirst)
+    if (items.length === 0) return 0
+
+    const sourceTitles = items.map((item) => item.title)
+    const translatedTitles = await translateBatchWithFormulaShield(
+      sourceTitles,
+      sourceLang,
+      targetLang,
+      options
+    )
+
+    for (let i = 0; i < items.length; i++) {
+      const tr = (translatedTitles[i] || items[i].title).trim()
+      if (tr) {
+        items[i].dict.set(PDFName.of('Title'), PDFHexString.fromText(tr))
+      }
+    }
+    return items.length
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Subsets embedded TrueType fonts and deduplicates PDF streams/objects via MuPDF (`subsetFonts` + `garbage=4,compress`).
+ * Prevents multi-page font stream duplication and keeps exported PDFs compact.
+ */
+export async function optimizePdfBuffer(pdfBytes: Buffer): Promise<Buffer> {
+  try {
+    const mupdf = await getMupdf()
+    const doc = mupdf.Document.openDocument(pdfBytes, 'application/pdf').asPDF()
+    if (!doc) return pdfBytes
+    doc.subsetFonts()
+    const out = doc.saveToBuffer('garbage=4,compress')
+    return Buffer.from(out.asUint8Array())
+  } catch {
+    return pdfBytes
   }
 }
 

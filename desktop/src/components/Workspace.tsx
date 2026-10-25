@@ -1220,6 +1220,7 @@ export default function Workspace({
             width={width}
             docId={docInfo?.id}
             version={runId}
+            onNavigatePage={select}
             {...mark}
           />
           {page.status === 'fallback' && <span className="absolute inset-y-0 -left-[5px] w-[3px] bg-red" aria-hidden="true" />}
@@ -1330,7 +1331,7 @@ export default function Workspace({
               {mode === 'side' ? (
                 <>
                   <PageFrame label="Source" sub={<>{src} · <span className="font-mono">p.{page.n}</span></>} width={width}>
-                    <PdfPage page={page} type="source" width={width} docId={docInfo?.id} {...mark} />
+                    <PdfPage page={page} type="source" width={width} docId={docInfo?.id} onNavigatePage={select} {...mark} />
                   </PageFrame>
                   <PageFrame label="Translated" sub={<>{tgt} · <PageState s={s} idle={phase === 'idle'} /></>} width={width}>
                     {output()}
@@ -1345,7 +1346,7 @@ export default function Workspace({
                   </span>
                 }>
                   <div className="relative">
-                    <PdfPage page={page} type="source" width={width} docId={docInfo?.id} {...mark} />
+                    <PdfPage page={page} type="source" width={width} docId={docInfo?.id} onNavigatePage={select} {...mark} />
                     <div className="absolute inset-0" style={{ opacity: blend / 100 }}>{output()}</div>
                   </div>
                 </PageFrame>

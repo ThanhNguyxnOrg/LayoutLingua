@@ -10,6 +10,9 @@ import {
   getMupdf,
   embedFontBundle,
   translateAndTypesetPage,
+  redactSourceProsePages,
+  translatePdfOutlines,
+  optimizePdfBuffer,
   renderPdfPageToPng,
   detectLanguageFromText,
   type PageTranslationResult,
@@ -24,6 +27,8 @@ interface SessionData {
   size: number
   source_pdf_bytes: Buffer
   translated_pdf_bytes?: Buffer
+  active_out_doc?: PDFDocument
+  active_out_dirty?: boolean
   page_count: number
   word_count: number
   detected_lang: string
@@ -397,6 +402,16 @@ async function startServer() {
         return
       }
 
+      if (
+        previewType === 'translated' &&
+        session.active_out_doc &&
+        session.active_out_dirty &&
+        session.page_results[clampedPage]
+      ) {
+        session.translated_pdf_bytes = Buffer.from(await session.active_out_doc.save())
+        session.active_out_dirty = false
+      }
+
       const activePdfBytes =
         previewType === 'translated' && session.translated_pdf_bytes
           ? session.translated_pdf_bytes
@@ -485,9 +500,48 @@ async function startServer() {
             session.source_pdf_bytes,
             'application/pdf'
           )
-          const outDoc = await PDFDocument.load(session.source_pdf_bytes)
-          const fontBundle = await embedFontBundle(outDoc, targetLang)
 
+          // PASS 1 (pre-pass): physically redact the source prose glyphs from a private MuPDF
+          // copy of the document so the output content stream carries no original text, while
+          // the surviving page resources (frozen math forms, decorations) stay self-consistent.
+          const resolvedSourceLang = sourceLang === 'auto' ? session.detected_lang : sourceLang
+          let outputSourceBytes = session.source_pdf_bytes
+          const paintOverPages = new Set<number>(selectedPages.map((p) => p - 1))
+          try {
+            const redactRes = await redactSourceProsePages(
+              session.source_pdf_bytes,
+              selectedPages.map((p) => p - 1),
+              resolvedSourceLang,
+              targetLang
+            )
+            if (redactRes.bytes) {
+              outputSourceBytes = redactRes.bytes
+              for (const p of selectedPages) {
+                if (!redactRes.failedPages.includes(p - 1)) paintOverPages.delete(p - 1)
+              }
+            }
+          } catch {
+            // Fail closed: keep the original bytes and paint over prose during typesetting
+          }
+
+          const outDoc = await PDFDocument.load(outputSourceBytes)
+          session.active_out_doc = outDoc
+          session.active_out_dirty = false
+          const fontBundle = await embedFontBundle(outDoc, targetLang)
+          const effectiveSourceLang = sourceLang === 'auto' ? session.detected_lang : sourceLang
+          const translationOpts = {
+            provider: body.provider,
+            geminiKey: body.gemini_key,
+            geminiModel: body.gemini_model,
+            openaiKey: body.openai_key,
+            openaiEndpoint: body.openai_endpoint,
+            openaiModel: body.openai_model,
+            minFontShrink: body.min_font_shrink,
+            customGlossary: body.custom_glossary,
+          }
+
+          // Translate PDF Document Catalog /Outlines (Bookmark / Table of Contents tree)
+          await translatePdfOutlines(outDoc, effectiveSourceLang, targetLang, translationOpts)
           const pageStatuses: Record<number, string> = {}
           const pageBlockCounts: Record<number, number> = {}
           const pageMathCounts: Record<number, number> = {}
@@ -514,12 +568,17 @@ async function startServer() {
 
           for (let idx = 0; idx < selectedPages.length; idx++) {
             if (session.cancel_requested) {
+              const rawBytes = Buffer.from(await outDoc.save())
+              session.translated_pdf_bytes = await optimizePdfBuffer(rawBytes)
+              session.active_out_doc = undefined
+              session.active_out_dirty = false
               session.is_translating = false
               session.progress = {
                 ...session.progress,
                 status: 'idle',
                 message: 'Translation cancelled by user.',
               }
+              persistSessionToDisk(session, false)
               return
             }
 
@@ -549,18 +608,9 @@ async function startServer() {
               outDoc,
               fontBundle,
               pageNum - 1,
-              sourceLang === 'auto' ? session.detected_lang : sourceLang,
+              effectiveSourceLang,
               targetLang,
-              {
-                provider: body.provider,
-                geminiKey: body.gemini_key,
-                geminiModel: body.gemini_model,
-                openaiKey: body.openai_key,
-                openaiEndpoint: body.openai_endpoint,
-                openaiModel: body.openai_model,
-                minFontShrink: body.min_font_shrink,
-                customGlossary: body.custom_glossary,
-              }
+              { ...translationOpts, paintOverProse: paintOverPages.has(pageNum - 1) }
             )
 
             session.page_results[pageNum] = pageResult
@@ -571,10 +621,15 @@ async function startServer() {
             totalBlocksTranslated += pageResult.blocksTranslated
             allIssues.push(...pageResult.issues)
 
-            // Save intermediate PDF bytes and live integrity so user can preview translated pages immediately!
-            const updatedBytes = Buffer.from(await outDoc.save())
-            session.translated_pdf_bytes = updatedBytes
+            session.active_out_dirty = true
             session.page_png_cache.delete(`translated_${pageNum}_${targetLang}`)
+
+            // Serialize immediately on the first page so the workspace preview updates right away,
+            // and defer full font-subsetted optimization until the job completes to avoid 96x font stream duplication
+            if (idx === 0) {
+              session.translated_pdf_bytes = Buffer.from(await outDoc.save())
+              session.active_out_dirty = false
+            }
 
             const liveIntegrity = {
               blocks_translated: totalBlocksTranslated,
@@ -605,10 +660,13 @@ async function startServer() {
               message: `Typeset Page ${pageNum}: ${pageResult.blocksTranslated} prose blocks translated, ${pageResult.mathBlocksPreserved} formula regions preserved.`,
               integrity: liveIntegrity,
             }
-            if ((idx + 1) % 5 === 0 || idx === selectedPages.length - 1) {
-              persistSessionToDisk(session, false)
-            }
           }
+
+          // Finalize PDF: save once, subset embedded TrueType fonts, and deduplicate PDF streams via MuPDF
+          const rawFinalBytes = Buffer.from(await outDoc.save())
+          session.translated_pdf_bytes = await optimizePdfBuffer(rawFinalBytes)
+          session.active_out_doc = undefined
+          session.active_out_dirty = false
 
           const integrityData = {
             blocks_translated: totalBlocksTranslated,
@@ -778,6 +836,24 @@ async function startServer() {
     }
   })
 
+  const resolveUserDirectory = (rawDir: string): string => {
+    const home = os.homedir()
+    const trimmed = (rawDir || '~/Downloads').trim()
+    let expanded = trimmed
+    if (trimmed === '~' || trimmed.startsWith('~/') || trimmed.startsWith('~\\')) {
+      expanded = path.join(home, trimmed.slice(1))
+    }
+    // Support Windows OneDrive folder redirection (e.g. ~/Desktop -> ~/OneDrive/Desktop)
+    if (!fs.existsSync(expanded)) {
+      const baseName = path.basename(expanded)
+      const oneDriveCandidate = path.join(home, 'OneDrive', baseName)
+      if (fs.existsSync(oneDriveCandidate)) {
+        return oneDriveCandidate
+      }
+    }
+    return expanded
+  }
+
   // 7. Save file to disk
   app.post(['/api/save', '/save', '/api/save-file'], async (req, res) => {
     try {
@@ -787,18 +863,26 @@ async function startServer() {
       const filename = String(
         body.filename || `${session.filename.replace(/\.pdf$/i, '')}.${session.target_lang}.pdf`
       ).replace(/[\r\n/\\:*?"<>|]/g, '_')
-      const dir = String(body.directory || '~/Downloads')
-      const exportDir = path.join(os.tmpdir(), 'layoutlingua-exports')
-      fs.mkdirSync(exportDir, { recursive: true })
-
-      const outPath = path.join(exportDir, filename)
+      const rawDir = String(body.directory || '~/Downloads')
+      const resolvedDir = resolveUserDirectory(rawDir)
       const content = session.translated_pdf_bytes || session.source_pdf_bytes
-      fs.writeFileSync(outPath, content)
+
+      let finalOutPath = ''
+      try {
+        fs.mkdirSync(resolvedDir, { recursive: true })
+        finalOutPath = path.join(resolvedDir, filename)
+        fs.writeFileSync(finalOutPath, content)
+      } catch {
+        const fallbackDir = path.join(os.tmpdir(), 'layoutlingua-exports')
+        fs.mkdirSync(fallbackDir, { recursive: true })
+        finalOutPath = path.join(fallbackDir, filename)
+        fs.writeFileSync(finalOutPath, content)
+      }
 
       res.json({
         status: 'ok',
-        saved_path: `${dir.replace(/\/$/, '')}/${filename}`,
-        directory: dir,
+        saved_path: finalOutPath,
+        directory: path.dirname(finalOutPath),
         filename,
         bytes: content.length,
       })
@@ -810,15 +894,15 @@ async function startServer() {
   // 8. System folders & folder picker
   app.get(['/api/system-folders', '/system-folders'], (_req, res) => {
     res.json({
-      Desktop: '~/Desktop',
-      Downloads: '~/Downloads',
-      Documents: '~/Documents',
+      Desktop: resolveUserDirectory('~/Desktop'),
+      Downloads: resolveUserDirectory('~/Downloads'),
+      Documents: resolveUserDirectory('~/Documents'),
     })
   })
 
   app.get(['/api/pick-folder', '/pick-folder'], (req, res) => {
     const initial = String(req.query.initial || '~/Downloads')
-    res.json({ path: initial })
+    res.json({ path: resolveUserDirectory(initial) })
   })
 
   app.post(['/api/open-folder', '/open-folder'], (_req, res) => {
