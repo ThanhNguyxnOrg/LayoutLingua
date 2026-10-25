@@ -27,6 +27,7 @@
 </p>
 
 <p align="center">
+  <a href="#-demo">Demo</a> •
   <a href="#-key-innovations">Key Innovations</a> •
   <a href="#-supported-languages--typography">17 Languages</a> •
   <a href="#-system-architecture">Architecture</a> •
@@ -37,6 +38,25 @@
 </p>
 
 </div>
+
+---
+
+## 🖥️ Demo
+
+> 🎬 Real capture — a 96-page Vietnamese mathematical handbook (`Sotaytoanhoc.pdf`, legacy VNI-Times encoding + `MT Extra` vector arrows) translated to English with geometry, formulas, dot leaders, and colors preserved.
+
+| 🏠 Open & Preflight | 📖 Dual-View Workspace |
+|:---:|:---:|
+| ![Open Screen — Document Preflight](docs/assets/demo-home.png) | ![Dual-View Workspace — Side by Side](docs/assets/demo-workspace.png) |
+
+| 🪞 Alpha-Blend Overlay Inspector |
+|:---:|
+| ![Overlay Inspector — Source vs Translated Blend](docs/assets/demo-overlay.png) |
+
+- 🧮 **Formulas frozen**: `log`, fractions, sub/superscripts, and vector arrows stay pixel-identical.
+- 🎨 **Headings keep color & casing**: `IV. HÌNH HỌC → IV. GEOMETRY`, `a) Tam giác đều → a) Equilateral triangle`.
+- 📏 **TOC dot leaders re-aligned** to the right margin after translation.
+- ✅ **Integrity bar**: `96/96 verified · 921 blocks translated · Needs review 0`.
 
 ---
 
@@ -179,6 +199,7 @@ Tested on the 96-page Vietnamese mathematical handbook **`Sotaytoanhoc.pdf`** (9
 
 ### Prerequisites
 - **Node.js** `>= 20.0.0` (or **Bun** `>= 1.1.0`)
+- *(Optional, desktop stack only)* **Python** `>= 3.10` + **Rust toolchain** for Tauri builds
 
 ### 1. Install Dependencies
 ```bash
@@ -191,13 +212,31 @@ npm run dev
 ```
 The Express + Vite server starts on **`http://localhost:3000`**.
 
-### 3. Production Build & Start
+### 3. 🖥️ Native Desktop App (Tauri v2 + Python engine)
+
+The desktop shell pairs the same React UI with the independent **Python engine** (`layoutlingua/server.py`) on `http://127.0.0.1:8765`:
+
+```bash
+# 1️⃣ Python engine
+python -m venv .venv
+.venv\Scripts\Activate.ps1        # 🐧 Linux/macOS: source .venv/bin/activate
+pip install -e ".[dev]"
+
+# 2️⃣ Desktop UI (vite :5173, or `npm run tauri dev` for the native window)
+cd desktop
+npm install
+npm run dev
+```
+
+> 🔁 Both engines share the same REST contract (upload, translate, progress, **resume-from-disk sessions**, cancel, export) — see the [API Reference](docs/API_REFERENCE.md) parity matrix.
+
+### 4. Production Build & Start
 ```bash
 npm run build
 npm start
 ```
 
-### 4. Environment Variables (`.env.example`)
+### 5. Environment Variables (`.env.example`)
 LayoutLingua works **out-of-the-box with zero API keys** via its multi-mirror Google Translate NMT pipeline, and optionally supports Gemini 2.5 Flash or any OpenAI-compatible endpoint (OpenAI, DeepSeek, Groq, Ollama):
 ```env
 GEMINI_API_KEY=your_optional_gemini_api_key

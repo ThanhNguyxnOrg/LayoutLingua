@@ -9,6 +9,23 @@ All notable changes to **LayoutLingua** are documented in this file.
 
 ---
 
+## [2.1.1] — 2026-10-25
+
+### 🚀 Added
+- **🖥️ Full Desktop/Engine Parity**: The Tauri desktop stack (`desktop/` + Python engine `layoutlingua/server.py`) now implements the identical REST contract as the web stack — `GET /api/session-status`, content-hash upload dedupe with `X-Doc-Id`, `POST /api/cancel` (keeps already-translated pages), and `page-preview?format=meta` block metadata for the inspector/hyperlink overlays.
+- **💾 Python Engine Session Persistence Hardening**: Disk-backed session cache (`source.pdf` / `translated.pdf` / `meta.json` under the OS cache dir) with transparent recovery after full engine restarts, plus per-5-page continuous persistence and bounded `MAX_SESSIONS` eviction.
+- **🖼️ Demo Documentation Suite**: Wide-angle demo captures (Open & Preflight, Dual-View Workspace, Alpha-Blend Overlay) bundled at `docs/assets/` and embedded in the README.
+
+### 🔧 Fixed
+- **`OVERFLOW_FALLBACK` on Single-Word Sliver Blocks**: One-word prose fragments sandwiched between frozen math regions (e.g. a 10pt `từ` slot on page 78) could never fit their translation at the `82%` Tz condensation floor. Single words now tolerate a **`72%` Tz floor** (no wrap points — the same squeeze range the TOC and multi-line paths already use). Verified on the 96-page benchmark: quality report drops from `1 warning` to **`0`** with the fragment rendering inside its clearance without overlap.
+- **🪄 Logo Wordmark Restored**: The header logo `<img src="/logo.png">` (previously replaced by a text badge during the workspace sync) is back in **both** web and desktop shells.
+
+### 🧹 Changed
+- **README & Docs Overhaul**: README now embeds real demo screenshots and the desktop quickstart; `ARCHITECTURE.md` documents the two-runtime topology (web TS engine ↔ desktop Python engine) with the parity matrix; `docs/API_REFERENCE.md` covers the full shared endpoint contract; `docs/ALGORITHM.md` documents the new single-word `Tz` rule.
+- **Repository Hygiene**: Test sessions, temporary exports, and stray runtime artifacts purged; `.gitignore` covers `.cache/` and drop archives.
+
+---
+
 ## [2.1.0] — 2026-10-23
 
 ### 🚀 Added

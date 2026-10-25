@@ -68,6 +68,6 @@ For each `ProseSpan` $s$ in a translated `ProseGroup`:
 
 ### Pass 2: Anisotropic `Tz` + Multi-Line Fitting
 - **Single-Line Slot (`spans.length === 1`)**:
-  Computes $r = W_{\text{clearance}} / W_{\text{text}}(\text{size}_0)$. Combines horizontal PDF scaling $\text{Tz} = \max(82\%, \min(100\%, r \times 100\%))$ with vertical font scaling $s_v = \max(s_{\min}, \min(1.0, r / (\text{Tz}/100)))$.
+  Computes $r = W_{\text{clearance}} / W_{\text{text}}(\text{size}_0)$. Combines horizontal PDF scaling $\text{Tz} = \max(T_{\text{floor}}, \min(100\%, r \times 100\%))$ with vertical font scaling $s_v = \max(s_{\min}, \min(1.0, r / (\text{Tz}/100)))$, where the condensation floor $T_{\text{floor}}$ is **82% for multi-word text** and **72% for a single word** (no internal whitespace — a lone word has no wrap points, so it tolerates the same 72–78% squeeze the TOC and multi-line draw paths already use). This guarantees that one-word prose fragments sandwiched between frozen math regions (e.g. a 10pt `từ` slot between two `MathObstacle`s) fit their translation without triggering `OVERFLOW_FALLBACK`.
 - **Multi-Line Slot (`spans.length > 1`)**:
   Searches $s \in [1.0, s_{\min}]$ in steps of $0.02$. If standard wrapping at $s_{\min}$ exceeds `maxBottomY`, applies multi-stage horizontal condensation ($\text{Tz} \in \{92\%, 86\%, 80\%\}$) to increase effective line capacity by $100/\text{Tz}$, guaranteeing 100% of translated lines are rendered without truncation.
