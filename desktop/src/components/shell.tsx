@@ -5,9 +5,11 @@ import { IconButton } from './ui'
 export function Wordmark() {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="flex size-7 items-center justify-center rounded-md bg-teal text-white font-mono text-xs font-bold shadow-sm">
-        LL
-      </div>
+      <img
+        src="/logo.png"
+        alt="LayoutLingua Logo"
+        className="size-7 rounded-md object-contain shadow-sm ring-1 ring-line-strong/40"
+      />
       <span className="text-[15.5px] font-extrabold tracking-[-0.015em] text-ink">
         Layout<span className="text-teal">Lingua</span>
       </span>
