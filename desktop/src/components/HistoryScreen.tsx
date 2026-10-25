@@ -4,9 +4,12 @@ import {
   getHistory,
   removeHistoryItem,
   clearHistory,
+  getPdfBlobFromCache,
+  restoreOrVerifyRecentDoc,
 } from '../services/history'
 import { IconFile, IconCheck, IconAlert, IconError, IconArrowR, IconX, IconUpload } from './icons'
 import { Button } from './ui'
+import { apiUrl } from '../services/api'
 
 export type { HistoryItem }
 
@@ -21,8 +24,47 @@ export default function HistoryScreen({
   const [query, setQuery] = useState('')
 
   useEffect(() => {
-    setItems(getHistory())
+    let active = true
+    const rawList = getHistory()
+    setItems(rawList)
+    ;(async () => {
+      for (const item of rawList) {
+        const checkRes = await fetch(
+          apiUrl(
+            `/api/session-status?id=${encodeURIComponent(item.id)}&name=${encodeURIComponent(item.name)}`
+          )
+        ).catch(() => null)
+        const checkData = checkRes && checkRes.ok ? await checkRes.json().catch(() => null) : null
+        if (checkData?.exists) continue
+        const idbBytes = await getPdfBlobFromCache(item.id, item.name)
+        if (!idbBytes && active) {
+          const updated = removeHistoryItem(item.id || item.name)
+          setItems(updated)
+        }
+      }
+    })()
+    return () => {
+      active = false
+    }
   }, [])
+
+  const handleSelectDoc = async (item: HistoryItem) => {
+    const restored = await restoreOrVerifyRecentDoc(item, apiUrl)
+    if (restored.ok) {
+      onOpenDoc({
+        ...item,
+        id: restored.id || item.id,
+        name: restored.name || item.name,
+        pages: restored.pages || item.pages,
+        size: restored.size || item.size,
+        detectedLang: restored.detectedLang || item.detectedLang,
+      })
+    } else {
+      const updated = removeHistoryItem(item.id || item.name)
+      setItems(updated)
+      if (onNavigateToOpen) onNavigateToOpen()
+    }
+  }
 
   const filtered = items.filter(
     (i) =>
@@ -57,7 +99,6 @@ export default function HistoryScreen({
           )}
         </div>
 
-        {/* Search Bar (Only shown if items exist) */}
         {items.length > 0 && (
           <div className="mb-6">
             <input
@@ -101,7 +142,7 @@ export default function HistoryScreen({
               >
                 <div
                   className="flex items-center gap-4 min-w-0 flex-1 cursor-pointer"
-                  onClick={() => onOpenDoc(item)}
+                  onClick={() => handleSelectDoc(item)}
                 >
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-soft text-teal">
                     <IconFile className="size-5" />
@@ -143,7 +184,7 @@ export default function HistoryScreen({
                   <Button
                     size="sm"
                     variant="primary"
-                    onClick={() => onOpenDoc(item)}
+                    onClick={() => handleSelectDoc(item)}
                     className="opacity-90 group-hover:opacity-100"
                   >
                     Open <IconArrowR className="size-3.5" />

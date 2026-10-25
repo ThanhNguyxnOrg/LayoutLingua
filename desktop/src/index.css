@@ -71,5 +71,3 @@ body { font-family: var(--font-sans); color: var(--color-ink); background: var(-
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #5C6E77 !important;
 }
-
-

@@ -32,7 +32,6 @@ export default function HelpModal({ onClose }: { onClose: () => void }) {
       >
         <div className="flex items-center justify-between border-b border-line px-6 py-4 bg-canvas/40">
           <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Logo" className="size-6 rounded" />
             <h2 id="help-title" className="text-[16px] font-bold text-ink">
               Keyboard Shortcuts & Help
             </h2>

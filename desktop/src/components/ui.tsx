@@ -91,6 +91,4 @@ export function StateNotice({ tone, icon, title, children, actions }: { tone: 'n
   )
 }
 
-
-
 export { IconCheck }

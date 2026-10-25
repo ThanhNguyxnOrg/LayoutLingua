@@ -677,6 +677,9 @@ function Inspector(p: {
                   {p.visibleIssues.length > 0 && <Button className="flex-1" onClick={() => p.setTab('quality')}>Review warnings</Button>}
                   <Button variant="primary" className="flex-1" onClick={p.onExport}><IconDownload />Export PDF</Button>
                 </div>
+                <Button size="sm" className="w-full" onClick={p.start}>
+                  Re-translate document ({p.src} → {p.tgt})
+                </Button>
               </section>
             )}
 
@@ -708,7 +711,7 @@ function Inspector(p: {
                   <span>{copiedIssues ? 'Copied log!' : 'Copy log'}</span>
                 </button>
               </div>
-              {p.visibleIssues.map((i) => <IssueRow key={i.id} index={issues.indexOf(i) + 1} issue={i} active={p.activeIssue === i.id} onOpen={() => p.openIssue(i)} />)}
+              {p.visibleIssues.map((i, idx) => <IssueRow key={i.id} index={idx + 1} issue={i} active={p.activeIssue === i.id} onOpen={() => p.openIssue(i)} />)}
               <p className="px-4 py-3 text-[12px] text-faint">Items stay listed until the underlying page changes. Opening an item does not resolve it.</p>
             </>
           )
@@ -721,7 +724,7 @@ function Inspector(p: {
               <span className="text-[13px] font-semibold text-muted">{p.pageState}</span>
             </div>
             <dl className="mt-4 divide-y divide-line border-y border-line text-[13px]">
-              {[['Page size', '210 × 297 mm (A4)'], ['Media box', '0 0 595.3 841.9'], ['Text blocks', p.page.status === 'fallback' ? '0 translated' : String(p.page.blockCount)], ['Table cells', String(p.page.cellCount)], ['Formulas kept', String(p.page.blocks.filter((b) => b.kind === 'eq').length)], ['Embedded fonts', 'SourceSerif4, CMMI10']].map(([k, v]) => (
+              {[['Page size', '210 × 297 mm (A4)'], ['Media box', '0 0 595.3 841.9'], ['Text blocks', p.page.status === 'fallback' ? '0 translated' : String(p.page.blockCount)], ['Table cells', String(p.page.cellCount)], ['Formulas kept', String(p.page.blocks.filter((b) => b.kind === 'eq').length)], ['Embedded fonts', 'DejaVuSerif, DejaVuSans, DroidSansCJK']].map(([k, v]) => (
                 <div key={k} className="flex justify-between py-2.5"><dt className="text-muted">{k}</dt><dd className="font-mono text-[12.5px]">{v}</dd></div>
               ))}
             </dl>
@@ -779,28 +782,57 @@ export default function Workspace({
   const [progressSubtitle, setProgressSubtitle] = useState<string | null>(null)
   const [integrity, setIntegrity] = useState<any>(null)
 
+  const [runId, setRunId] = useState(0)
+
   const docPages: Page[] = useMemo(() => {
     if (!docInfo?.pages) return pages
+    const isDemoPaper = !docInfo.id || docInfo.id === 'demo-research-paper'
     return Array.from({ length: docInfo.pages }, (_, i) => {
       const n = i + 1
       const isDone = phase === 'done' || (phase === 'processing' && i < done)
-      const realStatus = integrity?.page_statuses?.[n] || (isDone ? 'ok' : 'pending')
-      const realBlockCount = integrity?.page_block_counts?.[n] ?? 12
+      const realStatus = integrity?.page_statuses?.[n] || (isDemoPaper && pages[i] ? pages[i].status : isDone ? 'ok' : 'pending')
+      const realBlockCount = integrity?.page_block_counts?.[n] ?? (isDemoPaper && pages[i] ? pages[i].blockCount : 12)
+      const realMathCount = integrity?.page_math_counts?.[n] ?? (isDemoPaper && pages[i] ? pages[i].blocks.filter((b) => b.kind === 'eq').length : 14)
+      const syntheticMathBlocks = Array.from({ length: realMathCount }, (_, mIdx) => ({
+        kind: 'eq' as const,
+        id: `m${mIdx + 1}`,
+        tex: '',
+        no: `(${mIdx + 1})`,
+      }))
       return {
         n,
         status: realStatus as any,
-        blocks: [],
+        blocks: isDemoPaper && pages[i] ? pages[i].blocks : syntheticMathBlocks,
         blockCount: realBlockCount,
-        cellCount: 0,
+        cellCount: isDemoPaper && pages[i] ? pages[i].cellCount : 0,
       }
     })
-  }, [docInfo?.pages, phase, done, integrity])
+  }, [docInfo?.id, docInfo?.pages, phase, done, integrity])
   const [inspectorOpen, setInspectorOpen] = useState(() => window.innerWidth >= 1340)
   const [zoom, setZoom] = useState<number | null>(null)
   const [mode, setMode] = useState<'side' | 'overlay'>('side')
   const [blend, setBlend] = useState(100)
-  const [src, setSrc] = useState(() => docInfo?.detectedLang === 'vi' ? 'Vietnamese' : 'English')
-  const [tgt, setTgt] = useState(() => docInfo?.detectedLang === 'vi' ? 'English' : 'Vietnamese')
+  const isoToLabelMap: Record<string, string> = {
+    en: 'English',
+    vi: 'Vietnamese',
+    zh: 'Chinese (Simplified)',
+    'zh-tw': 'Chinese (Traditional)',
+    ja: 'Japanese',
+    ko: 'Korean',
+    fr: 'French',
+    de: 'German',
+    es: 'Spanish',
+    ru: 'Russian',
+    it: 'Italian',
+    pt: 'Portuguese',
+    id: 'Indonesian',
+    nl: 'Dutch',
+    pl: 'Polish',
+    tr: 'Turkish',
+    uk: 'Ukrainian',
+  }
+  const [src, setSrc] = useState(() => isoToLabelMap[docInfo?.detectedLang || 'en'] || 'English')
+  const [tgt, setTgt] = useState(() => (docInfo?.detectedLang === 'vi' ? 'English' : 'Vietnamese'))
   const [pageRange, setPageRange] = useState('all')
 
   const [rangeFrom, rangeTo] = useMemo(() => {
@@ -854,30 +886,24 @@ export default function Workspace({
     }
   }, [docInfo?.id, totalPages])
 
-  const isTranslatingRef = useRef(false)
-
   useEffect(() => {
     if (phase !== 'processing') {
-      isTranslatingRef.current = false
       return
     }
-
-    if (isTranslatingRef.current) return
-    isTranslatingRef.current = true
 
     let active = true
     let progressTimer: any = null
     let consecutiveFails = 0
 
-    // If backend doc is open, invoke real translation API with live progress polling
-    if (docInfo?.id) {
+    const activeDocId = docInfo?.id || 'sample_academic'
+    if (activeDocId) {
       progressTimer = setInterval(async () => {
         if (!active) return
         try {
-          const pRes = await fetch(apiUrl(`/api/progress?id=${encodeURIComponent(docInfo.id!)}`))
+          const pRes = await fetch(apiUrl(`/api/progress?id=${encodeURIComponent(activeDocId)}`))
           if (pRes.ok) {
             const pData = await pRes.json()
-            if (pData.current_page > 0 && active) {
+            if (pData.current_page != null && active) {
               setDone(pData.current_page)
             }
             if (pData.stage_index != null && active) {
@@ -905,7 +931,6 @@ export default function Workspace({
             }
             if (pData.status === 'idle' && active) {
               if (progressTimer) clearInterval(progressTimer)
-              isTranslatingRef.current = false
               setPhase('idle')
               return
             }
@@ -943,7 +968,6 @@ export default function Workspace({
             consecutiveFails++
             if (consecutiveFails > 8) {
               if (progressTimer) clearInterval(progressTimer)
-              isTranslatingRef.current = false
               setPhase('idle')
             }
           }
@@ -976,15 +1000,18 @@ export default function Workspace({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          doc_id: docInfo.id,
+          doc_id: activeDocId,
           source_lang: resolvedSourceLang,
           target_lang: resolvedTargetLang,
           page_range: pageRange || 'all',
           custom_glossary: settings.customGlossary || '',
           provider: settings.provider,
-          api_key: settings.provider === 'gemini' ? settings.geminiKey : settings.provider === 'openai' ? settings.openaiKey : '',
-          base_url: settings.provider === 'openai' ? settings.openaiEndpoint : '',
-          model: settings.provider === 'gemini' ? settings.geminiModel : settings.openaiModel,
+          gemini_key: settings.geminiKey,
+          gemini_model: settings.geminiModel,
+          openai_key: settings.openaiKey,
+          openai_endpoint: settings.openaiEndpoint,
+          openai_model: settings.openaiModel,
+          min_font_shrink: settings.minFontShrink,
         }),
       })
         .then(async (res) => {
@@ -1016,11 +1043,8 @@ export default function Workspace({
         active = false
         if (progressTimer) clearInterval(progressTimer)
       }
-    } else {
-      alert('No active document session found. Please re-open your PDF.')
-      setPhase('idle')
     }
-  }, [phase, docInfo?.id, tgt, settings, totalPages, pageRange])
+  }, [phase, runId, docInfo?.id])
 
   const stage = backendStage != null
     ? (phase === 'done' ? stages.length : backendStage)
@@ -1049,6 +1073,8 @@ export default function Workspace({
         title: iss.title,
         detail: iss.detail,
         region: iss.region,
+        next: iss.next || 'Inspect the highlighted region or add a shorter term in Glossary.',
+        action: iss.action || `Inspect region on page ${iss.page}`,
       }))
     }
     return []
@@ -1090,16 +1116,116 @@ export default function Workspace({
 
   const select = (n: number) => { setCur(n); setHighlight(undefined); setActiveIssue(undefined) }
   const openIssue = (i: Issue) => { setCur(i.page); setHighlight(i.region); setActiveIssue(i.id); setTab('quality') }
-  const start = () => { setPhase('processing'); setTab('translation') }
-  const retryPage = () => { setRetrying(true); setTimeout(() => { setRetrying(false) }, 1400) }
+  const start = () => {
+    setDone(0)
+    setOverallPct(4)
+    setBackendStage(0)
+    setRunId((r) => r + 1)
+    setPhase('processing')
+    setTab('translation')
+  }
+  const retryPage = () => {
+    setRetrying(true)
+    start()
+    setTimeout(() => { setRetrying(false) }, 900)
+  }
+
+  const handleSetSrc = (newSrc: string) => {
+    if (newSrc === tgt) {
+      setTgt(src)
+    }
+    setSrc(newSrc)
+    if (phase === 'done' || phase === 'cancelled' || phase === 'provider-error' || phase === 'rate-limited') {
+      setPhase('idle')
+    }
+  }
+
+  const handleSetTgt = (newTgt: string) => {
+    if (newTgt === src) {
+      setSrc(tgt)
+    }
+    setTgt(newTgt)
+    if (phase === 'done' || phase === 'cancelled' || phase === 'provider-error' || phase === 'rate-limited') {
+      setPhase('idle')
+    }
+  }
+
+  const handleSetPageRange = (newRange: string) => {
+    setPageRange(newRange)
+    if (phase === 'done' || phase === 'cancelled' || phase === 'provider-error' || phase === 'rate-limited') {
+      setPhase('idle')
+    }
+  }
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault()
+        if (phase !== 'processing') start()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault()
+        if (phase === 'done') setExportOpen(true)
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'o' || e.key === 'O')) {
+        e.preventDefault()
+        onClose()
+        return
+      }
+      if (e.key === 'ArrowLeft') {
+        setCur((c) => Math.max(1, c - 1))
+      } else if (e.key === 'ArrowRight') {
+        setCur((c) => Math.min(totalPages, c + 1))
+      } else if (e.key === '+' || e.key === '=') {
+        setZ(0.1)
+      } else if (e.key === '-') {
+        setZ(-0.1)
+      } else if (e.key === '0') {
+        setZoom(null)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [phase, totalPages, width])
 
   const pageLabel = (s: ReturnType<typeof known>) => s === 'pending' ? (phase === 'idle' ? 'Not translated' : 'Pending') : s === 'ok' ? 'Translated' : s === 'warn' ? 'Needs review' : 'Preserved from source'
   const s = known(page)
-  const issue = issues.find((i) => i.id === activeIssue)
-  const mark = { highlight, highlightLabel: issue ? `${issues.indexOf(issue) + 1}  ${sevMeta[issue.severity].label}` : undefined, highlightTone: issue?.severity }
+  const issue = visibleIssues.find((i) => i.id === activeIssue)
   const vi = issue ? visibleIssues.indexOf(issue) : -1
+  const mark = { highlight, highlightLabel: issue ? `${vi + 1}  ${sevMeta[issue.severity].label}` : undefined, highlightTone: issue?.severity }
+
+  const isCurrentPageInSelectedRange = isFullDoc || (page.n >= rangeFrom && page.n <= rangeTo)
+  const isCurrentPageTranslated =
+    phase === 'done' ||
+    (phase !== 'idle' &&
+      isCurrentPageInSelectedRange &&
+      (Boolean(integrity?.completed_pages?.[page.n]) ||
+        Boolean(integrity?.page_block_counts?.[page.n] > 0) ||
+        page.n - rangeFrom + 1 <= done))
 
   const output = () => {
+    if (isCurrentPageTranslated) {
+      return (
+        <div className="relative">
+          <PdfPage
+            key={`trans-${docInfo?.id}-${page.n}-${runId}-${tgt}`}
+            page={page}
+            type="translated"
+            width={width}
+            docId={docInfo?.id}
+            version={runId}
+            {...mark}
+          />
+          {page.status === 'fallback' && <span className="absolute inset-y-0 -left-[5px] w-[3px] bg-red" aria-hidden="true" />}
+        </div>
+      )
+    }
     if (phase === 'idle') {
       return (
         <OutputPlaceholder
@@ -1122,22 +1248,6 @@ export default function Workspace({
           title={placeholderTitle}
           body={telemetry.message || "Extracting equations, translating prose with neural MT, and typesetting layout..."}
         />
-      )
-    }
-    if (phase === 'done') {
-      return (
-        <div className="relative">
-          <PdfPage
-            key={`trans-${docInfo?.id}-${page.n}-${previewVersion}`}
-            page={page}
-            type="translated"
-            width={width}
-            docId={docInfo?.id}
-            version={previewVersion}
-            {...mark}
-          />
-          {page.status === 'fallback' && <span className="absolute inset-y-0 -left-[5px] w-[3px] bg-red" aria-hidden="true" />}
-        </div>
       )
     }
     if (phase === 'rate-limited') {
@@ -1204,7 +1314,7 @@ export default function Workspace({
           )}
           {issue && (() => { const m = sevMeta[issue.severity]; return (
             <div role="status" className="flex h-10 shrink-0 items-center gap-3 border-b border-line bg-white px-4 text-[12.5px]">
-              <span className={`flex items-center gap-1.5 font-semibold ${m.text}`}><span className="font-mono">{issues.indexOf(issue) + 1}</span><m.Icon className="size-3.5" />{m.label}</span>
+              <span className={`flex items-center gap-1.5 font-semibold ${m.text}`}><span className="font-mono">{vi + 1}</span><m.Icon className="size-3.5" />{m.label}</span>
               <span className="truncate font-semibold">{issue.title}</span>
               <span className="truncate text-muted">Next: {issue.next}</span>
               <span className="ml-auto flex shrink-0 items-center gap-0.5">
@@ -1266,10 +1376,10 @@ export default function Workspace({
             pageState={pageLabel(s)}
             src={src}
             tgt={tgt}
-            setSrc={setSrc}
-            setTgt={setTgt}
+            setSrc={handleSetSrc}
+            setTgt={handleSetTgt}
             pageRange={pageRange}
-            setPageRange={setPageRange}
+            setPageRange={handleSetPageRange}
             settings={settings}
             onUpdateProvider={(pr) => updateSettings((prev) => ({ ...prev, provider: pr }))}
             onOpenSettings={onOpenSettings}
@@ -1278,8 +1388,12 @@ export default function Workspace({
             openIssue={openIssue}
             start={start}
             cancel={() => {
-              isTranslatingRef.current = false
-              setPhase('idle')
+              fetch(apiUrl('/api/cancel'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ doc_id: docInfo?.id || 'sample_academic' }),
+              }).catch(() => {})
+              setPhase('cancelled')
             }}
             onExport={() => setExportOpen(true)}
             retryPage={retryPage}

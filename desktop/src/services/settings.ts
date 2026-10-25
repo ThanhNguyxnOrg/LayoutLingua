@@ -41,7 +41,6 @@ export function loadSettings(): AppSettings {
     if (raw) {
       const parsed = JSON.parse(raw)
       const merged: AppSettings = { ...DEFAULT_SETTINGS, ...parsed }
-      // Transparent migration: convert legacy 'ollama' provider to unified 'openai'
       if (merged.provider === 'ollama') {
         merged.provider = 'openai'
         if (parsed.ollamaEndpoint) merged.openaiEndpoint = parsed.ollamaEndpoint

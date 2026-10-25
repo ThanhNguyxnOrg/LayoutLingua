@@ -3,13 +3,17 @@ import {
   type HistoryItem,
   getHistory,
   addHistoryItem,
+  removeHistoryItem,
   clearHistory,
+  savePdfBlobToCache,
+  getPdfBlobFromCache,
+  restoreOrVerifyRecentDoc,
 } from '../services/history'
 import { IconUpload, IconFile, IconLock, IconError, IconArrowR, IconFolder } from './icons'
 import { Button, StateNotice, StatusIndicator } from './ui'
 import { apiUrl } from '../services/api'
 
-type Err = null | 'unsupported' | 'password' | 'badpw'
+type Err = null | 'unsupported' | 'password' | 'badpw' | 'missing_recent'
 
 export interface SelectedDocument {
   name: string
@@ -36,7 +40,28 @@ export default function OpenScreen({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    setList(getHistory())
+    let active = true
+    const rawList = getHistory()
+    setList(rawList)
+    ;(async () => {
+      for (const item of rawList) {
+        const checkRes = await fetch(
+          apiUrl(
+            `/api/session-status?id=${encodeURIComponent(item.id)}&name=${encodeURIComponent(item.name)}`
+          )
+        ).catch(() => null)
+        const checkData = checkRes && checkRes.ok ? await checkRes.json().catch(() => null) : null
+        if (checkData?.exists) continue
+        const idbBytes = await getPdfBlobFromCache(item.id, item.name)
+        if (!idbBytes && active) {
+          const updated = removeHistoryItem(item.id || item.name)
+          setList(updated)
+        }
+      }
+    })()
+    return () => {
+      active = false
+    }
   }, [])
 
   const handleFiles = async (f?: File) => {
@@ -83,24 +108,23 @@ export default function OpenScreen({
       } else {
         const errJson = await res.json().catch(() => ({}))
         console.error('Backend upload error:', errJson)
-        alert(`Backend PDF processing error: ${errJson.error || res.statusText}`)
         setErr('unsupported')
         return
       }
     } catch (e) {
       console.error('Backend connection failed:', e)
-      alert(
-        'Unable to connect to Python Backend Engine at http://127.0.0.1:8765.\nPlease verify that the backend server is running.'
-      )
       setErr('unsupported')
       return
     } finally {
       setLoading(false)
     }
 
+    const docId = backendDoc.id || backendDoc.name
+    await savePdfBlobToCache(docId, backendDoc.name, f)
+
     // Persist real document to recent history
     const updated = addHistoryItem({
-      id: backendDoc.id || backendDoc.name,
+      id: docId,
       name: backendDoc.name,
       pages: backendDoc.pages || 1,
       size: backendDoc.size || 0,
@@ -110,6 +134,31 @@ export default function OpenScreen({
     })
     setList(updated)
     onOpen(backendDoc)
+  }
+
+  const handleOpenRecent = async (r: HistoryItem) => {
+    setErr(null)
+    setLoading(true)
+    try {
+      const restored = await restoreOrVerifyRecentDoc(r, apiUrl)
+      if (restored.ok) {
+        onOpen({
+          id: restored.id || r.id,
+          name: restored.name || r.name,
+          pages: restored.pages || r.pages,
+          path: r.path,
+          size: restored.size || r.size,
+          detectedLang: restored.detectedLang || r.detectedLang,
+        })
+      } else {
+        const updated = removeHistoryItem(r.id || r.name)
+        setList(updated)
+        setFile(r.name)
+        setErr('missing_recent')
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   const triggerPicker = () => fileInputRef.current?.click()
@@ -198,6 +247,25 @@ export default function OpenScreen({
                 >
                   LayoutLingua operates strictly on PDF documents to guarantee visual geometry preservation.
                   Please provide a file with a .pdf extension.
+                </StateNotice>
+              )}
+              {err === 'missing_recent' && (
+                <StateNotice
+                  tone="error"
+                  icon={<IconError className="size-5" />}
+                  title={`${file} is no longer cached in this browser session`}
+                  actions={
+                    <>
+                      <Button size="sm" variant="primary" onClick={triggerPicker}>
+                        Choose PDF file again
+                      </Button>
+                      <Button size="sm" onClick={() => setErr(null)}>
+                        Dismiss
+                      </Button>
+                    </>
+                  }
+                >
+                  This entry was recorded before local PDF persistence was enabled. Please select the PDF file once more to cache it permanently.
                 </StateNotice>
               )}
               {(err === 'password' || err === 'badpw') && (
@@ -310,17 +378,9 @@ export default function OpenScreen({
               {list.map((r) => (
                 <li key={r.id || r.name}>
                   <button
-                    onClick={() =>
-                      onOpen({
-                        id: r.id,
-                        name: r.name,
-                        pages: r.pages,
-                        path: r.path,
-                        size: r.size,
-                        detectedLang: r.detectedLang,
-                      })
-                    }
-                    className="group flex w-full items-center gap-3.5 px-5 py-3.5 text-left hover:bg-canvas/50 transition-colors cursor-pointer"
+                    onClick={() => handleOpenRecent(r)}
+                    disabled={loading}
+                    className="group flex w-full items-center gap-3.5 px-5 py-3.5 text-left hover:bg-canvas/50 transition-colors cursor-pointer disabled:opacity-60"
                   >
                     <span className="flex h-10 w-8 shrink-0 items-end justify-center rounded-sm border border-line-strong bg-white pb-1 shadow-2xs group-hover:border-teal transition-colors">
                       <span className="h-0.5 w-4 bg-teal/60" />

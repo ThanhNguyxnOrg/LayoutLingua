@@ -37,14 +37,8 @@ export default function App() {
   }
 
   const handleOpenDoc = (selectedDoc?: SelectedDocument) => {
-    setDoc(
-      selectedDoc || {
-        name: 'Research-Paper.pdf',
-        size: 2450000,
-        pages: 6,
-        path: '~/Documents/Papers',
-      }
-    )
+    if (!selectedDoc) return
+    setDoc(selectedDoc)
     setRail('documents')
   }
 
