@@ -187,8 +187,13 @@ def _is_pure_formula_block(spans: list[GlyphSpan], config: ParserConfig = Parser
         return True
 
     # Equation with relation operator and at most 1 short non-prose variable cluster (e.g. S = abc / 4R = pr)
+    # A token carrying non-ASCII diacritics is a natural-language word in some script
+    # (e.g. Vietnamese "Hàm", "số") and is never a variable cluster — mirroring the
+    # TS engine's multilingual-script protection for prose beside 2D formulas.
     prose_tokens = _extract_prose_tokens(full_text)
-    if has_rel and len(prose_tokens) <= 1 and math_sym_count >= 2 and all(len(w) <= 3 for w in prose_tokens):
+    if has_rel and len(prose_tokens) <= 1 and math_sym_count >= 2 and all(
+        len(w) <= 3 and w.isascii() for w in prose_tokens
+    ):
         return True
 
     # Heavy math symbol dominance with zero prose words
