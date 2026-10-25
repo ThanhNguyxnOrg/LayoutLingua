@@ -4,6 +4,7 @@ import Workspace from './components/Workspace'
 import HistoryScreen from './components/HistoryScreen'
 import SettingsModal from './components/SettingsModal'
 import HelpModal from './components/HelpModal'
+import CreditsModal from './components/CreditsModal'
 import { AppHeader, NavRail, type RailItem } from './components/shell'
 
 export default function App() {
@@ -11,6 +12,7 @@ export default function App() {
   const [rail, setRail] = useState<RailItem>('documents')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [creditsOpen, setCreditsOpen] = useState(false)
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -31,6 +33,8 @@ export default function App() {
   const handleRailChange = (newRail: RailItem) => {
     if (newRail === 'settings') {
       setSettingsOpen(true)
+    } else if (newRail === 'credits') {
+      setCreditsOpen(true)
     } else {
       setRail(newRail)
     }
@@ -99,6 +103,7 @@ export default function App() {
       {/* Global Modals */}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+      {creditsOpen && <CreditsModal onClose={() => setCreditsOpen(false)} />}
     </div>
   )
 }

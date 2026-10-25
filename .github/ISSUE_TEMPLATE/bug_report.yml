@@ -53,7 +53,7 @@ body:
     attributes:
       label: "LayoutLingua Version"
       description: "Found in app header or terminal (e.g., 1.0.0, commit hash, or source build)"
-      placeholder: "1.0.0"
+      placeholder: "2.0.0"
     validations:
       required: true
 

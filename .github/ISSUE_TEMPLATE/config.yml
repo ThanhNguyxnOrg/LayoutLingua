@@ -4,5 +4,5 @@ contact_links:
     url: "https://github.com/ThanhNguyxnOrg/LayoutLingua/discussions"
     about: "Ask questions, share workflows, and discuss scientific document translation"
   - name: "Documentation & Architecture Guide"
-    url: "https://github.com/ThanhNguyxnOrg/LayoutLingua#architecture--research-invariants"
+    url: "https://github.com/ThanhNguyxnOrg/LayoutLingua#-system-architecture"
     about: "Read technical architecture, invariant rules, and research foundations"

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { IconFile, IconHistory, IconSettings, IconHelp } from './icons'
+import { IconFile, IconHistory, IconSettings, IconHelp, IconHeart } from './icons'
 import { IconButton } from './ui'
 
 export function Wordmark() {
@@ -42,7 +42,7 @@ export function AppHeader({
   )
 }
 
-export type RailItem = 'documents' | 'history' | 'settings'
+export type RailItem = 'documents' | 'history' | 'settings' | 'credits'
 
 export function NavRail({
   active,
@@ -55,6 +55,7 @@ export function NavRail({
     ['documents', 'Documents', IconFile],
     ['history', 'Recent history', IconHistory],
     ['settings', 'Settings', IconSettings],
+    ['credits', 'Credits & Source', IconHeart],
   ]
   return (
     <nav
