@@ -1426,6 +1426,15 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 elif dest_dir.startswith("~"):
                     dest_dir = os.path.expanduser(dest_dir)
 
+                # Windows OneDrive folder redirection fallback (TS parity): if the
+                # resolved path does not exist, ~/OneDrive/<basename> wins when it does.
+                if not os.path.isdir(dest_dir):
+                    one_drive_candidate = os.path.join(
+                        os.path.expanduser("~"), "OneDrive", os.path.basename(dest_dir.rstrip("/\\"))
+                    )
+                    if os.path.isdir(one_drive_candidate):
+                        dest_dir = one_drive_candidate
+
                 norm_dir = os.path.normpath(os.path.abspath(dest_dir))
                 os.makedirs(norm_dir, exist_ok=True)
 
