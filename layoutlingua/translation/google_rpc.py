@@ -102,13 +102,19 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
         return self._capabilities
 
     def _fetch_single_chunk(self, chunk: str, s_lang: str, t_lang: str) -> str:
-        # Pool of Google endpoints & clients. dict-chrome-ex uses extension quota which bypasses web gtx rate-limits.
-        endpoints = [
-            ("translate.googleapis.com", "gtx"),
-            ("translate.googleapis.com", "dict-chrome-ex"),
-            ("translate.google.com", "gtx"),
-            ("translate.google.com", "dict-chrome-ex"),
+        # Pool of Google endpoints & clients. The `at` client with the Android
+        # Translate app UA is the most token-stable combination (pdf2zh pattern):
+        # it preserves spacing around inline formula placeholders far better than
+        # the web gtx client, which glues words and corrupts Vietnamese diacritics
+        # on masked segments. dict-chrome-ex uses extension quota which bypasses
+        # web gtx rate-limits.
+        at_mirrors = [
+            "https://translate.google.com/translate_a/single?client=at&dt=t",
+            "https://translate.google.com.vn/translate_a/single?client=at&dt=t",
+            "https://translate.google.de/translate_a/single?client=at&dt=t",
+            "https://translate.google.co.jp/translate_a/single?client=at&dt=t",
         ]
+        android_ua = "AndroidTranslate/6.29.0.05.421280910 (Linux; U; Android 11; Pixel 5)"
 
         last_err: Exception | None = None
         rate_limited_count = 0
@@ -119,6 +125,64 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
             "dt": "t",
             "q": chunk,
         }).encode("utf-8")
+
+        parsed_result = None
+
+        # Tier 1: client=at mirrors with the Android Translate UA (TS-parity)
+        for endpoint in at_mirrors:
+            req = urllib.request.Request(
+                endpoint,
+                data=post_data,
+                headers={
+                    "User-Agent": android_ua,
+                    "Accept": "*/*",
+                    "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+                },
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    raw = resp.read().decode("utf-8")
+                    data = json.loads(raw)
+                    parts: List[str] = []
+                    if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+                        for item in data[0]:
+                            if isinstance(item, list) and len(item) > 0 and item[0]:
+                                parts.append(str(item[0]))
+                    text = "".join(parts)
+                    if text.strip():
+                        return _sanitize_translated_tokens(text)
+            except urllib.error.HTTPError as he:
+                last_err = he
+                if he.code in (429, 403):
+                    rate_limited_count += 1
+            except Exception as exc:
+                last_err = exc
+
+        # Tier 2: googleapis gtx GET (single URL-encoded request)
+        try:
+            url = (
+                "https://translate.googleapis.com/translate_a/single?client=gtx"
+                f"&sl={urllib.parse.quote(s_lang)}&tl={urllib.parse.quote(t_lang)}"
+                f"&dt=t&q={urllib.parse.quote(chunk)}"
+            )
+            req = urllib.request.Request(url, headers={"User-Agent": android_ua, "Accept": "*/*"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+                    parts = [str(item[0]) for item in data[0] if isinstance(item, list) and item[0]]
+                    text = "".join(parts)
+                    if text.strip():
+                        return _sanitize_translated_tokens(text)
+        except Exception as exc:
+            last_err = exc
+
+        # Tier 3: legacy form-POST pool
+        endpoints = [
+            ("translate.googleapis.com", "gtx"),
+            ("translate.googleapis.com", "dict-chrome-ex"),
+            ("translate.google.com", "gtx"),
+            ("translate.google.com", "dict-chrome-ex"),
+        ]
 
         for host, client in endpoints:
             url = f"https://{host}/translate_a/single?client={client}"
