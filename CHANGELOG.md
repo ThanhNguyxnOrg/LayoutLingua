@@ -37,6 +37,7 @@ All notable changes to **LayoutLingua** are documented in this file.
 - **📤 Export Dialog**: monolingual PDF, **bilingual interleaved PDF** (original ↔ translated pairs with doubled TOC page numbers), and structured Markdown; direct-to-folder saving with **Open in File Explorer**.
 - **🩺 Quality Checks & Diagnostics**: two-tier fitting telemetry (document / page / block), structured `OVERFLOW_FALLBACK` warnings, one-click **Copy log** export for LLM triage.
 - **🖼️ Demo Gallery**: real wide-angle captures embedded in the README (`docs/assets/`).
+- **🗂️ Live Recent-Document Thumbnails**: each Recent documents row renders a miniature first-page preview (stable skeleton + graceful glyph fallback) instead of a blank placeholder.
 
 ### 🔧 Fixed
 - **Display formulas survive redaction** 🧮: the MuPDF redaction pre-pass runs on a private document copy so its restructured Form XObjects stay self-consistent — earlier stream-transplant approaches blanked `f(x)=f(x±l)…`, `f′(x)≥0(f′(x)≤0)`, `lim`, and `x₀±a` regions.

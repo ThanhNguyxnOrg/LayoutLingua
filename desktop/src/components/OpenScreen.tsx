@@ -15,6 +15,48 @@ import { apiUrl } from '../services/api'
 
 type Err = null | 'unsupported' | 'password' | 'badpw' | 'missing_recent'
 
+/**
+ * Miniature first-page preview for a Recent documents row. Keeps a stable
+ * page-shaped box (no layout shift) with a quiet skeleton while the PNG
+ * streams in, and falls back to the mini-page glyph when the session is
+ * not available on the server.
+ */
+function RecentThumb({ id }: { id: string }) {
+  const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading')
+  useEffect(() => {
+    setState('loading')
+  }, [id])
+  return (
+    <span
+      aria-busy={state === 'loading'}
+      className="relative block h-[62px] w-11 shrink-0 overflow-hidden rounded-md border border-line-strong bg-white shadow-2xs group-hover:border-teal transition-colors"
+    >
+      {state !== 'error' && (
+        <img
+          src={apiUrl(`/api/page-preview?id=${encodeURIComponent(id)}&page=1&type=source`)}
+          alt=""
+          loading="lazy"
+          onLoad={() => setState('ok')}
+          onError={() => setState('error')}
+          className={`absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-200 ${
+            state === 'ok' ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+      )}
+      {state !== 'ok' && (
+        <span className="absolute inset-0 flex flex-col items-center justify-end gap-[3px] pb-1.5" aria-hidden="true">
+          <span className="w-full space-y-[3px] px-1.5">
+            <span className="block h-[3px] w-3/4 rounded-sm bg-canvas" />
+            <span className="block h-[3px] w-full rounded-sm bg-canvas" />
+            <span className="block h-[3px] w-5/6 rounded-sm bg-canvas" />
+          </span>
+          <span className="h-0.5 w-5 rounded-sm bg-teal/60" />
+        </span>
+      )}
+    </span>
+  )
+}
+
 export interface SelectedDocument {
   name: string
   size?: number
@@ -382,9 +424,7 @@ export default function OpenScreen({
                     disabled={loading}
                     className="group flex w-full items-center gap-3.5 px-5 py-3.5 text-left hover:bg-canvas/50 transition-colors cursor-pointer disabled:opacity-60"
                   >
-                    <span className="flex h-10 w-8 shrink-0 items-end justify-center rounded-sm border border-line-strong bg-white pb-1 shadow-2xs group-hover:border-teal transition-colors">
-                      <span className="h-0.5 w-4 bg-teal/60" />
-                    </span>
+                    <RecentThumb id={r.id || r.name} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-bold text-ink group-hover:text-teal transition-colors">
                         {r.name}
