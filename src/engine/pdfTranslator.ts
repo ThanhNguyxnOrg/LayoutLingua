@@ -3031,6 +3031,7 @@ export async function translateAndTypesetPage(
         }
         const vertGapBelow = minBelowY - sp.y1
         const singleLineScale = clearanceW / Math.max(1, fullW)
+        const hasInternalSpace = /\S\s+\S/.test(trText)
 
         if (singleLineScale < 0.78 && vertGapBelow >= group.size * 0.95 && clearanceW >= 42) {
           // Find the highest scale in [effectiveMinScale, 0.90] that wraps cleanly into <= 2 lines
@@ -3065,8 +3066,10 @@ export async function translateAndTypesetPage(
               })
             }
           } else {
-            // Anisotropic single-line fit: combine PDF Tz horizontal condensation (down to 82%) with vertical font scale
-            const tzFactor = Math.max(0.82, Math.min(1.0, singleLineScale))
+            // Anisotropic single-line fit: combine PDF Tz horizontal condensation (down to 82%,
+            // or 72% for a single word which has no wrap points) with vertical font scale
+            const tzFloor = hasInternalSpace ? 0.82 : 0.72
+            const tzFactor = Math.max(tzFloor, Math.min(1.0, singleLineScale))
             const neededVertScale = singleLineScale / tzFactor
             appliedScale = Math.max(effectiveMinScale, Math.min(1.0, neededVertScale))
             if (neededVertScale < effectiveMinScale) overflowFallback = true
@@ -3082,8 +3085,10 @@ export async function translateAndTypesetPage(
             })
           }
         } else {
-          // Anisotropic single-line fit: combine PDF Tz horizontal condensation (down to 82%) with vertical font scale
-          const tzFactor = Math.max(0.82, Math.min(1.0, singleLineScale))
+          // Anisotropic single-line fit: combine PDF Tz horizontal condensation (down to 82%,
+          // or 72% for a single word which has no wrap points) with vertical font scale
+          const tzFloor = hasInternalSpace ? 0.82 : 0.72
+          const tzFactor = Math.max(tzFloor, Math.min(1.0, singleLineScale))
           const neededVertScale = singleLineScale / tzFactor
           appliedScale = Math.max(effectiveMinScale, Math.min(1.0, neededVertScale))
           if (neededVertScale < effectiveMinScale) overflowFallback = true
