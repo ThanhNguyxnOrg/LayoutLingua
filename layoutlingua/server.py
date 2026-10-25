@@ -896,6 +896,13 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         except Exception:
                             continue
                         nav_target = _overlaps_link((float(bx0), float(by0), float(bx1), float(by1)))
+                        if nav_target is None:
+                            # TOC rows without a real annotation derive their
+                            # target from the trailing page number of the row
+                            # (dot-leader pattern, TS parity).
+                            m_toc = re.match(r"^(.*?)[.\s…·]{3,}\s*(\d{1,4})\s*$", b.text.strip())
+                            if m_toc:
+                                nav_target = int(m_toc.group(2))
                         blocks_out.append({
                             "id": b.block_id,
                             "kind": b.block_type,
