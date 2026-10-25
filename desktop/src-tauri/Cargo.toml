@@ -1,6 +1,6 @@
 [package]
 name = "layoutlingua-desktop"
-version = "2.0.0"
+version = "2.1.1"
 description = "LayoutLingua native desktop client powered by Tauri v2"
 authors = ["ThanhNguyxnOrg"]
 edition = "2021"

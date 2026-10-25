@@ -8,7 +8,7 @@
 *Strict Typographic Geometry Preservation • Sub-Line Formula Pinning • 17-Language Neural Typesetting*
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.0-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.1.0" />
+  <img src="https://img.shields.io/badge/Version-2.1.1-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.1.1" />
   <img src="https://img.shields.io/badge/Engine-MuPDF%20WASM%20%2B%20pdf--lib-0284C7?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" alt="MuPDF + pdf-lib" />
   <img src="https://img.shields.io/badge/TypeScript-5.8%20Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5.8" />
   <img src="https://img.shields.io/badge/React-19.0-149ECA?style=for-the-badge&logo=react&logoColor=white" alt="React 19" />
