@@ -28,7 +28,7 @@ Thank you for contributing to **LayoutLingua**! 🎉 To keep the PDF translation
 ## 1. 🏆 Golden Engineering Rules
 
 ### 🚫 Rule 1: Strict Zero-Hardcode Policy
-- **Never hardcode natural-language word lists** inside `src/engine/pdfTranslator.ts` to fix a document-specific bug (e.g., never add lists of Vietnamese/English/German stopwords or caption words to `isMathWordToken` or `canMerge`).
+- **Never hardcode natural-language word lists** inside the translation engine to fix a document-specific bug (e.g., never add lists of Vietnamese/English/German stopwords or caption words in the classifiers).
 - Always solve classification and layout challenges using:
   1. **🏷️ Font-table flags (`vflag`)**: `Symbol`, `MT Extra`, `CMMI`, `CMSY`, `bold`, `italic`, `serif`, `mono`.
   2. **📐 2D Coordinate Geometry**: Baseline offsets ($\Delta oy$), glyph size ratios, column fill ratios, and pixmap ray-casting.
@@ -40,10 +40,10 @@ Thank you for contributing to **LayoutLingua**! 🎉 To keep the PDF translation
 - Never use whole-block union rectangles that could erase vertical curly braces (`}`), fraction bars, or geometric diagrams between lines.
 
 ### 🌍 Rule 3: 17-Language Parity
-- When adding domain terms to `src/engine/glossaries/`, keep all 16 `academic_math_en_*.json` files synchronized so English-pivot translation works identically across all 272 language pairs.
+- When adding domain terms to `layoutlingua/resources/glossary/`, keep every `academic_*_*.json` file synchronized so English-pivot translation works identically across all 272 language pairs.
 
-### 🔁 Rule 4: Two-Engine Parity
-- REST contract changes (`server.ts`) must be mirrored in `layoutlingua/server.py` (and vice versa) so the React UI runs unchanged on both engines — see the parity matrix in the [README](../README.md#-rest-api--dual-engine-contract).
+### 🔁 Rule 4: Honest Providers
+- Every provider must be genuinely available at translate time — a missing API key or runtime stops the job with an explicit error. Never silently substitute another provider.
 
 ---
 
@@ -75,7 +75,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) — the repo hi
 
 - [ ] `npm run build` and `npm run lint` succeed with zero TypeScript or Vite errors. 🧹
 - [ ] `pytest tests/ -v` passes if the Python engine changed. 🐍
-- [ ] Zero hardcoded word lists introduced in `src/engine/pdfTranslator.ts`. 🚫
+- [ ] Zero hardcoded word lists introduced in the engine. 🚫
 - [ ] Both engines kept in parity for any REST contract change. 🔁
 - [ ] Tested on multi-page mathematical PDFs (including TOC pages, symbol tables, footnotes with links, and geometric figures) with `0` PUA leaks and `0` overflow fallbacks. 📐
 - [ ] Relevant documentation (`README.md`, `ARCHITECTURE.md`, or `CHANGELOG.md`) updated. 📚

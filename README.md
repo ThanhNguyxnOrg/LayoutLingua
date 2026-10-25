@@ -9,7 +9,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Version-2.0.0-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.0.0" />
-  <img src="https://img.shields.io/badge/Engine-MuPDF%20WASM%20%2B%20pdf--lib-0284C7?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" alt="MuPDF + pdf-lib" />
+  <img src="https://img.shields.io/badge/Engine-PyMuPDF_Vector_Core-0284C7?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" alt="PyMuPDF Engine" />
   <img src="https://img.shields.io/badge/TypeScript-5.8%20Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5.8" />
   <img src="https://img.shields.io/badge/React-19.0-149ECA?style=for-the-badge&logo=react&logoColor=white" alt="React 19" />
   <img src="https://img.shields.io/badge/Tauri-v2.0%20Desktop-FFC131?style=for-the-badge&logo=tauri&logoColor=black" alt="Tauri v2" />
@@ -100,7 +100,7 @@ Translating academic papers, mathematical handbooks, and engineering specificati
       <ul>
         <li><b>ISO 639-3 N-Gram Profiles (<code>franc-min</code>)</b>: Combines Unicode script range checks with statistical character trigram profiles across all 17 supported languages.</li>
         <li><b>Legacy Encoding Normalization</b>: Automatically decodes legacy <b>VNI-Times / VNI-Win</b> Vietnamese fonts (including kerned split diacritics) and <b>Symbol PUA</b> (<code>U+F020..U+F0FF</code>) into standard Unicode NFC.</li>
-        <li><b>English-Pivot Academic Glossaries</b>: 16 bidirectional JSON glossaries (<code>src/engine/glossaries/</code>) cover 136+ core mathematical terms across all 272 language pairs.</li>
+        <li><b>English-Pivot Academic Glossaries</b>: 16 bidirectional JSON glossaries (<code>layoutlingua/resources/glossary/</code>) cover 136+ core mathematical terms across all 272 language pairs.</li>
       </ul>
     </td>
     <td width="50%" valign="top">
@@ -156,9 +156,9 @@ flowchart TB
         PG["PdfPage Renderer<br/>(PNG Stream + Block Hover + Link Overlays)"]
     end
 
-    subgraph Server["Express + MuPDF + pdf-lib Engine (server.ts & src/engine/)"]
+    subgraph Server["Python Engine (layoutlingua/server.py)"]
         API["REST API & Session Store<br/>(.cache/sessions/<sha256>/)"]
-        PARSE["1. analyzePdfPageLayout<br/>(MuPDF Quads + VNI/PUA Decode + Pixmap Ray-Cast)"]
+        PARSE["1. parse_pdf — DocumentIR<br/>(PyMuPDF Quads + VNI/TCVN3 Decode)"]
         ISOL["2. Sub-Line Formula Pinning<br/>(vflag + 2D Sub/Sup + Style-Switch)"]
         NMT["3. translateBatchWithFormulaShield<br/>(franc-min + 16 Glossaries + Multi-Mirror NMT / Gemini / OpenAI)"]
         TYPE["4. Two-Pass Selective Typesetter<br/>(Pass 1 Erasure + Pass 2 Anisotropic Tz & Wrap)"]
@@ -204,15 +204,15 @@ The engine is **100% algorithmic** — no hardcoded word lists, no per-document 
 
 ---
 
-## 🔌 REST API — Dual-Engine Contract
+## 🔌 REST API Contract
 
-Both engines expose the **identical REST contract** — the React UI runs unchanged on either one. ✅
+One engine, one contract — the Python engine serves the whole app; the React desktop UI is its client. ✅
 
-| | 🌐 Web Engine | 🖥️ Desktop Engine |
-|:---|:---|:---|
-| Process | `server.ts` (Node, MuPDF WASM + pdf-lib) | `layoutlingua/server.py` (Python, PyMuPDF) |
-| Base URL | `http://localhost:3000` | `http://127.0.0.1:8765` |
-| Session store | `.cache/sessions/<sha256>/` | OS cache dir (`platformdirs`) |
+| | 🖥️ LayoutLingua Engine |
+|:---|:---|
+| Process | `layoutlingua/server.py` (Python, PyMuPDF vector core) |
+| Base URL | `http://127.0.0.1:8765` |
+| Session store | OS cache dir (`platformdirs` — survives restarts) |
 
 | Endpoint | Method | 📌 Purpose |
 |:---|:---:|:---|
@@ -248,50 +248,43 @@ Tested on a 96-page Vietnamese mathematical handbook (921 prose groups, legacy V
 ## 🛠 Installation & Quickstart
 
 ### Prerequisites
-- **Node.js** `>= 20.0.0` (or **Bun** `>= 1.1.0`)
-- *(Optional, desktop stack only)* **Python** `>= 3.10` + **Rust toolchain** for Tauri builds
+- **Python** `>= 3.10` (engine)
+- **Node.js** `>= 20.0.0` (desktop UI build)
+- **Rust toolchain** (only for native Tauri builds)
 
-### 1. Install Dependencies
+### 1️⃣ Python Engine (port 8765)
 ```bash
-npm install
-```
-
-### 2. Start the Full-Stack Development Server
-```bash
-npm run dev
-```
-The Express + Vite server starts on **`http://localhost:3000`**.
-
-### 3. 🖥️ Native Desktop App (Tauri v2 + Python engine)
-
-The desktop shell pairs the same React UI with the independent **Python engine** (`layoutlingua/server.py`) on `http://127.0.0.1:8765`:
-
-```bash
-# 1️⃣ Python engine
 python -m venv .venv
 .venv\Scripts\Activate.ps1        # 🐧 Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"
+python -m layoutlingua.server       # 🚀 http://127.0.0.1:8765
+```
 
-# 2️⃣ Desktop UI (vite :5173, or `npm run tauri dev` for the native window)
+### 2️⃣ Desktop UI (port 5173)
+```bash
 cd desktop
 npm install
-npm run dev
+npm run dev                         # 🎨 UI in the browser during development
+npm run tauri dev                   # 🪟 or the full native Tauri window
 ```
 
-> 🔁 Both engines share the same REST contract (upload, translate, progress, **resume-from-disk sessions**, cancel, export) — see the [REST API](#-rest-api--dual-engine-contract) parity matrix.
+> 💡 **One-click launcher (Windows)**: double-click `start_app.bat` — it boots the engine and launches the desktop app.
 
-### 4. Production Build & Start
+### 3️⃣ Production Build
 ```bash
-npm run build
-npm start
+cd desktop
+npm run build                       # 📦 UI bundle for Tauri
+npm run tauri build                 # 📦 LayoutLingua_Setup_2.0.0.exe / portable exe
 ```
 
-### 5. Environment Variables (`.env.example`)
-LayoutLingua works **out-of-the-box with zero API keys** via its multi-mirror Google Translate NMT pipeline, and optionally supports Gemini 2.5 Flash or any OpenAI-compatible endpoint (OpenAI, DeepSeek, Groq, Ollama):
-```env
-GEMINI_API_KEY=your_optional_gemini_api_key
-PORT=3000
+### 4️⃣ Verification Suite
+```bash
+pytest tests/ -q                                # 🧪 245 automated engine tests
+python scripts/test_live_translation.py         # ⚡ live end-to-end translation smoke test
 ```
+
+### 🔑 API Keys (optional)
+The engine works **out of the box with zero keys** via Google Translate RPC. For premium providers, paste keys directly in **Settings → Configure Providers** (Gemini, OpenAI-compatible, Ollama) — no environment files required. Offline translation ships via **Argos Translate**: install `argostranslate` in the engine environment to unlock it.
 
 ---
 

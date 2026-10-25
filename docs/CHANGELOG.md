@@ -42,7 +42,7 @@ All notable changes to **LayoutLingua** are documented in this file.
 - **💾 Dual-Layer Session Persistence**: backend disk store (`.cache/sessions/<sha256>/` — source, translated, live progress & integrity) + frontend IndexedDB blob cache; **restart-proof resume** verified by full engine kills, `/api/session-status` recovery, and content-hash upload dedupe via `X-Doc-Id`.
 - **🧮 Persistent Segment Cache**: every translated segment survives restarts and rate-limit halts — no duplicate API cost.
 - **🔗 Hyperlink & Navigation Preservation**: native `http(s)`/`mailto` links re-registered as PDF `/Link` annotations; internal GoTo destinations resolve to `#page=N` and the Mục lục viewer jumps straight to the target page; the PDF /Outlines bookmark tree is translated too.
-- **🖥️ Dual-Engine REST Contract**: the React UI runs unchanged on the Node web engine (`:3000`) and the Python engine (`:8765`) — `session-status`, content-hash dedupe, `cancel` (keeps translated pages), `page-preview?format=meta` block/hyperlink metadata, real-folder `/api/save` (OneDrive redirection aware ⚡ 0.3s), and the full export matrix.
+- **🔌 Full REST contract on the engine** — `session-status` resume, content-hash upload dedupe, `cancel` (keeps translated pages), `page-preview?format=meta` block/hyperlink metadata with `#page=N` navigation, real-folder `/api/save` (OneDrive redirection aware ⚡ 0.3s), and the full export matrix.
 
 **🖥️ Desktop Application & UI**
 - **Tauri v2 Shell** (React 19 + TypeScript + Tailwind v4) with zero-window Python sidecar lifecycle (`CREATE_NO_WINDOW`, graceful exit).
@@ -66,6 +66,7 @@ All notable changes to **LayoutLingua** are documented in this file.
 - **Desktop export slimming**: the Python accumulator subsets embedded fonts and garbage-collects the output — 96-page export **53.9MB → ~1.4MB**, matching the web engine.
 
 ### 🧹 Changed
+- **🖥️ Single-runtime consolidation (final)**: the Node/TS web engine was fully merged into the Python typesetter — word-level formula pinning with token-flow glyph freezing, newline-packed Google RPC batching (15x fewer requests, no mid-job rate limits), TOC `#page=N` navigation, OneDrive-aware `/api/save`, legacy VNI/TCVN3 decoding — verified end-to-end on the 96-page benchmark (0 warnings, 0 source remnants) before retiring `server.ts`, the root `src/` copy, and the web packaging. `desktop/src/` is the single UI and `layoutlingua/server.py` the single engine.
 - **📚 Documentation Hub**: the repo carries only `README.md` at the root — every deep-dive (Architecture, Algorithms, API Reference, Context, Changelog, Contributing, Conduct, Security) lives in `docs/` with cross-linked navigation back to the hub.
 - Repo trimmed to pure source — no runtime caches, archives, drop archives, or scratch files.
 - Full **245-test** pytest suite, strict TypeScript across web + desktop, CI matrix on Ubuntu / Windows / macOS.
