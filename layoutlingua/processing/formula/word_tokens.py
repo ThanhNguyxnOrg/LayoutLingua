@@ -242,6 +242,11 @@ def classify_word_tokens(tokens: list[WordToken]) -> None:
             continue
         wx0, wy0, wx1, wy1 = w.bbox
         for s in small:
+            # Sub/superscript adjacency is strictly intra-line: a small glyph on
+            # the NEXT line shares the x-window and would otherwise flag every
+            # prose word of the line above as math.
+            if s.line_index != w.line_index:
+                continue
             sx0, sy0, sx1, sy1 = s.bbox
             s_center_x = (sx0 + sx1) / 2.0
             # The small glyph's center must sit within +-3pt of the word's own

@@ -270,62 +270,27 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
         s_lang = self._normalize_lang_code(request.source_language, "auto")
         t_lang = self._normalize_lang_code(request.target_language, "vi")
 
-        # Pack multiple segments with delimiter to minimize HTTP round-trips and avoid rate limits
-        DELIMITER = "\n⟦SPLIT_SEP⟧\n"
-        MAX_PACK_CHARS = 2600
-
-        current_pack: list[tuple[str, str]] = []
-        current_len = 0
-
-        def _flush_pack(pack: list[tuple[str, str]]) -> None:
-            if not pack:
-                return
-            if len(pack) == 1:
-                seg_id, raw_t = pack[0]
-                try:
-                    translations[seg_id] = self._translate_single(raw_t, s_lang, t_lang)
-                except RateLimitError:
-                    raise
-                except Exception as ex:
-                    # One more retry after brief pause
-                    try:
-                        time.sleep(0.5)
-                        translations[seg_id] = self._translate_single(raw_t, s_lang, t_lang)
-                    except Exception:
-                        translations[seg_id] = raw_t
-                return
-
-            joined_text = DELIMITER.join(item[1] for item in pack)
+        # One segment per request. Packing multiple segments with a delimiter
+        # corrupts formula placeholders: Google mangles or substitutes the
+        # <bN></bN> tags of every segment after the first (verified A/B), which
+        # is the root cause of shattered inline formulas. Segment-level requests
+        # preserve the placeholders exactly (A/B verified). The rate limiter in
+        # TranslationService paces the extra round-trips.
+        for seg in request.segments:
+            raw_text = seg.masked_text
+            if not raw_text.strip():
+                translations[seg.segment_id] = raw_text
+                continue
             try:
-                translated_joined = self._translate_single(joined_text, s_lang, t_lang)
-                # Resilient splitting supporting unicode brackets or standard brackets with whitespace
-                split_parts = re.split(r"⟦\s*SPLIT_SEP\s*⟧|\[\s*SPLIT_SEP\s*\]", translated_joined)
-                if len(split_parts) == len(pack):
-                    for (seg_id, _), part in zip(pack, split_parts):
-                        translations[seg_id] = _sanitize_translated_tokens(part.strip())
-                    return
+                translations[seg.segment_id] = self._translate_single(raw_text, s_lang, t_lang)
             except RateLimitError:
                 raise
             except Exception:
-                pass
-
-            # Divide and conquer fallback: binary split the pack into smaller sub-packs
-            mid = len(pack) // 2
-            _flush_pack(pack[:mid])
-            _flush_pack(pack[mid:])
-
-        for seg in request.segments:
-            raw_text = seg.masked_text
-            seg_len = len(raw_text)
-            if current_len + seg_len + len(DELIMITER) > MAX_PACK_CHARS and current_pack:
-                _flush_pack(current_pack)
-                current_pack = [(seg.segment_id, raw_text)]
-                current_len = seg_len
-            else:
-                current_pack.append((seg.segment_id, raw_text))
-                current_len += seg_len + len(DELIMITER)
-
-        if current_pack:
-            _flush_pack(current_pack)
+                # One more retry after a brief pause; fail-closed to the masked source
+                try:
+                    time.sleep(0.5)
+                    translations[seg.segment_id] = self._translate_single(raw_text, s_lang, t_lang)
+                except Exception:
+                    translations[seg.segment_id] = raw_text
 
         return BatchTranslationResult(translations=translations)

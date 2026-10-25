@@ -103,7 +103,10 @@ class FormulaIsolator:
 
         use_words = bool(word_tokens)
         if use_words:
-            items = sorted(word_tokens, key=lambda w: (round(w.bbox[1] / 8.0) * 8.0, w.bbox[0]))
+            # Sort by the 3pt-baseline-cluster line index (not a coarse y-bucket:
+            # sub/superscript words sit a few points lower and a y-bucket sort
+            # scrambles them out of their formula group).
+            items = sorted(word_tokens, key=lambda w: (w.line_index, w.bbox[0]))
         else:
             items = sorted(block.spans, key=lambda s: (round(s.bbox[1] / 8.0) * 8.0, s.bbox[0]))
 
