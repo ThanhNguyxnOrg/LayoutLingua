@@ -50,9 +50,9 @@ Uploads a raw PDF binary stream, extracts page dimensions/word counts via MuPDF,
 - **Response (`200 OK`)**:
 ```json
 {
-  "id": "3151691ef4f9",
-  "name": "Sotaytoanhoc.pdf",
-  "size": 2734337,
+  "id": "a3f8c2d1e4b6",
+  "name": "textbook.pdf",
+  "size": 2841920,
   "page_count": 96,
   "word_count": 17368,
   "detected_lang": "vi",
@@ -70,9 +70,9 @@ Checks whether a document session exists in memory or in the on-disk cache (`id`
 ```json
 {
   "exists": true,
-  "id": "3151691ef4f9",
-  "name": "Sotaytoanhoc.pdf",
-  "size": 2734337,
+  "id": "a3f8c2d1e4b6",
+  "name": "textbook.pdf",
+  "size": 2841920,
   "page_count": 96,
   "detected_lang": "vi",
   "target_lang": "en",
@@ -148,7 +148,7 @@ Starts an asynchronous layout-preserving translation job across the selected pag
 - **Request Body**:
 ```json
 {
-  "doc_id": "3151691ef4f9",
+  "doc_id": "a3f8c2d1e4b6",
   "source_lang": "vi",
   "target_lang": "en",
   "page_range": "1-25",
@@ -164,7 +164,7 @@ Starts an asynchronous layout-preserving translation job across the selected pag
 ### 7. `POST /api/cancel`
 Cancels the active job. ♻️ Pages already translated are **kept** — the partial output is committed to the session so it can be previewed, exported, and resumed.
 
-- **Body**: `{ "doc_id": "3151691ef4f9" }`
+- **Body**: `{ "doc_id": "a3f8c2d1e4b6" }`
 - **Response**: `{ "status": "cancelled" }`
 
 ---
@@ -184,7 +184,7 @@ Exports the translated document:
 Writes the export directly to the user-chosen filesystem directory (resolves `~` and Windows OneDrive folder redirection such as `~/OneDrive/Desktop`).
 
 - **Body**: `{ "doc_id", "filename", "directory", "mode": "mono|bilingual", "format": "pdf|md", "scope": "all|translated_only" }`
-- **Response**: `{ "status": "ok", "saved_path": "C:\Users\…\Sotaytoanhoc.en.pdf", "bytes": 1522432 }` — a real, verified path (typical full-document export completes in < 0.3s)
+- **Response**: `{ "status": "ok", "saved_path": "C:\Users\…\textbook.en.pdf", "bytes": 1522432 }` — a real, verified path (typical full-document export completes in < 0.3s)
 
 ### 10. `GET /api/system-folders` · `GET /api/pick-folder` · `POST /api/open-folder`
 Desktop folder helpers: known destination folders (`Desktop`, `Downloads`, `Documents`), a folder picker passthrough, and an "Open in File Explorer" action for a saved path.

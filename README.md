@@ -44,7 +44,7 @@
 
 ## 🖥️ Demo
 
-> 🎬 Real capture — a 96-page Vietnamese mathematical handbook (`Sotaytoanhoc.pdf`, legacy VNI-Times encoding + `MT Extra` vector arrows) translated to English with geometry, formulas, dot leaders, and colors preserved.
+> 🎬 Real capture — a 96-page Vietnamese mathematical handbook (legacy VNI-Times encoding + `MT Extra` vector arrows) translated to English with geometry, formulas, dot leaders, and colors preserved.
 
 | 🏠 Open & Preflight | 📖 Dual-View Workspace |
 |:---:|:---:|
@@ -231,7 +231,7 @@ Both engines expose the **identical REST contract** — the React UI runs unchan
 
 ## 📊 Benchmarks & Competitive Comparison
 
-Tested on the 96-page Vietnamese mathematical handbook **`Sotaytoanhoc.pdf`** (921 prose groups, legacy VNI-Times encoding, `MT Extra` vector arrows, dense 2D equations, curly-brace symbol tables, and geometric figures):
+Tested on a 96-page Vietnamese mathematical handbook (921 prose groups, legacy VNI-Times encoding, `MT Extra` vector arrows, dense 2D equations, curly-brace symbol tables, and geometric figures):
 
 | Metric / Capability | **LayoutLingua v2.0** | **PDFMathTranslate (pdf2zh)** | **BabelDOC** | **Google Translate Web** |
 |:---|:---:|:---:|:---:|:---:|
