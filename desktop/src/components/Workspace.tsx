@@ -996,6 +996,18 @@ export default function Workspace({
       const resolvedTargetLang = langCodeMap[tgt] || (tgt === 'Vietnamese' ? 'vi' : 'en')
       const resolvedSourceLang = langCodeMap[src] || (src === 'Vietnamese' ? 'vi' : 'auto')
 
+      // Same-language guard: a vi->vi (or en->en) run would silently replace the
+      // document with an untranslated copy - fail loudly before touching the server.
+      const detected = docInfo?.detectedLang || ''
+      const effectiveSource = resolvedSourceLang === 'auto' ? detected : resolvedSourceLang
+      if (effectiveSource && resolvedTargetLang === effectiveSource) {
+        setTelemetry({
+          message: `Target language matches the document language (${effectiveSource.toUpperCase()}). Pick a different target language - a same-language run would replace the document with an untranslated copy.`,
+        })
+        setPhase('provider-error')
+        return
+      }
+
       fetch(apiUrl('/api/translate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

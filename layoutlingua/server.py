@@ -1339,6 +1339,25 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
 
                 session = _get_or_recover_session(doc_id)
 
+                # Same-language runs are almost certainly a misconfiguration and
+                # would silently replace every page with a no-op copy (destroying
+                # an existing translation). Fail loudly instead.
+                req_target = str(req_json.get("target_lang", "")).strip().lower()
+                req_source = str(req_json.get("source_lang", "")).strip().lower()
+                effective_source = req_source if req_source and req_source != "auto" else str(session.get("detected_lang", "en")).lower()
+                if req_target and req_target == effective_source:
+                    self._send_json(
+                        {
+                            "error": (
+                                f"Target language ({req_target}) matches the document language. "
+                                "Pick a different target language in the language selector - a same-language "
+                                "run would replace the document with an untranslated copy."
+                            )
+                        },
+                        status=400,
+                    )
+                    return
+
                 if not session:
                     self._send_json({"error": f"Session '{doc_id}' not found"}, status=404)
                     return
