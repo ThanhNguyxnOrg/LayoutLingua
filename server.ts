@@ -443,6 +443,17 @@ async function startServer() {
       const targetLang = String(body.target_lang || 'vi')
       const pageRange = String(body.page_range || 'all')
 
+      // Fail-closed provider guard: the web runtime has no offline NMT runtime, so selecting
+      // Argos must stop here with an explicit error instead of silently falling back to the
+      // Google RPC mirror (which would break the offline privacy promise of that provider).
+      if (String(body.provider || '') === 'argos') {
+        res.status(400).json({
+          error:
+            'Argos offline translation is only available in the desktop app (Python engine with argostranslate installed). In the web runtime choose Google Translate RPC, Gemini, or an OpenAI-compatible endpoint instead.',
+        })
+        return
+      }
+
       const session = await getOrRecoverSession(docId)
       session.target_lang = targetLang
 

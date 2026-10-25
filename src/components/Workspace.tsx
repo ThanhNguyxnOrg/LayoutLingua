@@ -1024,6 +1024,8 @@ export default function Workspace({
             }
           } else if (!res.ok) {
             if (progressTimer) clearInterval(progressTimer)
+            const errData = await res.json().catch(() => ({}))
+            setTelemetry({ message: errData.error || errData.message || undefined })
             setPhase('provider-error')
             if (docInfo?.id || docInfo?.name) {
               updateHistoryStatus(docInfo.id || docInfo.name, 'failed')

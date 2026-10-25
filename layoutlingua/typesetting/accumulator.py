@@ -305,7 +305,14 @@ class DocumentAccumulator:
         self.preserve_document_properties(translated_toc=translated_toc)
         if report is not None:
             self.restore_links(report)
-        pdf_bytes = self.output_doc.tobytes(deflate=True, garbage=3)
+        try:
+            # Subset embedded fonts and drop unreferenced objects: without this the
+            # per-page font programs bloat a 96-page export to ~50MB (matching the
+            # TS engine's optimizePdfBuffer step for parity).
+            self.output_doc.subset_fonts()
+        except Exception as subset_err:
+            print(f"[LayoutLingua] Font subsetting notice: {subset_err}")
+        pdf_bytes = self.output_doc.tobytes(deflate=True, garbage=4, clean=True)
         self.output_doc.close()
         return pdf_bytes
 
@@ -322,6 +329,11 @@ class DocumentAccumulator:
         self.preserve_document_properties(translated_toc=translated_toc)
         if report is not None:
             self.restore_links(report)
+
+        try:
+            self.output_doc.subset_fonts()
+        except Exception as subset_err:
+            print(f"[LayoutLingua] Font subsetting notice: {subset_err}")
 
         bilingual_doc = pymupdf.open()
         num_pages = max(len(self.source_doc), len(self.output_doc))

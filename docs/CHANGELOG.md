@@ -60,6 +60,8 @@ All notable changes to **LayoutLingua** are documented in this file.
 - **Symbol table row separation**: geometric row-obstacle guards stop adjacent table rows from merging vertically.
 - **Flicker-free live preview**: stable run-scoped page keys — completed pages never unmount while later pages translate.
 - **Export size & speed**: save-once + `subsetFonts()` + garbage-collected output — full 96-page document **46MB → ~1.5MB**, export < 1s. ⚡
+- **Honest provider behaviour on both engines** 🤝: selecting **Argos Translate** without its offline runtime now fails explicitly instead of silently falling back to Google Translate RPC (web engine returns a 400 with guidance; the desktop engine raises the same error) — the offline privacy promise is never faked. The Settings card is labelled `DESKTOP ONLY` in the browser.
+- **Desktop export slimming**: the Python accumulator subsets embedded fonts and garbage-collects the output — 96-page export **53.9MB → ~1.4MB**, matching the web engine.
 
 ### 🧹 Changed
 - **📚 Documentation Hub**: the repo carries only `README.md` at the root — every deep-dive (Architecture, Algorithms, API Reference, Context, Changelog, Contributing, Conduct, Security) lives in `docs/` with cross-linked navigation back to the hub.

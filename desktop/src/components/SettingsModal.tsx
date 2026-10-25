@@ -20,6 +20,7 @@ export default function SettingsModal({
   initialTab?: 'config' | 'guide'
 }) {
   const [globalSettings, updateGlobalSettings] = useSettings()
+  const isDesktopRuntime = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
   const [settings, setSettings] = useState<AppSettings>(globalSettings)
   const [saved, setSaved] = useState(false)
   const [activeTab, setActiveTab] = useState<'config' | 'guide'>(initialTab)
@@ -171,8 +172,10 @@ export default function SettingsModal({
                   {
                     id: 'argos',
                     name: 'Argos Translate (Offline)',
-                    sub: 'Lightweight offline CTranslate2 NMT model',
-                    badge: 'Offline',
+                    sub: isDesktopRuntime
+                      ? 'Lightweight offline CTranslate2 NMT model'
+                      : 'Requires the desktop app (Python engine) — not available in the browser',
+                    badge: isDesktopRuntime ? 'Offline' : 'DESKTOP ONLY',
                   },
                 ].map((p) => (
                   <label
