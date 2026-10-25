@@ -57,6 +57,7 @@ desktop/src-tauri/target/
 *.exe
 *.msi
 test_*.pdf
+tests/test_live_output.png
 translated_*.png
 hard_testcase_*.pdf
 hard_testcase_*.png
