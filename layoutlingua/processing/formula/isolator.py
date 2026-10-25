@@ -91,21 +91,33 @@ class FormulaIsolator:
         Sorts spans left-to-right and groups consecutive/connected math spans into a single
         cohesive formula token, preventing neural MT models from fragmenting expressions.
         """
-        # Sort spans in natural reading order: top-to-bottom first, then left-to-right on each line.
-        # Uses 8pt vertical baseline quantization to accommodate subscript/superscript baseline jitters.
-        sorted_spans = sorted(block.spans, key=lambda s: (round(s.bbox[1] / 8.0) * 8.0, s.bbox[0]))
+        # TS-parity: word-level tokenization when char geometry is available.
+        # Falls back to span-level classification for spans without chars.
+        from layoutlingua.processing.formula.word_tokens import build_word_tokens, classify_word_tokens
+
+        try:
+            word_tokens = build_word_tokens(block)
+            classify_word_tokens(word_tokens)
+        except Exception:
+            word_tokens = []
+
+        use_words = bool(word_tokens)
+        if use_words:
+            items = sorted(word_tokens, key=lambda w: (round(w.bbox[1] / 8.0) * 8.0, w.bbox[0]))
+        else:
+            items = sorted(block.spans, key=lambda s: (round(s.bbox[1] / 8.0) * 8.0, s.bbox[0]))
 
         tokens: list[FormulaToken] = []
         masked_parts: list[str] = []
-        span_ids: list[str] = [s.span_id for s in sorted_spans]
+        span_ids: list[str] = [s.span_id for s in block.spans]
         token_id_counter = 0
 
-        is_math_list = [self.is_math_span(s) for s in sorted_spans]
-        n = len(sorted_spans)
+        is_math_list = [it.is_math if use_words else self.is_math_span(it) for it in items]
+        n = len(items)
         i = 0
 
         while i < n:
-            span = sorted_spans[i]
+            span = items[i]
             # Check if this span is math or starts a math expression
             # A leading number/operator can start a math group if directly followed by a math span
             starts_math = is_math_list[i]
@@ -116,20 +128,20 @@ class FormulaIsolator:
 
             if starts_math:
                 j = i
-                group: list[GlyphSpan] = []
+                group = []
                 while j < n:
                     if is_math_list[j]:
-                        group.append(sorted_spans[j])
+                        group.append(items[j])
                         j += 1
-                    elif not sorted_spans[j].text.strip() and j + 1 < n and is_math_list[j + 1]:
-                        group.append(sorted_spans[j])
+                    elif not items[j].text.strip() and j + 1 < n and is_math_list[j + 1]:
+                        group.append(items[j])
                         j += 1
                     elif (
                         j + 1 < n and is_math_list[j + 1] and
-                        re.match(r"^[\d\s.,:;+=\-*/_~^…≤≥()\[\]{}]+$", sorted_spans[j].text) and
-                        len(sorted_spans[j].text.strip()) <= 6
+                        re.match(r"^[\d\s.,:;+=\-*/_~^…≤≥()\[\]{}]+$", items[j].text) and
+                        len(items[j].text.strip()) <= 6
                     ):
-                        group.append(sorted_spans[j])
+                        group.append(items[j])
                         j += 1
                     else:
                         break
@@ -156,7 +168,10 @@ class FormulaIsolator:
                 i += 1
 
         raw_text = block.text
-        masked_text = "".join(masked_parts)
+        # Word-level tokens lose the inter-word spaces of their parent spans:
+        # re-join with explicit spaces (token parts already carry padding, and
+        # the normalization below collapses any doubles).
+        masked_text = (" " if use_words else "").join(masked_parts)
 
         # Normalize semantic boundary spaces around placeholders
         masked_text = re.sub(r"(\S)(<b\d+></b\d+>)", r"\1 \2", masked_text)

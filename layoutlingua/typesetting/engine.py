@@ -185,6 +185,118 @@ class TypesetEngine:
             font_name=self.options.font_name,
         )
         self._clearance_planner = ClearancePlanner(padding_pt=self.options.clearance_padding_pt)
+
+    # ------------------------------------------------------------------
+    # TS-parity token flow: keep original math glyphs frozen in place,
+    # redact only prose gaps, and draw translated prose chunks into them.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _split_restored_by_tokens(translated_text: str, tokens: list) -> tuple[list[str], bool]:
+        """Split the restored translated string into prose chunks around each token's raw content."""
+        chunks: list[str] = []
+        cursor = 0
+        lowered = translated_text
+        for token in tokens:
+            raw = token.raw_content.strip()
+            if not raw:
+                continue
+            idx = lowered.find(raw, cursor)
+            if idx < 0:
+                return [], False
+            chunks.append(translated_text[cursor:idx])
+            cursor = idx + len(raw)
+        chunks.append(translated_text[cursor:])
+        return chunks, True
+
+    @staticmethod
+    def _assign_tokens_to_lines(tokens: list, line_rects: list) -> dict[int, list]:
+        """Assign each formula token to the line rect containing its vertical center."""
+        assignment: dict[int, list] = {}
+        for li, rect in enumerate(line_rects):
+            ry0, ry1 = rect[1], rect[3]
+            for token in tokens:
+                tx0, ty0, tx1, ty1 = token.bbox
+                cy = (ty0 + ty1) / 2.0
+                if ry0 - 1.0 <= cy <= ry1 + 1.0:
+                    assignment.setdefault(li, []).append(token)
+        return assignment
+
+    def _plan_token_flow(
+        self,
+        tokens: list,
+        translated_text: str,
+        line_rects: list,
+        block_font: str,
+        orig_font_size: float,
+    ) -> tuple[bool, list[tuple[pymupdf.Rect, str, float]]] | None:
+        """Plan prose chunks drawn into the gaps around frozen formula tokens.
+
+        Returns a list of (rect, chunk_text, font_size) draw specs, or None when the
+        flow cannot be honored (caller falls back to the legacy full-redact path).
+        """
+        chunks, ok = self._split_restored_by_tokens(translated_text, tokens)
+        if not ok:
+            return None
+
+        assignment = self._assign_tokens_to_lines(tokens, line_rects)
+
+        # Gap sequence in reading order: for each line (top to bottom), the prose
+        # sub-rects between consecutive token bboxes.
+        gaps: list[pymupdf.Rect] = []
+        for li, rect in enumerate(line_rects):
+            line_tokens = sorted(assignment.get(li, []), key=lambda t: t.bbox[0])
+            cursor_x = rect[0]
+            for token in line_tokens:
+                tx0, _, tx1, _ = token.bbox
+                left = max(cursor_x, rect[0])
+                right = min(tx0, rect[2])
+                if right - left > 6.0:
+                    gaps.append(pymupdf.Rect(left, rect[1], right, rect[3]))
+                cursor_x = max(cursor_x, tx1)
+            if rect[2] - cursor_x > 6.0:
+                gaps.append(pymupdf.Rect(cursor_x, rect[1], rect[2], rect[3]))
+
+        # Interleave prose chunks with gaps: chunks fill the gaps in order; any
+        # leftover chunks collapse into the last (widest) gap.
+        if not gaps:
+            return None
+
+        fontfile = self.font_manager.get_font_path(block_font)
+        try:
+            font = pymupdf.Font(fontfile=fontfile) if fontfile else pymupdf.Font("helv")
+        except Exception:
+            font = pymupdf.Font("helv")
+
+        min_scale = self.options.min_font_scale
+        specs: list[tuple[pymupdf.Rect, str, float]] = []
+        # Distribute chunks into gaps in order; the tail chunks share the last gap.
+        gi = 0
+        for chunk in chunks:
+            text = chunk.strip()
+            if not text:
+                continue
+            if gi >= len(gaps):
+                gi = len(gaps) - 1
+            gap = gaps[gi]
+            gi += 1
+
+            gap_w = max(8.0, gap.width - 4.0)
+            size = min(orig_font_size, gap.height * 0.92)
+            while size > orig_font_size * min_scale:
+                if font.text_length(text, fontsize=size) <= gap_w:
+                    break
+                size -= 0.25
+            if font.text_length(text, fontsize=size) > gap_w:
+                # The prose chunk cannot fit its gap even at the minimum floor:
+                # fail the token flow so the caller falls back to the legacy
+                # full-redact path (fail-closed, no data loss).
+                return None
+            specs.append((gap, text, size))
+
+        return specs
+
+
     def stage_page_transaction(
         self,
         source_doc: pymupdf.Document,
@@ -291,9 +403,10 @@ class TypesetEngine:
                 if isinstance(p_ids, (set, list, tuple)):
                     preserved_ids.update(p_ids)
 
-            # 1. Identify translation candidates
+            # 1. Identify translation candidates (+ formula tokens for the TS-parity token flow)
             candidate_blocks: list[TextBlock] = []
             block_translation_map: dict[str, str] = {}
+            token_map: dict[str, list] = {}
             for block in page_ir.blocks:
                 if block.block_type in ("formula", "table_rejected") or block.block_id in preserved_ids:
                     continue
@@ -303,6 +416,12 @@ class TypesetEngine:
                 if trans_text and trans_text.strip() and trans_text.strip() != block.text.strip():
                     candidate_blocks.append(block)
                     block_translation_map[block.block_id] = trans_text
+                    try:
+                        from layoutlingua.processing.formula.isolator import FormulaIsolator as _FI
+
+                        token_map[block.block_id] = _FI().isolate_block(block).tokens
+                    except Exception:
+                        token_map[block.block_id] = []
 
             # 2. Pre-compute read-only clearance plan on pristine scratch page
             clearance_plan = self._clearance_planner.plan_page_clearance(
@@ -573,7 +692,40 @@ class TypesetEngine:
                         else [(block.bbox[0], block.bbox[1], block.bbox[2], block.bbox[3])]
                     )
 
-                if fits:
+                # TS-parity token flow: keep original math glyphs frozen, draw prose
+                # chunks into the gaps. Falls back to the legacy whole-text path when
+                # the flow cannot be honored.
+                token_specs = None
+                if token_map.get(block.block_id) and tight_line_rects and not is_cell:
+                    token_specs = self._plan_token_flow(
+                        token_map[block.block_id],
+                        translated_text,
+                        tight_line_rects,
+                        block_font,
+                        orig_font_size,
+                    )
+
+                if fits or token_specs:
+                    if token_specs:
+                        # Token flow: chunks are drawn per-gap at their own sizes;
+                        # the original math glyphs are never touched.
+                        fitting_plan.append((
+                            block,
+                            tight_line_rects,
+                            translated_text,
+                            orig_font_size,
+                            dominant_color,
+                            orig_font_size,
+                            1.2,
+                            len(tight_line_rects),
+                            target_layout_box,
+                            is_cell,
+                            grid,
+                            cell_geom,
+                            block_font,
+                            token_specs,
+                        ))
+                        continue
                     # For Table of Contents dot leaders, re-adapt to the fitted font size
                     translated_text = self._fit_tester.adapt_dot_leader_if_needed(
                         text=translated_text,
@@ -595,6 +747,7 @@ class TypesetEngine:
                         grid,
                         cell_geom,
                         block_font,
+                        None,
                     ))
                 else:
                     page_summary.overflow_blocks += 1
@@ -666,15 +819,23 @@ class TypesetEngine:
                                 item[10],
                                 item[11],
                                 item[12],
+                                item[13] if len(item) > 13 else None,
                             )
                         fitting_plan = new_plan
 
             # 8. Apply selective redaction ONLY on approved, fitting candidates
             if fitting_plan:
                 for block, tight_line_rects, *rest in fitting_plan:
-                    for line_rect in tight_line_rects:
-                        rect = pymupdf.Rect(*line_rect)
-                        scratch_page.add_redact_annot(rect, fill=False, cross_out=False)
+                    token_specs = rest[-1] if rest and isinstance(rest[-1], list) else None
+                    if token_specs:
+                        # TS-parity: redact only the prose gaps so the frozen math
+                        # glyphs survive with their original fonts and positioning.
+                        for gap_rect, _chunk, _size in token_specs:
+                            scratch_page.add_redact_annot(gap_rect, fill=False, cross_out=False)
+                    else:
+                        for line_rect in tight_line_rects:
+                            rect = pymupdf.Rect(*line_rect)
+                            scratch_page.add_redact_annot(rect, fill=False, cross_out=False)
 
                 scratch_page.apply_redactions(
                     images=pymupdf.PDF_REDACT_IMAGE_NONE,
@@ -697,7 +858,72 @@ class TypesetEngine:
                     grid,
                     cell_geom,
                     block_font,
+                    token_specs,
                 ) in fitting_plan:
+                    if token_specs:
+                        # TS-parity draw: prose chunks into the gaps around frozen math
+                        fontfile_arg = (
+                            None
+                            if block_font.lower() in BUILTIN_OR_CJK_FONTS
+                            else str(self.font_manager.get_font_path(block_font))
+                        )
+                        shrink_ratios = []
+                        for gap_rect, chunk_text, chunk_size in token_specs:
+                            chunk_rect = pymupdf.Rect(gap_rect)
+                            rc = scratch_page.insert_textbox(
+                                chunk_rect,
+                                chunk_text,
+                                fontsize=chunk_size,
+                                fontname=block_font,
+                                fontfile=fontfile_arg,
+                                color=color,
+                                lineheight=1.15,
+                            )
+                            if rc < 0:
+                                chunk_rect = pymupdf.Rect(
+                                    gap_rect.x0,
+                                    gap_rect.y0 - 1.5,
+                                    gap_rect.x1,
+                                    gap_rect.y1 + abs(rc) + 2.0,
+                                )
+                                scratch_page.insert_textbox(
+                                    chunk_rect,
+                                    chunk_text,
+                                    fontsize=chunk_size,
+                                    fontname=block_font,
+                                    fontfile=fontfile_arg,
+                                    color=color,
+                                    lineheight=1.15,
+                                )
+                            shrink_ratios.append(chunk_size / orig_size if orig_size > 0 else 1.0)
+                            page_replaced_ratios.append(shrink_ratios[-1])
+
+                        shrink_ratio = min(shrink_ratios) if shrink_ratios else 1.0
+                        page_summary.replaced_blocks += 1
+                        if is_cell:
+                            page_summary.replaced_cells += 1
+                        page_details.append(
+                            BlockFittingDetail(
+                                block_id=block.block_id,
+                                page_number=page_number,
+                                status=BlockFittingStatus.SUCCESS,
+                                original_text=block.text,
+                                translated_text=text,
+                                original_font_size=orig_size,
+                                final_font_size=round(min(shrink_ratios) * orig_size, 2) if shrink_ratios else orig_size,
+                                shrink_ratio=shrink_ratio,
+                                line_height_em=1.15,
+                                line_count=len(token_specs),
+                                bbox=target_layout_box,
+                                overflow_cause=OverflowCause.NONE,
+                                unit_kind="CELL" if is_cell else "BLOCK",
+                                table_id=grid.table_id if grid else None,
+                                row_idx=cell_geom.row_idx if cell_geom else None,
+                                col_idx=cell_geom.col_idx if cell_geom else None,
+                                reason="Token flow: math glyphs frozen, prose drawn into gaps.",
+                            )
+                        )
+                        continue
                     box_h = max(target_layout_box[3] - target_layout_box[1], line_count * final_size * 1.50)
                     rect = pymupdf.Rect(target_layout_box[0], target_layout_box[1], target_layout_box[2], target_layout_box[1] + box_h)
                     fontfile_arg = (
