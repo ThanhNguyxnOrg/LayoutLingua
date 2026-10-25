@@ -28,7 +28,7 @@ Thank you for contributing to **LayoutLingua**! 🎉 To keep the PDF translation
 ## 1. 🏆 Golden Engineering Rules
 
 ### 🚫 Rule 1: Strict Zero-Hardcode Policy
-- **Never hardcode natural-language word lists** inside the translation engine to fix a document-specific bug (e.g., never add lists of Vietnamese/English/German stopwords or caption words to `isMathWordToken` or `canMerge`).
+- **Never hardcode natural-language word lists** inside `src/engine/pdfTranslator.ts` to fix a document-specific bug (e.g., never add lists of Vietnamese/English/German stopwords or caption words to `isMathWordToken` or `canMerge`).
 - Always solve classification and layout challenges using:
   1. **🏷️ Font-table flags (`vflag`)**: `Symbol`, `MT Extra`, `CMMI`, `CMSY`, `bold`, `italic`, `serif`, `mono`.
   2. **📐 2D Coordinate Geometry**: Baseline offsets ($\Delta oy$), glyph size ratios, column fill ratios, and pixmap ray-casting.
@@ -40,31 +40,30 @@ Thank you for contributing to **LayoutLingua**! 🎉 To keep the PDF translation
 - Never use whole-block union rectangles that could erase vertical curly braces (`}`), fraction bars, or geometric diagrams between lines.
 
 ### 🌍 Rule 3: 17-Language Parity
-- When adding domain terms to `layoutlingua/resources/glossary/`, keep every `academic_math_en_*.json` (and sibling domains) synchronized so English-pivot translation works identically across all language pairs.
+- When adding domain terms to `src/engine/glossaries/`, keep all 16 `academic_math_en_*.json` files synchronized so English-pivot translation works identically across all 272 language pairs.
 
-### 🔁 Rule 4: Honest Providers
-- Every provider must be genuinely available at translate time — a missing API key or runtime stops the job with an explicit error. Never silently substitute another provider.
+### 🔁 Rule 4: Two-Engine Parity
+- REST contract changes (`server.ts`) must be mirrored in `layoutlingua/server.py` (and vice versa) so the React UI runs unchanged on both engines — see the parity matrix in the [README](../README.md#-rest-api--dual-engine-contract).
 
 ---
 
 ## 2. 🛠 Development Workflow
 
-### 🐍 Python Engine (port 8765)
+### 🌐 Web Stack (TS engine, port 3000)
+```bash
+npm install          # 📦 dependencies
+npm run dev          # 🚀 Express + Vite dev server
+npm run lint         # 🧹 TypeScript strict check
+npm run build        # 📦 production build
+```
+
+### 🖥 Desktop Stack (Python engine, port 8765 + Tauri UI)
 ```bash
 python -m venv .venv && .venv\Scripts\Activate.ps1   # 🐧 Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"                              # 🐍 engine + dev tools
-pytest tests/ -q                                     # 🧪 245 engine tests
-python -m layoutlingua.server                        # 🚀 start the engine
-python scripts/test_live_translation.py              # ⚡ live end-to-end smoke test
-```
+pytest tests/ -v                                     # 🧪 245 engine tests
 
-### 🖥 Desktop UI (port 5173 + Tauri)
-```bash
-cd desktop
-npm install          # 📦 dependencies
-npm run dev          # 🎨 UI dev server (talks to the engine on :8765)
-npm run build        # 📦 UI bundle for Tauri
-npm run tauri build  # 🪟 native installer / portable build
+cd desktop && npm install && npm run dev             # 🖥 desktop UI (vite :5173)
 ```
 
 ### 📝 Commit Messages
@@ -74,9 +73,9 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) — the repo hi
 
 ## 3. ✅ Pull Request Checklist
 
-- [ ] `pytest tests/ -q` passes (245 engine tests). 🐍
-- [ ] `cd desktop && npm run build` succeeds with zero TypeScript or Vite errors. 🧹
-- [ ] Zero hardcoded word lists introduced in the engine. 🚫
-- [ ] Providers stay honest: a missing key or runtime fails explicitly. 🔁
+- [ ] `npm run build` and `npm run lint` succeed with zero TypeScript or Vite errors. 🧹
+- [ ] `pytest tests/ -v` passes if the Python engine changed. 🐍
+- [ ] Zero hardcoded word lists introduced in `src/engine/pdfTranslator.ts`. 🚫
+- [ ] Both engines kept in parity for any REST contract change. 🔁
 - [ ] Tested on multi-page mathematical PDFs (including TOC pages, symbol tables, footnotes with links, and geometric figures) with `0` PUA leaks and `0` overflow fallbacks. 📐
 - [ ] Relevant documentation (`README.md`, `ARCHITECTURE.md`, or `CHANGELOG.md`) updated. 📚

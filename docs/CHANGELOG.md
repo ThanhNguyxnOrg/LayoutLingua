@@ -65,7 +65,6 @@ All notable changes to **LayoutLingua** are documented in this file.
 
 ### 🧹 Changed
 - **📚 Documentation Hub**: the repo carries only `README.md` at the root — every deep-dive (Architecture, Algorithms, API Reference, Context, Changelog, Contributing, Conduct, Security) lives in `docs/` with cross-linked navigation back to the hub.
-- **🖥️ Single-runtime consolidation**: the Node/TypeScript web stack (`server.ts`, root `src/`, root npm config, Docker packaging) retired — `desktop/src/` is now the single UI copy and `layoutlingua/server.py` the single engine, eliminating the two-engine sync debt. The release workflow ships the Python engine source for Windows/macOS/Linux.
 - Repo trimmed to pure source — no runtime caches, archives, drop archives, or scratch files.
 - Full **245-test** pytest suite, strict TypeScript across web + desktop, CI matrix on Ubuntu / Windows / macOS.
 

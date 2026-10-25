@@ -16,7 +16,7 @@
 
 <p>
   <img src="https://img.shields.io/badge/🔐_Security-Local_First_Privacy-0D9488?style=for-the-badge" alt="Security Policy" />
-  <img src="https://img.shields.io/badge/🧊_PDF_Execution-PyMuPDF_Sandboxed_Parsing-0284C7?style=for-the-badge" alt="Sandboxed PyMuPDF" />
+  <img src="https://img.shields.io/badge/🧊_PDF_Execution-Sandboxed_MuPDF_WASM-0284C7?style=for-the-badge" alt="Sandboxed MuPDF" />
   <img src="https://img.shields.io/badge/🛡️_Data_Leakage-Zero_(Offline_Mode)-22C55E?style=for-the-badge" alt="Zero Leakage" />
 </p>
 

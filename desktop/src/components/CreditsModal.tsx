@@ -15,7 +15,7 @@ export default function CreditsModal({ onClose }: { onClose: () => void }) {
   }, [onClose])
 
   const platform = typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
-  const engine = '__TAURI_INTERNALS__' in window ? 'desktop app (Tauri · Python engine :8765)' : 'browser dev preview (Python engine :8765)'
+  const engine = '__TAURI_INTERNALS__' in window ? 'desktop (Tauri, Python engine :8765)' : 'web (Node TS engine :3000)'
   // Prefills match the field ids in .github/ISSUE_TEMPLATE/bug_report.yml
   const issueUrl =
     `https://github.com/${REPO}/issues/new?template=bug_report.yml` +

@@ -9,7 +9,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Version-2.0.0-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.0.0" />
-  <img src="https://img.shields.io/badge/Engine-PyMuPDF_Vector_Core-0284C7?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" alt="PyMuPDF Engine" />
+  <img src="https://img.shields.io/badge/Engine-MuPDF%20WASM%20%2B%20pdf--lib-0284C7?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" alt="MuPDF + pdf-lib" />
   <img src="https://img.shields.io/badge/TypeScript-5.8%20Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5.8" />
   <img src="https://img.shields.io/badge/React-19.0-149ECA?style=for-the-badge&logo=react&logoColor=white" alt="React 19" />
   <img src="https://img.shields.io/badge/Tauri-v2.0%20Desktop-FFC131?style=for-the-badge&logo=tauri&logoColor=black" alt="Tauri v2" />
@@ -100,14 +100,14 @@ Translating academic papers, mathematical handbooks, and engineering specificati
       <ul>
         <li><b>ISO 639-3 N-Gram Profiles (<code>franc-min</code>)</b>: Combines Unicode script range checks with statistical character trigram profiles across all 17 supported languages.</li>
         <li><b>Legacy Encoding Normalization</b>: Automatically decodes legacy <b>VNI-Times / VNI-Win</b> Vietnamese fonts (including kerned split diacritics) and <b>Symbol PUA</b> (<code>U+F020..U+F0FF</code>) into standard Unicode NFC.</li>
-        <li><b>English-Pivot Academic Glossaries</b>: bundled bidirectional JSON glossaries (<code>layoutlingua/resources/glossary/</code>) cover 136+ core mathematical terms across all language pairs.</li>
+        <li><b>English-Pivot Academic Glossaries</b>: 16 bidirectional JSON glossaries (<code>src/engine/glossaries/</code>) cover 136+ core mathematical terms across all 272 language pairs.</li>
       </ul>
     </td>
     <td width="50%" valign="top">
       <h3>⚡ 4. Flicker-Free Live Workspace & Cache</h3>
       <ul>
         <li><b>Stable Run-Scoped Preview</b>: Completed pages stream immediately to the dual-view canvas and remain rock-steady while subsequent pages translate in the background.</li>
-        <li><b>Dual-Layer Session Persistence</b>: Persists source & translated PDFs to disk (OS cache dir, <code>sessions/&lt;id&gt;/</code>) on the backend and mirrors raw PDF blobs in browser <code>IndexedDB</code> for instant recovery from <b>Recent documents</b>.</li>
+        <li><b>Dual-Layer Session Persistence</b>: Persists source & translated PDFs to disk (<code>.cache/sessions/&lt;sha256&gt;/</code>) on the backend and mirrors raw PDF blobs in browser <code>IndexedDB</code> for instant recovery from <b>Recent documents</b>.</li>
         <li><b>Interactive Hyperlink Overlay</b>: Preserves native PDF <code>/Link</code> annotations and resolves flattened blue citation links as clickable overlays.</li>
       </ul>
     </td>
@@ -156,12 +156,12 @@ flowchart TB
         PG["PdfPage Renderer<br/>(PNG Stream + Block Hover + Link Overlays)"]
     end
 
-    subgraph Server["Python Engine (layoutlingua/server.py & layoutlingua/)"]
-        API["REST API & Session Store<br/>(OS cache dir / sessions/)"]
-        PARSE["1. parse_pdf — DocumentIR<br/>(PyMuPDF Quads + VNI/PUA Decode + Pixmap Ray-Cast)"]
+    subgraph Server["Express + MuPDF + pdf-lib Engine (server.ts & src/engine/)"]
+        API["REST API & Session Store<br/>(.cache/sessions/<sha256>/)"]
+        PARSE["1. analyzePdfPageLayout<br/>(MuPDF Quads + VNI/PUA Decode + Pixmap Ray-Cast)"]
         ISOL["2. Sub-Line Formula Pinning<br/>(vflag + 2D Sub/Sup + Style-Switch)"]
-        NMT["3. Formula-Shielded Translation<br/>(franc-min + 16 Glossaries + Google RPC / Gemini / OpenAI / Argos)"]
-        TYPE["4. Two-Pass Selective Typesetter<br/>(Pass 1 MuPDF Redaction + Pass 2 Anisotropic Tz & Wrap)"]
+        NMT["3. translateBatchWithFormulaShield<br/>(franc-min + 16 Glossaries + Multi-Mirror NMT / Gemini / OpenAI)"]
+        TYPE["4. Two-Pass Selective Typesetter<br/>(Pass 1 Erasure + Pass 2 Anisotropic Tz & Wrap)"]
     end
 
     UI -->|POST /api/upload| API
@@ -172,7 +172,7 @@ flowchart TB
 
 Every deep-dive lives in [`docs/`](docs/) — this README is the hub that links them all, and each doc links back here. 🗺️
 
-- 📘 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Deep Module specifications, data structures, and the single-runtime design.
+- 📘 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Deep Module specifications, data structures, and state lifecycle.
 - 🧮 **[docs/ALGORITHM.md](docs/ALGORITHM.md)** — Mathematical formulations: `vflag` pinning, ray-cast clearance, table guards, anisotropic `Tz` fitting.
 - 🔌 **[docs/API_REFERENCE.md](docs/API_REFERENCE.md)** — Full dual-engine REST contract with payload schemas.
 - 🧭 **[docs/CONTEXT.md](docs/CONTEXT.md)** — Ubiquitous domain language and coordinate system conventions.
@@ -187,32 +187,32 @@ Every deep-dive lives in [`docs/`](docs/) — this README is the hub that links 
 
 The engine is **100% algorithmic** — no hardcoded word lists, no per-document tuning. 🚫📝 Every classification decision comes from font-table flags, 2D geometry, Unicode properties, or statistical models:
 
-### 1️⃣ Structure & Clearance Analysis (`layoutlingua/core/parser.py`)
+### 1️⃣ `analyzePdfPageLayout` — Structure & Clearance
 - 🔍 **Structured Text Walk** — captures every glyph's quad, baseline origin, font flags, and RGB fill via MuPDF quads; decodes legacy **VNI-Windows** split diacritics and **Symbol PUA** (`U+F020..U+F0FF`) into Unicode NFC.
 - 🧲 **Sub-Line Formula Pinning (`vflag`)** — glyphs in `Symbol` / `MT Extra` / TeX math fonts (including multi-glyph vector arrows over $\overrightarrow{AB}$) and 2D sub/superscripts ($\Delta y \ge 1.5\text{pt}$, size $< 8.5\text{pt}$) are frozen as `MathObstacle`s. A paragraph-relative italic style-switch keeps all-italic theorems prose.
 - 📡 **Bidirectional Pixmap Ray-Cast** — scans the 1× RGB pixmap left/right of every prose span to find exact clearance before vertical braces `}`, diagrams, or table rules — sub-point accuracy.
 - 🧱 **Parallel Table Row Guard** — refuses to merge rows that pair with distinct aligned formula obstacles or cross horizontal ruled borders.
 
-### 2️⃣ Formula-Shielded Neural Translation (`layoutlingua/translation/`)
+### 2️⃣ `translateBatchWithFormulaShield` — Safe Neural Translation
 - 🔒 **Formula Shielding** — inline math becomes opaque `⟦M0⟧` tokens before any provider call; 🩹 self-healing restores mangled brackets after.
 - 🌍 **`franc-min` Trigram Detection** — ISO 639-3 profiles across 17 languages; blocks already in the target language are skipped.
 - 📚 **16 Academic Glossaries** — English-pivot math terminology across all 272 language pairs.
 
-### 3️⃣ Two-Pass Selective Typesetting (`layoutlingua/typesetting/`)
+### 3️⃣ Two-Pass Selective Typesetting
 - 🧽 **Pass 1 — Prose Redaction**: source prose glyphs are physically removed from the content stream via MuPDF's native redaction pipeline (run as a **pre-pass on a private document copy** so frozen math forms stay self-consistent), with obstacle-clipped rectangles; paint-over rectangles remain the fail-closed fallback. Copy/paste from the exported PDF yields *only* translated text + original math. 📋
 - 🖋️ **Pass 2 — Anisotropic Fitting**: TOC `\dotfill` leaders re-computed to the right margin; single-line spans use bidirectional clearance + `Tz` horizontal condensation (82–100%, down to **64% scaled by the min font floor for single words** — a lone word between formulas always fits one line); multi-line paragraphs binary-search font scale with multi-stage condensation so **no line is ever dropped**.
 
 ---
 
-## 🔌 REST API Contract
+## 🔌 REST API — Dual-Engine Contract
 
-One engine, one contract — the Python engine serves the whole app; the React desktop UI is its only client. ✅
+Both engines expose the **identical REST contract** — the React UI runs unchanged on either one. ✅
 
-| | 🖥️ LayoutLingua Engine |
-|:---|:---|
-| Process | `layoutlingua/server.py` (Python, PyMuPDF vector core) |
-| Base URL | `http://127.0.0.1:8765` |
-| Session store | OS cache dir (`platformdirs` — survives restarts) |
+| | 🌐 Web Engine | 🖥️ Desktop Engine |
+|:---|:---|:---|
+| Process | `server.ts` (Node, MuPDF WASM + pdf-lib) | `layoutlingua/server.py` (Python, PyMuPDF) |
+| Base URL | `http://localhost:3000` | `http://127.0.0.1:8765` |
+| Session store | `.cache/sessions/<sha256>/` | OS cache dir (`platformdirs`) |
 
 | Endpoint | Method | 📌 Purpose |
 |:---|:---:|:---|
@@ -248,43 +248,50 @@ Tested on a 96-page Vietnamese mathematical handbook (921 prose groups, legacy V
 ## 🛠 Installation & Quickstart
 
 ### Prerequisites
-- **Python** `>= 3.10` (engine)
-- **Node.js** `>= 20.0.0` (desktop UI build)
-- **Rust toolchain** (only for native Tauri builds)
+- **Node.js** `>= 20.0.0` (or **Bun** `>= 1.1.0`)
+- *(Optional, desktop stack only)* **Python** `>= 3.10` + **Rust toolchain** for Tauri builds
 
-### 1️⃣ Python Engine (port 8765)
+### 1. Install Dependencies
 ```bash
+npm install
+```
+
+### 2. Start the Full-Stack Development Server
+```bash
+npm run dev
+```
+The Express + Vite server starts on **`http://localhost:3000`**.
+
+### 3. 🖥️ Native Desktop App (Tauri v2 + Python engine)
+
+The desktop shell pairs the same React UI with the independent **Python engine** (`layoutlingua/server.py`) on `http://127.0.0.1:8765`:
+
+```bash
+# 1️⃣ Python engine
 python -m venv .venv
 .venv\Scripts\Activate.ps1        # 🐧 Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"
-python -m layoutlingua.server       # 🚀 http://127.0.0.1:8765
-```
 
-### 2️⃣ Desktop UI (port 5173)
-```bash
+# 2️⃣ Desktop UI (vite :5173, or `npm run tauri dev` for the native window)
 cd desktop
 npm install
-npm run dev                         # 🖥️ UI in the browser during development
-npm run tauri dev                   # 🪟 or the full native Tauri window
+npm run dev
 ```
 
-> 💡 **One-click launcher (Windows)**: double-click `start_app.bat` — it boots the engine and launches the desktop app.
+> 🔁 Both engines share the same REST contract (upload, translate, progress, **resume-from-disk sessions**, cancel, export) — see the [REST API](#-rest-api--dual-engine-contract) parity matrix.
 
-### 3️⃣ Production Build
+### 4. Production Build & Start
 ```bash
-cd desktop
-npm run build                       # 📦 UI bundle for Tauri
-npm run tauri build                 # 📦 LayoutLingua_Setup_2.0.0.exe / portable exe
+npm run build
+npm start
 ```
 
-### 4️⃣ Verification Suite
-```bash
-pytest tests/ -q                                # 🧪 245 automated engine tests
-python scripts/test_live_translation.py         # ⚡ live end-to-end translation smoke test
+### 5. Environment Variables (`.env.example`)
+LayoutLingua works **out-of-the-box with zero API keys** via its multi-mirror Google Translate NMT pipeline, and optionally supports Gemini 2.5 Flash or any OpenAI-compatible endpoint (OpenAI, DeepSeek, Groq, Ollama):
+```env
+GEMINI_API_KEY=your_optional_gemini_api_key
+PORT=3000
 ```
-
-### 🔑 API Keys (optional)
-The engine works **out of the box with zero keys** via Google Translate RPC. For premium providers, paste keys directly in **Settings → Configure Providers** (Gemini, OpenAI-compatible, Ollama) — no environment files required. Offline translation ships via **Argos Translate**: install `argostranslate` in the engine environment to unlock it.
 
 ---
 
