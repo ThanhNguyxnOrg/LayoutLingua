@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+import hashlib
 import os
 import sys
 import re
@@ -278,6 +279,37 @@ def _get_or_recover_session(doc_id: str) -> Optional[dict[str, Any]]:
     except Exception as exc:
         print(f"[LayoutLingua] Failed to rehydrate session '{doc_id}': {exc}")
         return None
+
+
+def _find_persisted_session(doc_id: str, filename_hint: Optional[str] = None) -> Optional[dict[str, Any]]:
+    """Locate a session in RAM or in the persistent disk cache by id or filename."""
+    with _LOCK:
+        if doc_id and doc_id in _SESSIONS:
+            return _SESSIONS[doc_id]
+        if filename_hint:
+            for s in _SESSIONS.values():
+                if s.get("filename") == filename_hint:
+                    return s
+
+    try:
+        cache_root = _get_session_cache_dir()
+        if not cache_root.is_dir():
+            return None
+        for entry in cache_root.iterdir():
+            meta_file = entry / "meta.json"
+            if not entry.is_dir() or not meta_file.is_file():
+                continue
+            try:
+                meta = json.loads(meta_file.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if (doc_id and meta.get("doc_id") == doc_id) or (
+                filename_hint and meta.get("filename") == filename_hint
+            ):
+                return _get_or_recover_session(meta.get("doc_id") or doc_id)
+    except Exception:
+        pass
+    return None
 
 
 def _run_translation_worker(doc_id: str, req_json: dict) -> None:
@@ -555,7 +587,11 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
 
         tracker.set_stage(3)
         processed_selected = 0
+        cancel_requested = False
         for page_idx in range(total_p):
+            if session.get("cancel_requested"):
+                cancel_requested = True
+                break
             p_ir = doc_ir.pages[page_idx] if page_idx < len(doc_ir.pages) else None
             p_num = page_idx + 1
             if p_ir and p_num in selected_pages:
@@ -609,6 +645,31 @@ def _run_translation_worker(doc_id: str, req_json: dict) -> None:
                 page_statuses[p_num] = "ok"
                 page_block_counts[p_num] = len(p_ir.blocks) if p_ir else 0
                 accumulator.commit_pristine_source_page(page_idx)
+
+        if cancel_requested:
+            # Keep every page already translated; leave the rest pristine from source.
+            try:
+                partial_bytes = accumulator.finish(translated_toc=None)
+                src_doc.close()
+                with _LOCK:
+                    session["translated_pdf_bytes"] = partial_bytes
+                    session["translated_segments"] = translated_segments
+                    session["selected_pages"] = sorted(list(selected_pages))
+                    session["is_translating"] = False
+                    session["progress"] = {
+                        "stage_index": 3,
+                        "stage_name": "Cancelled",
+                        "current_page": processed_selected,
+                        "total_pages": selected_count,
+                        "overall_pct": tracker.calculate_overall_pct(),
+                        "status": "idle",
+                        "eta_seconds": 0,
+                        "message": "Translation cancelled. Pages already translated are kept.",
+                    }
+                    _persist_session_to_disk(session)
+            except Exception as cancel_err:
+                print(f"[LayoutLingua] Cancel finalize notice: {cancel_err}")
+            return
 
         # Stage 4: Table of Contents & Writing final PDF
         with _LOCK:
@@ -753,6 +814,28 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
             self._send_json({"status": "ok", "version": __version__, "engine": "PyMuPDF"})
             return
 
+        # 1b. Check whether a recent document session exists on the server (in memory or on disk)
+        if path in ("/api/session-status", "/session-status"):
+            doc_id = query.get("id", [""])[0]
+            name_hint = query.get("name", [""])[0] or None
+            found = _find_persisted_session(doc_id, name_hint) if (doc_id or name_hint) else None
+            if found:
+                prog = found.get("progress") or {}
+                is_done = bool(found.get("translated_pdf_bytes")) or prog.get("status") == "done"
+                self._send_json({
+                    "exists": True,
+                    "id": found.get("doc_id", doc_id),
+                    "name": found.get("filename", name_hint or "Document.pdf"),
+                    "size": len(found.get("source_pdf_bytes") or b""),
+                    "page_count": found.get("page_count", 0),
+                    "detected_lang": found.get("detected_lang", "en"),
+                    "target_lang": found.get("target_lang", "vi"),
+                    "status": "translated" if is_done else "pending",
+                })
+            else:
+                self._send_json({"exists": False})
+            return
+
         # 2. Page preview rendering (High DPI PNG)
         if path in ("/api/page-preview", "/page-preview"):
             doc_id = query.get("id", [""])[0]
@@ -768,6 +851,47 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
 
             if not session:
                 self._send_json({"error": f"Session '{doc_id}' not found"}, status=404)
+                return
+
+            # Return layout block metadata JSON for interactive hover overlay
+            if query.get("format", ["png"])[0].lower() == "meta":
+                blocks_out: list[dict[str, Any]] = []
+                doc_ir_obj = session.get("doc_ir")
+                page_ir = (
+                    doc_ir_obj.pages[page_num - 1]
+                    if doc_ir_obj is not None and 0 <= page_num - 1 < len(doc_ir_obj.pages)
+                    else None
+                )
+                page_w = float(page_ir.geometry.width) if page_ir else 595.0
+                page_h = float(page_ir.geometry.height) if page_ir else 842.0
+                if page_ir is not None:
+                    for b in page_ir.blocks:
+                        try:
+                            bx0, by0, bx1, by1 = b.bbox
+                        except Exception:
+                            continue
+                        blocks_out.append({
+                            "id": b.block_id,
+                            "kind": b.block_type,
+                            "bbox": {
+                                "x": float(bx0),
+                                "y": float(by0),
+                                "w": float(bx1 - bx0),
+                                "h": float(by1 - by0),
+                            },
+                            "pageW": page_w,
+                            "pageH": page_h,
+                            "sourceText": b.text,
+                            "translatedText": b.text,
+                            "fontScale": 1.0,
+                            "preserved": True,
+                        })
+                self._send_json({
+                    "page": page_num,
+                    "pageW": page_w,
+                    "pageH": page_h,
+                    "blocks": blocks_out,
+                })
                 return
 
             try:
@@ -1088,7 +1212,36 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 vi_count = sum(1 for ch in sample_text if ch in vi_marks)
                 detected_lang = "vi" if vi_count > 3 else "en"
 
-                doc_id = uuid.uuid4().hex[:12]
+                # Deterministic document identity: honor client-provided id, else hash of content
+                requested_doc_id = urllib.parse.unquote(
+                    self.headers.get("X-Doc-Id", "") or ""
+                ).strip()
+                content_hash_id = hashlib.sha256(pdf_bytes).hexdigest()[:12]
+                lookup_id = requested_doc_id or content_hash_id
+
+                # Reuse an existing persisted session for the same document (same id/filename,
+                # same size and multi-page) so reopening never duplicates translation work
+                existing = _find_persisted_session(lookup_id, filename)
+                if (
+                    existing
+                    and existing.get("page_count") == page_count
+                    and page_count > 1
+                    and len(existing.get("source_pdf_bytes") or b"") == len(pdf_bytes)
+                ):
+                    self._send_json({
+                        "id": existing.get("doc_id", lookup_id),
+                        "name": existing.get("filename", filename),
+                        "size": len(pdf_bytes),
+                        "page_count": existing.get("page_count", page_count),
+                        "word_count": total_words,
+                        "detected_lang": existing.get("detected_lang", detected_lang),
+                        "is_scanned": existing.get("is_scanned", is_scanned),
+                        "scan_warning": existing.get("scan_warning", ""),
+                        "pages": pages_info,
+                    })
+                    return
+
+                doc_id = lookup_id
 
                 # Parse DocumentIR
                 with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
@@ -1166,6 +1319,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                         return
 
                     session["is_translating"] = True
+                    session["cancel_requested"] = False
                     total_pages = len(session["doc_ir"].pages) if session.get("doc_ir") else session.get("page_count", 1)
                     session["progress"] = {
                         "current_page": 0,
@@ -1194,6 +1348,20 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
 
                 traceback.print_exc()
                 self._send_json({"error": f"Failed to start translation: {e}"}, status=500)
+            return
+
+        # 2b. Cancel an active translation job (pages already translated are kept)
+        if path in ("/api/cancel", "/cancel"):
+            try:
+                cancel_body = json.loads(post_body.decode("utf-8")) if post_body else {}
+            except Exception:
+                cancel_body = {}
+            cancel_doc_id = str(cancel_body.get("doc_id") or "")
+            with _LOCK:
+                cancel_session = _SESSIONS.get(cancel_doc_id)
+                if cancel_session is not None:
+                    cancel_session["cancel_requested"] = True
+            self._send_json({"status": "cancelled"})
             return
 
         # 3. Save file directly to filesystem destination path
