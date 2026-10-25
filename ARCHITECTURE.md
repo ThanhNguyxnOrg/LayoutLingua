@@ -34,7 +34,7 @@ LayoutLingua ships **one React UI** on top of **two engines sharing an identical
 | **Session store** | `.cache/sessions/<sha256>/` | OS cache dir via `platformdirs` (`…/layoutlingua/Cache/sessions/`) |
 | **Lifecycle** | `npm run dev` / `npm start` | Tauri auto-spawns the Python sidecar (`CREATE_NO_WINDOW`), kills it on exit |
 
-> ✅ **Parity matrix** — both engines implement: `session-status` resume, content-hash upload dedupe, `cancel` (keeps translated pages), `page-preview?format=meta` block metadata, disk-persisted sessions, and the full export contract. See [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
+> ✅ **Parity matrix** — both engines implement: `session-status` resume, content-hash upload dedupe, `cancel` (keeps translated pages), `page-preview?format=meta` block metadata, disk-persisted sessions, and the full export contract. See the [README API section](README.md#-rest-api--dual-engine-contract).
 
 ---
 
@@ -78,10 +78,7 @@ LayoutLingua/
 │   └── processing/                   # Page ranges, TOC translation, Markdown export, telemetry
 ├── tests/                            # 🧪 245 automated engine tests (pytest)
 └── docs/
-    ├── ALGORITHM.md                  # 🧮 Mathematical & geometric algorithm specifications
-    ├── API_REFERENCE.md              # 🔌 REST API endpoints & schemas (both engines)
-    ├── assets/                       # 🖼️ Logo & demo screenshots
-    └── adr/                          # 📜 Architectural Decision Records (0001 - 0003)
+    └── assets/                       # 🖼️ Logo & demo screenshots (docs live in README.md)
 ```
 
 ---

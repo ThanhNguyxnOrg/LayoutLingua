@@ -1,56 +1,57 @@
-# Changelog (`CHANGELOG.md`)
+# 📜 Changelog (`CHANGELOG.md`)
 
 <p>
-  <img src="https://img.shields.io/badge/Changelog-Keep%20a%20Changelog%201.1.0-0D9488?style=for-the-badge" alt="Keep a Changelog" />
-  <img src="https://img.shields.io/badge/Versioning-Semantic%20Versioning%202.0.0-0284C7?style=for-the-badge" alt="SemVer" />
+  <img src="https://img.shields.io/badge/📜_Changelog-Keep_a_Changelog_1.1.0-0D9488?style=for-the-badge" alt="Keep a Changelog" />
+  <img src="https://img.shields.io/badge/🔢_Versioning-SemVer_2.0.0-0284C7?style=for-the-badge" alt="SemVer" />
 </p>
 
 All notable changes to **LayoutLingua** are documented in this file.
 
 ---
 
-## [2.1.1] — 2026-10-25
+## [2.0.0] — 2026-10-25
+
+🎉 **First stable release** — the complete layout-aware PDF translation engine, verified end-to-end on a 96-page Vietnamese mathematical handbook (921 prose groups, legacy VNI encoding, dense 2D equations) with **0 overflow warnings, 0 PUA leaks, and 100% vector preservation**.
 
 ### 🚀 Added
-- **🖥️ Full Desktop/Engine Parity**: The Tauri desktop stack (`desktop/` + Python engine `layoutlingua/server.py`) now implements the identical REST contract as the web stack — `GET /api/session-status`, content-hash upload dedupe with `X-Doc-Id`, `POST /api/cancel` (keeps already-translated pages), and `page-preview?format=meta` block metadata for the inspector/hyperlink overlays.
-- **💾 Python Engine Session Persistence Hardening**: Disk-backed session cache (`source.pdf` / `translated.pdf` / `meta.json` under the OS cache dir) with transparent recovery after full engine restarts, plus per-5-page continuous persistence and bounded `MAX_SESSIONS` eviction.
-- **🖼️ Demo Documentation Suite**: Wide-angle demo captures (Open & Preflight, Dual-View Workspace, Alpha-Blend Overlay) bundled at `docs/assets/` and embedded in the README.
+
+**🧮 Translation & Typesetting Engine**
+- **Two-Pass Selective Prose Erasure**: only verified natural-language prose spans are removed from the PDF content stream (MuPDF-native redaction pre-pass on a private document copy, obstacle-clipped, with paint-over rectangles as the fail-closed fallback) — mathematical equations, vector arrows, curly braces, table grids, and geometric diagrams stay 100% untouched in the original vector paths. Copy/paste from the exported PDF yields only translated text + original math. 📋
+- **Sub-Line Formula Pinning (`vflag`)**: glyphs in `Symbol` / `MT Extra` / TeX math fonts and 2D sub/superscript geometry ($\Delta y \ge 1.5\text{pt}$) are frozen as `MathObstacle`s; paragraph-relative italic style-switch and a 5-rule contextual recovery pass keep natural prose intact. **Zero hardcoded word lists.** 🚫📝
+- **Bidirectional Pixmap Ray-Cast Clearance**: sub-point detection of vertical braces, diagrams, and table rules around every prose span.
+- **Anisotropic `Tz` Fitting**: binary-search font scaling combined with PDF horizontal condensation (82–100%, **64% for single words scaled by the min font floor** — a lone word between formulas always fits its line 🤸), multi-line wrapping with multi-stage condensation (`92% / 86% / 80%`) so **no line is ever dropped**, and LaTeX `\dotfill` TOC leader harmonization.
+- **🌍 17-Language Statistical Detection (`franc-min`)**: ISO 639-3 trigram profiles + Unicode script ranges; legacy **VNI-Windows** and **Symbol PUA** decoders normalize to Unicode NFC.
+- **📚 16 Bidirectional Academic Math Glossaries**: 136+ terms, English-pivot across all 272 language pairs; CJK font dispatch (`Noto Sans SC/TC/JP/KR`) with kin-soku punctuation wrapping.
+
+**🔌 Multi-Provider Pipeline & Persistence**
+- **Zero-Setup Google Translate RPC** out of the box 🆓, plus Gemini, any OpenAI-compatible endpoint (OpenAI, DeepSeek, Groq, Ollama, LM Studio) with `/models` discovery, and **Argos Translate** for 100% offline privacy. 📴
+- **💾 Dual-Layer Session Persistence**: backend disk store (`.cache/sessions/<sha256>/` — source, translated, live progress & integrity) + frontend IndexedDB blob cache; **restart-proof resume** verified by full engine kills, `/api/session-status` recovery, and content-hash upload dedupe via `X-Doc-Id`.
+- **🧮 Persistent Segment Cache**: every translated segment survives restarts and rate-limit halts — no duplicate API cost.
+- **🔗 Hyperlink & Navigation Preservation**: native `http(s)`/`mailto` links re-registered as PDF `/Link` annotations; internal GoTo destinations resolve to `#page=N` and the Mục lục viewer jumps straight to the target page; the PDF /Outlines bookmark tree is translated too.
+- **🖥️ Dual-Engine REST Contract**: the React UI runs unchanged on the Node web engine (`:3000`) and the Python engine (`:8765`) — `session-status`, content-hash dedupe, `cancel` (keeps translated pages), `page-preview?format=meta` block/hyperlink metadata, real-folder `/api/save` (OneDrive redirection aware ⚡ 0.3s), and the full export matrix.
+
+**🖥️ Desktop Application & UI**
+- **Tauri v2 Shell** (React 19 + TypeScript + Tailwind v4) with zero-window Python sidecar lifecycle (`CREATE_NO_WINDOW`, graceful exit).
+- **Dual-View Workspace**: side-by-side synchronized canvases, **alpha-blend overlay slider** (0–100%), interactive bounding-box inspector & clickable hyperlink overlays, flicker-free incremental page streaming (`completed_pages` keys).
+- **📥 Document Preflight & Recent Documents**: drag-and-drop upload, scanned-PDF detection with OCR warning, persistent recents with automatic session recovery.
+- **📤 Export Dialog**: monolingual PDF, **bilingual interleaved PDF** (original ↔ translated pairs with doubled TOC page numbers), and structured Markdown; direct-to-folder saving with **Open in File Explorer**.
+- **🩺 Quality Checks & Diagnostics**: two-tier fitting telemetry (document / page / block), structured `OVERFLOW_FALLBACK` warnings, one-click **Copy log** export for LLM triage.
+- **🖼️ Demo Gallery**: real wide-angle captures embedded in the README (`docs/assets/`).
 
 ### 🔧 Fixed
-- **`OVERFLOW_FALLBACK` on Single-Word Sliver Blocks**: One-word prose fragments sandwiched between frozen math regions (e.g. a 10pt `từ` slot on page 78) could never fit their translation at the `82%` Tz condensation floor. Single words now tolerate a **`72%` Tz floor** (no wrap points — the same squeeze range the TOC and multi-line paths already use). Verified on the 96-page benchmark: quality report drops from `1 warning` to **`0`** with the fragment rendering inside its clearance without overlap.
-- **🪄 Logo Wordmark Restored**: The header logo `<img src="/logo.png">` (previously replaced by a text badge during the workspace sync) is back in **both** web and desktop shells.
+- **Display formulas survive redaction** 🧮: the MuPDF redaction pre-pass runs on a private document copy so its restructured Form XObjects stay self-consistent — earlier stream-transplant approaches blanked `f(x)=f(x±l)…`, `f′(x)≥0(f′(x)≤0)`, `lim`, and `x₀±a` regions.
+- **`OVERFLOW_FALLBACK` on single-word sliver blocks**: one-word fragments between frozen math regions (10pt `từ` slots) now fit via min-floor-scaled `Tz` condensation — quality report **0 warnings** on the full 96-page benchmark. 🏆
+- **`MT Extra` / Symbol vector arrow preservation**: unconditional `vflag` math classification — `0` PUA leaks (`υυυρ` corruption eliminated).
+- **Symbol table row separation**: geometric row-obstacle guards stop adjacent table rows from merging vertically.
+- **Flicker-free live preview**: stable run-scoped page keys — completed pages never unmount while later pages translate.
+- **Export size & speed**: save-once + `subsetFonts()` + garbage-collected output — full 96-page document **46MB → ~1.5MB**, export < 1s. ⚡
 
 ### 🧹 Changed
-- **README & Docs Overhaul**: README now embeds real demo screenshots and the desktop quickstart; `ARCHITECTURE.md` documents the two-runtime topology (web TS engine ↔ desktop Python engine) with the parity matrix; `docs/API_REFERENCE.md` covers the full shared endpoint contract; `docs/ALGORITHM.md` documents the new single-word `Tz` rule.
-- **Repository Hygiene**: Test sessions, temporary exports, and stray runtime artifacts purged; `.gitignore` covers `.cache/` and drop archives.
+- Documentation consolidated into a **self-contained README hub** (algorithms + REST API folded in); repo trimmed to pure source — no runtime caches, archives, or scratch files.
+- Full **245-test** pytest suite, strict TypeScript across web + desktop, CI matrix on Ubuntu / Windows / macOS.
 
 ---
 
-## [2.1.0] — 2026-10-23
+## [1.x] — 2026
 
-### 🚀 Added
-- **17-Language Statistical Trigram Detection (`franc-min`)**: Replaced static keyword heuristics with ISO 639-3 character trigram profiles (`franc-min`) combined with Unicode script range detectors across all 17 supported languages (`en`, `vi`, `zh-CN`, `zh-TW`, `ja`, `ko`, `fr`, `de`, `es`, `ru`, `it`, `pt`, `id`, `nl`, `pl`, `tr`, `uk`).
-- **Dual-Layer Recent Documents Persistence**:
-  - **Backend Disk Store (`.cache/sessions/<sha256>/`)**: Automatically persists `source.pdf`, `translated.pdf`, and `state.json` on disk across server restarts.
-  - **Frontend IndexedDB Cache (`layoutlingua_pdf_cache_v1`)**: Caches binary PDF blobs in IndexedDB and validates `/api/session-status` before opening recent documents, automatically re-uploading if needed.
-- **Interactive PDF Hyperlink Overlay**: Extracts native PDF `/Link` annotations via MuPDF `page.getLinks()` and resolves flattened blue citation links (`More…`) into clickable `<a>` overlays on both Source and Translated views.
-- **16 Bidirectional Academic Math Glossaries**: Synchronized 136+ geometry, algebra, calculus, and combinatorics handbook entries across all 16 `src/engine/glossaries/academic_math_en_*.json` files with English-pivot support for arbitrary language pairs.
-- **CJK Font Bundling & Grapheme Line Wrapping**: Automatic embedding of `Noto Sans SC`, `Noto Sans TC`, `Noto Sans JP`, and `Noto Sans KR` with CJK punctuation kin-soku rules.
-
-### 🔧 Fixed
-- **Flicker-Free Live Page Preview**: Scoped `<PdfPage>` keys to `(docId, pageNum, runId, targetLang)` and tracked per-page completion (`completed_pages`) on the backend so already-translated pages never unmount or flicker while subsequent pages translate.
-- **`MT Extra` / `Symbol` Vector Arrow Preservation**: Enforced unconditional `vflag` math classification (`if (hasSymbolFont) return true`) so 4-glyph PUA vector arrows (`0xF075, 0xF075, 0xF075, 0xF072` over $\overrightarrow{AB}$) are 100% preserved and never rendered as `"υυυρ"`.
-- **Multi-Column Symbol Table Row Separation**: Added geometric row-obstacle guards (`hasNewLeftSymbolRow` and `hasDistinctRightFormulaRows`) and line-width fill checks in `canMerge` so adjacent rows in symbol tables (e.g., *"Đồng dạng"* vs. *"Song song và cùng chiều"* vs. *"Song song và ngược chiều"*) never merge vertically.
-- **Subscripted Leading Variables ($P_n.$)**: Prioritized `hasAdjacentSubSup` before list/initial prefix matching in `isMathWordToken` so subscripted symbols followed by a period ($P_n.$) are preserved as 2D math obstacles.
-- **Parenthetical 1D Variable Grouping (`(n factorial)`)**: Preserved opening parenthetical 1D variables (`(n`) with their immediately following prose clause (`giai thừa)`).
-- **Zero Line Truncation in Multi-Line Paragraphs**: Added multi-stage horizontal condensation (`Tz` at `92%`, `86%`, `80%`) for multi-line paragraphs so 100% of translated lines fit vertically without dropping lines.
-
----
-
-## [2.0.0] — 2026-09-15
-
-### 🚀 Added
-- Initial **Two-Pass Selective Prose Erasure** and **Sub-Line Formula Pinning** architecture using MuPDF structured text quads and `pdf-lib`.
-- LaTeX `\dotfill` Table-of-Contents dot leader harmonization.
-- Legacy **VNI-Windows** (`VNI-Times`) and **Symbol PUA** (`U+F020..U+F0FF`) Unicode NFC decoders.
-- Dual-view React 19 workspace with Side-by-Side and Alpha-Blend Overlay inspection modes.
+- 🌱 Early contract skeleton: DocumentIR, mock provider, CLI + JSON-RPC IPC, and the first MuPDF vector preview renderer.

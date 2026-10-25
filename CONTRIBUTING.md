@@ -29,7 +29,7 @@ Thank you for contributing to **LayoutLingua**! 🎉 To keep the PDF translation
 - When adding domain terms to `src/engine/glossaries/`, keep all 16 `academic_math_en_*.json` files synchronized so English-pivot translation works identically across all 272 language pairs.
 
 ### 🔁 Rule 4: Two-Engine Parity
-- REST contract changes (`server.ts`) must be mirrored in `layoutlingua/server.py` (and vice versa) so the React UI runs unchanged on both engines — see the parity matrix in [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
+- REST contract changes (`server.ts`) must be mirrored in `layoutlingua/server.py` (and vice versa) so the React UI runs unchanged on both engines — see the parity matrix in the [README](README.md#-rest-api--dual-engine-contract).
 
 ---
 
@@ -64,4 +64,4 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) — the repo hi
 - [ ] Zero hardcoded word lists introduced in `src/engine/pdfTranslator.ts`. 🚫
 - [ ] Both engines kept in parity for any REST contract change. 🔁
 - [ ] Tested on multi-page mathematical PDFs (including TOC pages, symbol tables, footnotes with links, and geometric figures) with `0` PUA leaks and `0` overflow fallbacks. 📐
-- [ ] Relevant documentation (`ARCHITECTURE.md`, `docs/ALGORITHM.md`, or `CHANGELOG.md`) updated. 📚
+- [ ] Relevant documentation (`README.md`, `ARCHITECTURE.md`, or `CHANGELOG.md`) updated. 📚

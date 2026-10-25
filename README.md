@@ -2,13 +2,13 @@
 
 <img src="public/logo.png" alt="LayoutLingua Logo" width="96" height="96" />
 
-# LayoutLingua v2.1
+# LayoutLingua v2.0
 
 ### **High-Precision Multilingual Academic & Technical PDF Translation Engine**
 *Strict Typographic Geometry Preservation • Sub-Line Formula Pinning • 17-Language Neural Typesetting*
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.1-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.1.1" />
+  <img src="https://img.shields.io/badge/Version-2.0.0-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.0.0" />
   <img src="https://img.shields.io/badge/Engine-MuPDF%20WASM%20%2B%20pdf--lib-0284C7?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" alt="MuPDF + pdf-lib" />
   <img src="https://img.shields.io/badge/TypeScript-5.8%20Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5.8" />
   <img src="https://img.shields.io/badge/React-19.0-149ECA?style=for-the-badge&logo=react&logoColor=white" alt="React 19" />
@@ -34,7 +34,8 @@
   <a href="#-algorithmic-pipeline">Core Algorithms</a> •
   <a href="#-benchmarks">Benchmarks</a> •
   <a href="#-installation--quickstart">Quickstart</a> •
-  <a href="docs/API_REFERENCE.md">API Reference</a>
+  <a href="#-rest-api--dual-engine-contract">API</a> •
+  <a href="#-documentation">Docs</a>
 </p>
 
 </div>
@@ -64,7 +65,7 @@
 
 Translating academic papers, mathematical handbooks, and engineering specifications in PDF format is notoriously difficult: conventional PDF translators destroy multi-column grids, overwrite 2D mathematical equations ($\sum, \int, \overrightarrow{AB}, P_n^k$), corrupt vector diagrams, and strip interactive hyperlinks.
 
-**LayoutLingua v2.1** synthesizes battle-tested open-source techniques from **[PDFMathTranslate (pdf2zh)](https://github.com/Byaidu/PDFMathTranslate)**, **[BabelDOC](https://github.com/funstory-ai/BabelDOC)**, **[franc](https://github.com/wooorm/franc)**, and **MuPDF Structured Text Quads** into a unified, zero-hardcode **Sub-Line Formula Pinning & Adaptive Vector Typesetting Engine**:
+**LayoutLingua v2.0** synthesizes battle-tested open-source techniques from **[PDFMathTranslate (pdf2zh)](https://github.com/Byaidu/PDFMathTranslate)**, **[BabelDOC](https://github.com/funstory-ai/BabelDOC)**, **[franc](https://github.com/wooorm/franc)**, and **MuPDF Structured Text Quads** into a unified, zero-hardcode **Sub-Line Formula Pinning & Adaptive Vector Typesetting Engine**:
 
 1. **Two-Pass Selective Prose Erasure**: Masks *only* verified natural-language prose spans (`ProseGroup`s) using median-sampled local background RGB pixels while leaving 100% of mathematical equations, vector arrows, curly braces, table borders, and geometric diagrams untouched in the native PDF content stream.
 2. **Typographic Style-Switch & `vflag` Formula Isolation**: Separates inline mathematical tokens from natural prose using font-table flags (`Symbol`, `MT Extra`, `CMMI`, `CMSY`), 2D subscript/superscript baseline offsets, and paragraph-relative italic style switches—with **zero hardcoded word lists**.
@@ -169,13 +170,59 @@ flowchart TB
     TYPE -->|Live Page Commit| PG
 ```
 
-For deep module contracts and design rationales, explore our full documentation suite:
+Everything is documented right here in this README — no external doc tree to chase. 🗺️ Companion files at the repo root:
+
 - 📘 **[ARCHITECTURE.md](ARCHITECTURE.md)** — Deep Module specifications, data structures, and state lifecycle.
-- 🧮 **[docs/ALGORITHM.md](docs/ALGORITHM.md)** — Mathematical formulations of `vflag`, ray-cast clearance, and `Tz` fitting.
-- 🔌 **[docs/API_REFERENCE.md](docs/API_REFERENCE.md)** — Complete HTTP REST API reference and payload schemas.
 - 🧭 **[CONTEXT.md](CONTEXT.md)** — Ubiquitous domain language and coordinate system conventions.
 - 📜 **[CHANGELOG.md](CHANGELOG.md)** — Release history and verification milestones.
-- 🏛 **[docs/adr/](docs/adr/)** — Architectural Decision Records (ADRs 0001–0003).
+- 🤝 **[CONTRIBUTING.md](CONTRIBUTING.md)** — Engineering standards & PR checklist.
+- 🔐 **[SECURITY.md](SECURITY.md)** — Privacy guarantees & vulnerability reporting.
+
+---
+
+## 🧮 Algorithmic Pipeline
+
+The engine is **100% algorithmic** — no hardcoded word lists, no per-document tuning. 🚫📝 Every classification decision comes from font-table flags, 2D geometry, Unicode properties, or statistical models:
+
+### 1️⃣ `analyzePdfPageLayout` — Structure & Clearance
+- 🔍 **Structured Text Walk** — captures every glyph's quad, baseline origin, font flags, and RGB fill via MuPDF quads; decodes legacy **VNI-Windows** split diacritics and **Symbol PUA** (`U+F020..U+F0FF`) into Unicode NFC.
+- 🧲 **Sub-Line Formula Pinning (`vflag`)** — glyphs in `Symbol` / `MT Extra` / TeX math fonts (including multi-glyph vector arrows over $\overrightarrow{AB}$) and 2D sub/superscripts ($\Delta y \ge 1.5\text{pt}$, size $< 8.5\text{pt}$) are frozen as `MathObstacle`s. A paragraph-relative italic style-switch keeps all-italic theorems prose.
+- 📡 **Bidirectional Pixmap Ray-Cast** — scans the 1× RGB pixmap left/right of every prose span to find exact clearance before vertical braces `}`, diagrams, or table rules — sub-point accuracy.
+- 🧱 **Parallel Table Row Guard** — refuses to merge rows that pair with distinct aligned formula obstacles or cross horizontal ruled borders.
+
+### 2️⃣ `translateBatchWithFormulaShield` — Safe Neural Translation
+- 🔒 **Formula Shielding** — inline math becomes opaque `⟦M0⟧` tokens before any provider call; 🩹 self-healing restores mangled brackets after.
+- 🌍 **`franc-min` Trigram Detection** — ISO 639-3 profiles across 17 languages; blocks already in the target language are skipped.
+- 📚 **16 Academic Glossaries** — English-pivot math terminology across all 272 language pairs.
+
+### 3️⃣ Two-Pass Selective Typesetting
+- 🧽 **Pass 1 — Prose Redaction**: source prose glyphs are physically removed from the content stream via MuPDF's native redaction pipeline (run as a **pre-pass on a private document copy** so frozen math forms stay self-consistent), with obstacle-clipped rectangles; paint-over rectangles remain the fail-closed fallback. Copy/paste from the exported PDF yields *only* translated text + original math. 📋
+- 🖋️ **Pass 2 — Anisotropic Fitting**: TOC `\dotfill` leaders re-computed to the right margin; single-line spans use bidirectional clearance + `Tz` horizontal condensation (82–100%, down to **64% scaled by the min font floor for single words** — a lone word between formulas always fits one line); multi-line paragraphs binary-search font scale with multi-stage condensation so **no line is ever dropped**.
+
+---
+
+## 🔌 REST API — Dual-Engine Contract
+
+Both engines expose the **identical REST contract** — the React UI runs unchanged on either one. ✅
+
+| | 🌐 Web Engine | 🖥️ Desktop Engine |
+|:---|:---|:---|
+| Process | `server.ts` (Node, MuPDF WASM + pdf-lib) | `layoutlingua/server.py` (Python, PyMuPDF) |
+| Base URL | `http://localhost:3000` | `http://127.0.0.1:8765` |
+| Session store | `.cache/sessions/<sha256>/` | OS cache dir (`platformdirs`) |
+
+| Endpoint | Method | 📌 Purpose |
+|:---|:---:|:---|
+| `/api/health` | GET | Engine version & readiness |
+| `/api/upload` | POST | Parse PDF → session (content-hash id, dedupe via `X-Doc-Id`) |
+| `/api/session-status` | GET | Resume check — does the session exist in RAM or on disk? |
+| `/api/page-preview` | GET | 150 DPI page PNG (`type=source\|translated`) + `format=meta` block/hyperlink metadata |
+| `/api/translate` | POST | Start async layout-preserving translation (`page_range` supported) |
+| `/api/progress` | GET | Live stage / speed / ETA / per-page integrity telemetry |
+| `/api/cancel` | POST | Stop the job — pages already translated are kept ♻️ |
+| `/api/download` | GET | Export: monolingual PDF · bilingual interleaved PDF · Markdown |
+| `/api/save` | POST | Write the export straight to the user-chosen folder (OneDrive-aware) |
+| `/api/models` | GET | Discover OpenAI-compatible models |
 
 ---
 
@@ -183,7 +230,7 @@ For deep module contracts and design rationales, explore our full documentation 
 
 Tested on the 96-page Vietnamese mathematical handbook **`Sotaytoanhoc.pdf`** (921 prose groups, legacy VNI-Times encoding, `MT Extra` vector arrows, dense 2D equations, curly-brace symbol tables, and geometric figures):
 
-| Metric / Capability | **LayoutLingua v2.1** | **PDFMathTranslate (pdf2zh)** | **BabelDOC** | **Google Translate Web** |
+| Metric / Capability | **LayoutLingua v2.0** | **PDFMathTranslate (pdf2zh)** | **BabelDOC** | **Google Translate Web** |
 |:---|:---:|:---:|:---:|:---:|
 | **Vector Diagrams & Braces (`}`)** | ✅ **100% Lossless** | ⚠️ Partial redaction | ✅ Lossless | ❌ Rasterized / Overwritten |
 | **`MT Extra` Vector Arrows ($\overrightarrow{AB}$)** | ✅ **100% Preserved (`0` PUA leaks)** | ⚠️ Font substitution | ⚠️ Partial | ❌ Corrupted (`υυυρ`) |
@@ -228,7 +275,7 @@ npm install
 npm run dev
 ```
 
-> 🔁 Both engines share the same REST contract (upload, translate, progress, **resume-from-disk sessions**, cancel, export) — see the [API Reference](docs/API_REFERENCE.md) parity matrix.
+> 🔁 Both engines share the same REST contract (upload, translate, progress, **resume-from-disk sessions**, cancel, export) — see the [REST API](#-rest-api--dual-engine-contract) parity matrix.
 
 ### 4. Production Build & Start
 ```bash
