@@ -26,8 +26,8 @@ A two-layer data structure separating visual layout geometry (bounding boxes, fo
 **Independent Python Engine**:
 The standalone core processing engine written in Python (using PyMuPDF, DocLayout-YOLO, ONNX Runtime). It functions as a first-class CLI tool and an IPC server, running headless on any CI/CD virtual machine.
 
-**Desktop Client**:
-The cross-platform graphical user interface built with Tauri v2 (Rust backend), React 19, TypeScript, and Tailwind CSS. It communicates with the independent Python core engine via headless JSON-RPC stdio. All user-facing UI, dialogs, status indicators, and logs are strictly 100% English.
+**Web Studio Client**:
+The modern web user interface built with React 19, TypeScript, Vite, and Tailwind CSS. It communicates with the Python core engine via an Express proxy (`server.ts`) over HTTP REST APIs. All user-facing UI, dialogs, status indicators, and logs are strictly 100% English.
 
 **Early Contract Skeleton**:
 The initial end-to-end operational pipeline combining the IR, a Mock Translation Provider, minimal CLI, and JSON-RPC stdio IPC to verify process execution before layering heavy layout and typesetting engines.
@@ -56,7 +56,7 @@ A transparent decorator implementing `BaseTranslationProvider` that wraps any un
 **Graceful Failover Matrix**:
 The systematic escalation policy when a provider encounters rate limits (HTTP 429) or transport failures:
 1. If the user has configured API keys for secondary providers (Gemini / Groq / OpenAI), the system permits 1-click or automatic failover to continue translation.
-2. If no secondary keys are configured, the engine safely halts with fail-closed semantics, preserving 100% of processed pages in the Persistent Segment Cache and rendering actionable configuration shortcuts in the desktop UI.
+2. If no secondary keys are configured, the engine safely halts with fail-closed semantics, preserving 100% of processed pages in the Persistent Segment Cache and rendering actionable configuration shortcuts in the Web Studio UI.
 
 ---
 

@@ -17,7 +17,7 @@
 <p>
   <img src="https://img.shields.io/badge/🏛️_Architecture-Deep_Modules-0D9488?style=for-the-badge" alt="Deep Modules" />
   <img src="https://img.shields.io/badge/⚡_Runtime-Python_+_PyMuPDF-0284C7?style=for-the-badge" alt="Runtime" />
-  <img src="https://img.shields.io/badge/🖥️_Desktop-Tauri_v2_+_Python_Engine-FFC131?style=for-the-badge" alt="Desktop Runtime" />
+  <img src="https://img.shields.io/badge/🎨_Web_Studio-React_19_+_Vite_8.3-646CFF?style=for-the-badge" alt="Web Studio" />
   <img src="https://img.shields.io/badge/🎨_Frontend-React_19_+_Tailwind_v4-3178C6?style=for-the-badge" alt="Frontend" />
   <img src="https://img.shields.io/badge/💾_Persistence-Disk_SHA256_+_IndexedDB-8B5CF6?style=for-the-badge" alt="Persistence" />
 </p>
@@ -36,17 +36,20 @@ LayoutLingua follows John Ousterhout's **Deep Module** design principle: each co
 
 ---
 
-## 2. 🖥 Single Runtime — One Engine, One UI
+## 2. 🖥 Architecture Overview — Integrated Web Studio + Python Core
 
-LayoutLingua ships **one runtime**: the Python engine is the whole backend, and `desktop/src/` is the single copy of the React UI that the Tauri shell builds and serves. The former Node/TypeScript web engine was fully merged into the Python typesetter (word-level formula pinning, token-flow freezing, newline-packed RPC, TOC navigation, legacy VNI decoding) and retired.
+LayoutLingua runs an integrated full-stack architecture:
+- **Web Studio (`server.ts` + `src/`)**: A Node.js Express server running Vite middleware on `http://localhost:3000`. It serves the React 19 UI, handles hot module replacement, and transparently proxies all `/api/*` endpoints to the core Python engine.
+- **Python Core Engine (`layoutlingua/server.py`)**: A standalone high-performance vector typesetting engine on `http://127.0.0.1:8765`, auto-spawned by `server.ts` on launch and managed with graceful shutdown hooks.
+- **Single Command Operation**: Running `npm run dev` (or double-clicking `start_app.bat`) boots both the Web Studio and the Python engine concurrently.
 
-| | 🖥️ LayoutLingua Desktop |
+| | 🖥️ LayoutLingua Web Studio |
 |:---|:---|
-| **Shell** | Tauri v2 native window (`desktop/src-tauri/`) |
-| **UI bundle** | `desktop/src/` (Vite `:5173` during development, bundled by `npm run tauri build`) |
+| **Frontend UI** | React 19, TypeScript 5.8, Tailwind CSS v4 (`src/`) |
+| **Web Server** | Express + Vite reverse proxy (`server.ts`, `http://localhost:3000`) |
 | **Engine** | `layoutlingua/server.py` — PyMuPDF vector core on `http://127.0.0.1:8765` |
 | **Session store** | OS cache dir via `platformdirs` (`…/layoutlingua/Cache/sessions/`) |
-| **Lifecycle** | Tauri auto-spawns the Python sidecar (`CREATE_NO_WINDOW`), kills it on exit; `start_app.bat` does the same for portable builds |
+| **Lifecycle** | `server.ts` auto-spawns Python subprocess, kills it on exit; `start_app.bat` launches browser & dev server |
 
 > ✅ **Provider honesty**: every provider must be genuinely available at translate time — Gemini requires its API key, OpenAI-compatible requires a key or a local endpoint, and Argos requires the `argostranslate` runtime. A missing dependency stops the job with an explicit error instead of silently falling back to another provider.
 
@@ -57,7 +60,12 @@ LayoutLingua ships **one runtime**: the Python engine is the whole backend, and 
 ```text
 LayoutLingua/
 ├── README.md                         # 🏠 Documentation hub — links to every doc in docs/
-├── desktop/                          # 🖥️ Tauri v2 desktop stack
+├── package.json                      # 📦 Web Studio dependencies & scripts
+├── server.ts                         # 🚀 Express + Vite reverse proxy & Python engine lifecycle
+├── vite.config.ts                    # ⚡ Vite build & dev config
+├── index.html                        # 📄 Web application entry HTML
+├── public/                           # 🖼️ Static assets (logo, favicons)
+├── src/                              # 🎨 React 19 Web Studio application
 │   ├── App.tsx                       # Root application shell, navigation rail & modal orchestration
 │   ├── main.tsx                      # React 19 entry point
 │   ├── index.css                     # Tailwind CSS v4 design tokens & studio typography
@@ -73,22 +81,16 @@ LayoutLingua/
 │   │   ├── shell.tsx                 # 🧭 AppHeader & NavRail components
 │   │   ├── ui.tsx                    # 🧩 Studio UI primitives (Buttons, Badges, Notices)
 │   │   └── icons.tsx                 # ✒️ Vector SVG icon library
-│   ├── engine/
-│   │   ├── pdfTranslator.ts          # ⚙️ Core MuPDF + pdf-lib layout analyzer, math isolator & typesetter
-│   │   └── glossaries/               # 📚 16 bidirectional academic math JSON glossaries (en <-> 16 langs)
 │   └── services/
 │       ├── api.ts                    # 🔗 API URL resolver
 │       ├── history.ts                # 💾 localStorage + IndexedDB binary PDF cache & session recovery
 │       └── settings.ts               # 🔧 Persistent translation & typography settings
-├── desktop/                          # 🖥️ Tauri v2 desktop stack
-│   ├── src/                          # Synced React UI fork (Tauri-specific ExportDialog & SettingsModal)
-│   ├── src-tauri/                    # 🦀 Rust shell: backend sidecar lifecycle, CSP, bundle icons
-│   └── public/                       # Static assets (logo, favicons)
-├── layoutlingua/                     # 🐍 Independent Python engine (JSON-RPC/HTTP on :8765)
+├── layoutlingua/                     # 🐍 Independent Python engine (REST HTTP on :8765)
 │   ├── server.py                     # REST endpoints, session store & worker threads
 │   ├── core/                         # DocumentIR parser & geometry model
 │   ├── translation/                  # Providers, glossaries & persistent segment cache
 │   ├── typesetting/                  # TypesetEngine, DocumentAccumulator, fitting telemetry
+│   │   └── assets/fonts/             # 🔤 21 TrueType font files (DejaVu, FreeSans/Serif, CJK)
 │   └── processing/                   # Page ranges, TOC translation, Markdown export, telemetry
 ├── tests/                            # 🧪 265 automated engine tests (pytest)
 └── docs/                             # 📚 Documentation tree (README.md at root is the hub)

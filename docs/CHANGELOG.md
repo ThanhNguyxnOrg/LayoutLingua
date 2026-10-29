@@ -26,6 +26,8 @@ All notable changes to **LayoutLingua** are documented in this file.
 ## [2.1.0] — 2026-10-29
 
 ### 🚀 Added
+- **Full-Stack AI Studio Web Architecture**: Integrated the Google AI Studio runtime (`server.ts` Express + Vite dev proxy on port 3000, Python core engine on port 8765, React 19 + TypeScript + Tailwind CSS UI in `src/`).
+- **Consolidated Clean Repository**: Retired obsolete legacy subfolders, streamlined dependency management (`package.json`, `package-lock.json`), and validated 265/265 automated tests with live browser end-to-end verification.
 - **Multi-Family Font Suite**: Packaged 21 TrueType font files in `layoutlingua/typesetting/assets/fonts/` (`DejaVuSans`, `DejaVuSerif`, `FreeSans`, `FreeSerif`, `DejaVuSansMono` with complete bold/italic variants), enabling rich typographic fidelity and automatic CJK inline fallback (`china-s`, `china-t`, `japan`, `korea`).
 - **Phonological Syllabic Hyphenation**: Added `hyphenate_word` for Romance and Germanic languages, supporting narrow multi-line column header fitting and stacked label leftward expansion.
 - **Server Disk Session Recovery**: Added `/api/recent-sessions` endpoint allowing desktop windows to discover and rehydrate existing sessions directly from disk cache across restarts.
@@ -40,6 +42,8 @@ All notable changes to **LayoutLingua** are documented in this file.
 🎉 **First stable release** — the complete layout-aware PDF translation engine, verified end-to-end on a 96-page Vietnamese mathematical handbook (921 prose groups, legacy VNI encoding, dense 2D equations) with **0 overflow warnings, 0 PUA leaks, and 100% vector preservation**.
 
 ### 🚀 Added
+- **Full-Stack AI Studio Web Architecture**: Integrated the Google AI Studio runtime (`server.ts` Express + Vite dev proxy on port 3000, Python core engine on port 8765, React 19 + TypeScript + Tailwind CSS UI in `src/`).
+- **Consolidated Clean Repository**: Retired obsolete legacy subfolders, streamlined dependency management (`package.json`, `package-lock.json`), and validated 265/265 automated tests with live browser end-to-end verification.
 
 **🧮 Translation & Typesetting Engine**
 - **Two-Pass Selective Prose Erasure**: only verified natural-language prose spans are removed from the PDF content stream (MuPDF-native redaction pre-pass on a private document copy, obstacle-clipped, with paint-over rectangles as the fail-closed fallback) — mathematical equations, vector arrows, curly braces, table grids, and geometric diagrams stay 100% untouched in the original vector paths. Copy/paste from the exported PDF yields only translated text + original math. 📋

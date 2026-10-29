@@ -57,13 +57,14 @@ npm run lint         # 🧹 TypeScript strict check
 npm run build        # 📦 production build
 ```
 
-### 🖥 Desktop Stack (Python engine, port 8765 + Tauri UI)
+### 🖥 Web Studio Stack (Python engine, port 8765 + Web Studio UI, port 3000)
 ```bash
 python -m venv .venv && .venv\Scripts\Activate.ps1   # 🐧 Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"                              # 🐍 engine + dev tools
-pytest tests/ -v                                     # 🧪 245 engine tests
+pytest tests/ -q                                     # 🧪 265 engine tests
 
-cd desktop && npm install && npm run dev             # 🖥 desktop UI (vite :5173)
+npm install --legacy-peer-deps                       # 📦 web studio dependencies
+npm run dev                                          # 🚀 web studio + engine (localhost:3000)
 ```
 
 ### 📝 Commit Messages

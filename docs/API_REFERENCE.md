@@ -17,13 +17,13 @@
 <p>
   <img src="https://img.shields.io/badge/🔌_API-REST_+_Binary_Streams-0D9488?style=for-the-badge" alt="REST API" />
   <img src="https://img.shields.io/badge/🖥️_Engine-Python_::8765-FFC131?style=for-the-badge" alt="Engine" />
-  <img src="https://img.shields.io/badge/🐍_Desktop_Engine-:8765_(server.py)-FFC131?style=for-the-badge" alt="Python Engine" />
+  <img src="https://img.shields.io/badge/🌐_Web_Studio-:3000_(server.ts)-646CFF?style=for-the-badge" alt="Web Studio" />
   <img src="https://img.shields.io/badge/✅_Contract-100%25_Parity-22C55E?style=for-the-badge" alt="Parity" />
 </p>
 
 All backend routes are served under `/api/*` by the LayoutLingua engine:
 
-- 🖥️ **Engine**: `layoutlingua/server.py` (Python + PyMuPDF vector core) on `http://127.0.0.1:8765` — the single backend serving the React desktop UI.
+- 🖥️ **Engine**: `layoutlingua/server.py` (Python + PyMuPDF vector core) on `http://127.0.0.1:8765` — the single backend serving the React Web Studio.
 
 > ✅ Every endpoint below is the live contract of that engine.
 
@@ -62,7 +62,7 @@ Uploads a raw PDF binary stream, extracts page dimensions/word counts via MuPDF,
 ```
 
 ### 2b. `GET /api/recent-sessions`
-Discovers and enumerates sessions persisted in operating system cache directories (`source.pdf`, `meta.json`, `translated.pdf`), enabling desktop windows to discover and rehydrate previous sessions across restarts.
+Discovers and enumerates sessions persisted in operating system cache directories (`source.pdf`, `meta.json`, `translated.pdf`), enabling Web Studio clients to discover and rehydrate previous sessions across restarts.
 
 - **Query Parameters**: None
 - **Response (`200 OK`)**:
@@ -208,7 +208,7 @@ Writes the export directly to the user-chosen filesystem directory (resolves `~`
 - **Response**: `{ "status": "ok", "saved_path": "C:\Users\…\textbook.en.pdf", "bytes": 1522432 }` — a real, verified path (typical full-document export completes in < 0.3s)
 
 ### 10. `GET /api/system-folders` · `GET /api/pick-folder` · `POST /api/open-folder`
-Desktop folder helpers: known destination folders (`Desktop`, `Downloads`, `Documents`), a folder picker passthrough, and an "Open in File Explorer" action for a saved path.
+Filesystem destination helpers: known destination folders (`Desktop`, `Downloads`, `Documents`), a folder picker passthrough, and an "Open in File Explorer" action for a saved path.
 
 ---
 
