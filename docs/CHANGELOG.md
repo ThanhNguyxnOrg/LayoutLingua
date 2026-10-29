@@ -23,6 +23,18 @@ All notable changes to **LayoutLingua** are documented in this file.
 
 ---
 
+## [2.1.0] — 2026-10-29
+
+### 🚀 Added
+- **Multi-Family Font Suite**: Packaged 21 TrueType font files in `layoutlingua/typesetting/assets/fonts/` (`DejaVuSans`, `DejaVuSerif`, `FreeSans`, `FreeSerif`, `DejaVuSansMono` with complete bold/italic variants), enabling rich typographic fidelity and automatic CJK inline fallback (`china-s`, `china-t`, `japan`, `korea`).
+- **Phonological Syllabic Hyphenation**: Added `hyphenate_word` for Romance and Germanic languages, supporting narrow multi-line column header fitting and stacked label leftward expansion.
+- **Server Disk Session Recovery**: Added `/api/recent-sessions` endpoint allowing desktop windows to discover and rehydrate existing sessions directly from disk cache across restarts.
+- **Enhanced DocumentIR Parser**: Added horizontal gap line splitting (`_split_lines_across_horizontal_gaps`), vertical graphic divider extraction (`_extract_page_vertical_dividers`), and vertical hyphenated fragment rejoining.
+- **Desktop UI Rehydration & Lazy Rendering**: Added automatic session discovery on `OpenScreen`, retry and IntersectionObserver lazy loading in `PdfPage`, and complete 17-language code mapping in `Workspace`.
+- **Test Suite Expansion**: Added 3 new test suites (`test_multilingual_layout_and_hyphenation.py`, `test_glossary_and_single_line_fitting.py`, `test_ts_engine_port.py`), bringing the automated test count to **265 passed (100%)**.
+
+---
+
 ## [2.0.0] — 2026-10-25
 
 🎉 **First stable release** — the complete layout-aware PDF translation engine, verified end-to-end on a 96-page Vietnamese mathematical handbook (921 prose groups, legacy VNI encoding, dense 2D equations) with **0 overflow warnings, 0 PUA leaks, and 100% vector preservation**.

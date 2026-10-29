@@ -180,3 +180,4 @@
 - [ ] **Step 5: Commit documentation changes:**
   `git add README.md docs/`
   `git commit -m "docs: sync architecture, changelog, api reference, and readme for multi-family engine and session recovery"`
+

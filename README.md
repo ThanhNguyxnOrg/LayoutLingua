@@ -140,9 +140,9 @@ Translating academic papers, mathematical handbooks, and engineering specificati
 
 | Script Family | Languages | Embedded Font Family | Wrapping & Tokenization |
 |:---|:---|:---|:---|
-| **Latin & Extended** | `en`, `vi`, `fr`, `de`, `es`, `it`, `pt`, `id`, `nl`, `pl`, `tr` | `DejaVu Sans` / `DejaVu Serif` (Regular, Bold, Italic, Bold-Italic) | Whitespace word-boundary + anisotropic `Tz` |
-| **Cyrillic** | `ru`, `uk` | `DejaVu Sans` / `DejaVu Serif` (Full Cyrillic Unicode block) | Whitespace word-boundary + anisotropic `Tz` |
-| **CJK Unified** | `zh-CN`, `zh-TW`, `ja`, `ko` | `Noto Sans SC`, `Noto Sans TC`, `Noto Sans JP`, `Noto Sans KR` | Grapheme-level CJK kin-soku punctuation attachment |
+| **Latin & Extended** | `en`, `vi`, `fr`, `de`, `es`, `it`, `pt`, `id`, `nl`, `pl`, `tr` | `DejaVu Sans`, `DejaVu Serif`, `FreeSans`, `FreeSerif`, `DejaVu Sans Mono` (Full variant matrix) | Syllabic hyphenation + whitespace boundary + anisotropic `Tz` |
+| **Cyrillic** | `ru`, `uk` | `DejaVu Sans` / `DejaVu Serif` / `FreeSerif` (Full Cyrillic Unicode block) | Whitespace word-boundary + anisotropic `Tz` |
+| **CJK Unified** | `zh-CN`, `zh-TW`, `ja`, `ko` | `Noto Sans CJK` / PyMuPDF CJK font fallbacks (`china-s`, `china-t`, `japan`, `korea`) | Grapheme-level CJK kin-soku punctuation attachment + CJK inline fallback |
 
 ---
 
@@ -279,7 +279,7 @@ npm run tauri build                 # 📦 LayoutLingua_Setup_2.0.0.exe / portab
 
 ### 4️⃣ Verification Suite
 ```bash
-pytest tests/ -q                                # 🧪 245 automated engine tests
+pytest tests/ -q                                # 🧪 265 automated engine tests
 python scripts/test_live_translation.py         # ⚡ live end-to-end translation smoke test
 ```
 

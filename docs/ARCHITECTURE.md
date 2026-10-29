@@ -90,7 +90,7 @@ LayoutLingua/
 │   ├── translation/                  # Providers, glossaries & persistent segment cache
 │   ├── typesetting/                  # TypesetEngine, DocumentAccumulator, fitting telemetry
 │   └── processing/                   # Page ranges, TOC translation, Markdown export, telemetry
-├── tests/                            # 🧪 245 automated engine tests (pytest)
+├── tests/                            # 🧪 265 automated engine tests (pytest)
 └── docs/                             # 📚 Documentation tree (README.md at root is the hub)
     ├── ARCHITECTURE.md               # 🏛 Deep Module specifications & two-runtime design
     ├── ALGORITHM.md                  # 🧮 vflag pinning, ray-cast clearance, anisotropic Tz

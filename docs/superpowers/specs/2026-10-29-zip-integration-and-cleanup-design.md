@@ -124,3 +124,4 @@ Update project documentation to reflect all newly incorporated capabilities:
   - Record the v2.0 enhancements (font families, hyphenation, session caching, expanded test suite).
 - **`docs/API_REFERENCE.md`**:
   - Document the `/api/recent-sessions` endpoint.
+

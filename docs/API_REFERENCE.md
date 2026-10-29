@@ -61,6 +61,28 @@ Uploads a raw PDF binary stream, extracts page dimensions/word counts via MuPDF,
 }
 ```
 
+### 2b. `GET /api/recent-sessions`
+Discovers and enumerates sessions persisted in operating system cache directories (`source.pdf`, `meta.json`, `translated.pdf`), enabling desktop windows to discover and rehydrate previous sessions across restarts.
+
+- **Query Parameters**: None
+- **Response (`200 OK`)**:
+```json
+{
+  "sessions": [
+    {
+      "id": "a3f8c2d1e4b6",
+      "name": "textbook.pdf",
+      "pages": 42,
+      "size": 1048576,
+      "status": "translated",
+      "detectedLang": "vi",
+      "targetLang": "en",
+      "mtime": 1729864200
+    }
+  ]
+}
+```
+
 ### 3. `GET /api/session-status`
 Checks whether a document session exists in memory or in the on-disk cache (`id` **or** `name` match).
 
