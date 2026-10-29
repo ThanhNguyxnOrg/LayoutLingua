@@ -13,7 +13,7 @@ import { IconUpload, IconFile, IconLock, IconError, IconArrowR, IconFolder } fro
 import { Button, StateNotice, StatusIndicator } from './ui'
 import { apiUrl } from '../services/api'
 
-type Err = null | 'unsupported' | 'password' | 'badpw' | 'missing_recent'
+type Err = null | 'unsupported' | 'server_error' | 'password' | 'badpw' | 'missing_recent'
 
 /**
  * Miniature first-page preview for a Recent documents row. Keeps a stable
@@ -74,6 +74,7 @@ export default function OpenScreen({
   onOpen: (doc?: SelectedDocument) => void
 }) {
   const [err, setErr] = useState<Err>(null)
+  const [errDetail, setErrDetail] = useState('')
   const [drag, setDrag] = useState(false)
   const [pw, setPw] = useState('')
   const [list, setList] = useState<HistoryItem[]>([])
@@ -86,7 +87,32 @@ export default function OpenScreen({
     const rawList = getHistory()
     setList(rawList)
     ;(async () => {
-      for (const item of rawList) {
+      // Discover any sessions persisted on the server disk cache so fresh tabs also show them
+      try {
+        const recentRes = await fetch(apiUrl('/api/recent-sessions'))
+        if (recentRes.ok) {
+          const recentData = await recentRes.json()
+          if (Array.isArray(recentData?.sessions) && active) {
+            let merged = getHistory()
+            for (const s of recentData.sessions) {
+              if (s?.id && s?.name) {
+                merged = addHistoryItem({
+                  id: s.id,
+                  name: s.name,
+                  pages: s.pages || 1,
+                  size: s.size || 0,
+                  status: s.status === 'translated' ? 'translated' : 'pending',
+                  detectedLang: s.detectedLang,
+                })
+              }
+            }
+            setList(merged)
+          }
+        }
+      } catch {}
+
+      const currentList = getHistory()
+      for (const item of currentList) {
         const checkRes = await fetch(
           apiUrl(
             `/api/session-status?id=${encodeURIComponent(item.id)}&name=${encodeURIComponent(item.name)}`
@@ -109,12 +135,14 @@ export default function OpenScreen({
   const handleFiles = async (f?: File) => {
     if (!f) return
     setFile(f.name)
-    if (!f.name.toLowerCase().endsWith('.pdf')) {
+    const isPdf = f.name.toLowerCase().endsWith('.pdf') || f.type === 'application/pdf'
+    if (!isPdf) {
       setErr('unsupported')
       return
     }
 
     setErr(null)
+    setErrDetail('')
     setLoading(true)
 
     let backendDoc: SelectedDocument = {
@@ -125,18 +153,33 @@ export default function OpenScreen({
     }
 
     try {
-      // Upload to LayoutLingua core backend (PyMuPDF engine)
-      const res = await fetch(apiUrl('/api/upload'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/pdf',
-          'X-Filename': encodeURIComponent(f.name),
-        },
-        body: f,
-      })
+      let lastRes: Response | null = null
+      let lastErrMsg = ''
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await fetch(apiUrl('/api/upload'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/pdf',
+              'X-Filename': encodeURIComponent(f.name),
+            },
+            body: f,
+          })
+          lastRes = res
+          if (res.ok) break
+          if (res.status === 502 || res.status === 503 || res.status === 504) {
+            await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
+            continue
+          }
+          break
+        } catch (netErr: any) {
+          lastErrMsg = netErr?.message || 'Network connection error'
+          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
+        }
+      }
 
-      if (res.ok) {
-        const data = await res.json()
+      if (lastRes && lastRes.ok) {
+        const data = await lastRes.json()
         backendDoc = {
           name: data.name || f.name,
           size: data.size || f.size,
@@ -148,14 +191,16 @@ export default function OpenScreen({
           path: undefined,
         }
       } else {
-        const errJson = await res.json().catch(() => ({}))
+        const errJson = lastRes ? await lastRes.json().catch(() => ({})) : {}
         console.error('Backend upload error:', errJson)
-        setErr('unsupported')
+        setErrDetail(errJson?.error || lastErrMsg || 'Backend engine is starting up, please try again in a moment.')
+        setErr('server_error')
         return
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Backend connection failed:', e)
-      setErr('unsupported')
+      setErrDetail(e?.message || 'Could not reach the local PDF engine.')
+      setErr('server_error')
       return
     } finally {
       setLoading(false)
@@ -259,14 +304,11 @@ export default function OpenScreen({
             </p>
           </label>
 
-          <div className="mt-5 flex items-center gap-3">
+          <div className="mt-5 flex flex-wrap items-center gap-2.5">
             <Button variant="primary" onClick={triggerPicker} className="shadow-2xs" disabled={loading}>
               <IconFolder className="size-4" />
               Choose PDF File
             </Button>
-            <span className="ml-auto text-[12.5px] text-muted font-mono">
-              Fast, high-fidelity local translation
-            </span>
           </div>
 
           {err && (
@@ -289,6 +331,25 @@ export default function OpenScreen({
                 >
                   LayoutLingua operates strictly on PDF documents to guarantee visual geometry preservation.
                   Please provide a file with a .pdf extension.
+                </StateNotice>
+              )}
+              {err === 'server_error' && (
+                <StateNotice
+                  tone="error"
+                  icon={<IconError className="size-5" />}
+                  title={`Could not open ${file}`}
+                  actions={
+                    <>
+                      <Button size="sm" variant="primary" onClick={triggerPicker}>
+                        Try again
+                      </Button>
+                      <Button size="sm" onClick={() => setErr(null)}>
+                        Dismiss
+                      </Button>
+                    </>
+                  }
+                >
+                  {errDetail || 'The local Python PDF engine is warming up. Please try uploading the file again.'}
                 </StateNotice>
               )}
               {err === 'missing_recent' && (

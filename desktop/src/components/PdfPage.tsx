@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Page } from './data'
 import { apiUrl } from '../services/api'
 
@@ -21,6 +21,7 @@ interface LayoutBlockMeta {
 type Props = {
   page: Page
   lang?: 'en' | 'vi'
+  targetLang?: string
   type?: 'source' | 'translated'
   width: number
   highlight?: string
@@ -35,6 +36,7 @@ type Props = {
 export default function PdfPage({
   page,
   lang = 'en',
+  targetLang,
   type,
   width,
   highlight,
@@ -45,7 +47,12 @@ export default function PdfPage({
   version,
   onNavigatePage,
 }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const [isVisible, setIsVisible] = useState(width >= 120)
+  const [imgLoaded, setImgLoaded] = useState(false)
   const [imgFailed, setImgFailed] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
   const [blocks, setBlocks] = useState<LayoutBlockMeta[]>([])
   const [hoveredBlock, setHoveredBlock] = useState<LayoutBlockMeta | null>(null)
 
@@ -55,18 +62,55 @@ export default function PdfPage({
   const previewType = type || (lang === 'vi' ? 'translated' : 'source')
   const activeDocId = docId || 'sample_academic'
 
-  useEffect(() => {
-    setImgFailed(false)
-  }, [page.n, previewType, activeDocId, version])
+  const previewDpi = width < 120 ? 72 : 150
+  const langQuery = previewType === 'translated' && targetLang ? `&lang=${encodeURIComponent(targetLang)}` : ''
 
   useEffect(() => {
-    if (imgFailed && previewType === 'translated') {
+    if (width >= 120) {
+      setIsVisible(true)
+      return
+    }
+    const el = containerRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setIsVisible(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setIsVisible(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '400px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [width])
+
+  useEffect(() => {
+    setImgLoaded(false)
+    setImgFailed(false)
+    setRetryCount(0)
+  }, [page.n, previewType, activeDocId, version, targetLang])
+
+  useEffect(() => {
+    if (imgRef.current?.complete && imgRef.current?.naturalWidth > 0) {
+      setImgLoaded(true)
+      setImgFailed(false)
+    }
+  }, [page.n, previewType, activeDocId, version, retryCount, isVisible, targetLang])
+
+  useEffect(() => {
+    if (imgFailed && retryCount < 30) {
+      const delay = previewType === 'translated' ? 1200 : 350 + Math.min(retryCount, 6) * 250
       const timer = setTimeout(() => {
+        setRetryCount((r) => r + 1)
         setImgFailed(false)
-      }, 1800)
+      }, delay)
       return () => clearTimeout(timer)
     }
-  }, [imgFailed, previewType])
+  }, [imgFailed, retryCount, previewType])
 
   // Fetch block bounding boxes for interactive layout inspection and hyperlinks on full-size pages
   useEffect(() => {
@@ -77,7 +121,7 @@ export default function PdfPage({
     let active = true
     fetch(
       apiUrl(
-        `/api/page-preview?id=${encodeURIComponent(activeDocId)}&page=${page.n}&format=meta${
+        `/api/page-preview?id=${encodeURIComponent(activeDocId)}&page=${page.n}&format=meta${langQuery}${
           version ? `&v=${version}` : ''
         }`
       )
@@ -92,15 +136,43 @@ export default function PdfPage({
     return () => {
       active = false
     }
-  }, [activeDocId, page.n, width, version])
+  }, [activeDocId, page.n, width, version, langQuery])
 
   return (
     <div
+      ref={containerRef}
       style={{ width, height: PAGE_H * scale }}
       className="relative shrink-0 overflow-hidden bg-white shadow-2xs select-none"
     >
-      {imgFailed && previewType === 'translated' ? (
-        <div className="size-full flex flex-col items-center justify-center gap-1.5 bg-canvas/40 border border-dashed border-line text-center p-1.5">
+      {isVisible && !imgFailed && (
+        <img
+          ref={imgRef}
+          key={`${activeDocId}-${page.n}-${previewType}-${targetLang || ''}-${version || 0}-${retryCount}`}
+          src={apiUrl(
+            `/api/page-preview?id=${encodeURIComponent(activeDocId)}&page=${
+              page.n
+            }&type=${previewType}&dpi=${previewDpi}${langQuery}${version ? `&v=${version}` : ''}${
+              retryCount > 0 ? `&r=${retryCount}` : ''
+            }`
+          )}
+          loading={width < 120 ? 'lazy' : 'eager'}
+          alt={`Page ${page.n} (${previewType})`}
+          className={`size-full object-contain transition-opacity duration-150 ${
+            imgLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          onError={() => {
+            setImgLoaded(false)
+            setImgFailed(true)
+          }}
+          onLoad={() => {
+            setImgLoaded(true)
+            setImgFailed(false)
+          }}
+        />
+      )}
+
+      {(!isVisible || imgFailed || !imgLoaded) && (
+        <div className="absolute inset-0 size-full flex flex-col items-center justify-center gap-1.5 bg-canvas/40 border border-dashed border-line text-center p-1.5">
           <div
             className={`${
               width < 120 ? 'size-3.5' : 'size-6'
@@ -113,27 +185,18 @@ export default function PdfPage({
                 : 'text-[13px] font-semibold text-ink'
             }
           >
-            {width < 120 ? `P. ${page.n}` : `Translating page ${page.n}...`}
+            {width < 120
+              ? `P. ${page.n}`
+              : previewType === 'translated'
+              ? `Translating page ${page.n}...`
+              : `Loading page ${page.n}...`}
           </p>
-          {width >= 120 && (
+          {width >= 120 && previewType === 'translated' && (
             <p className="text-[11.5px] text-muted max-w-[220px]">
               Preserving mathematical equations and layout typography
             </p>
           )}
         </div>
-      ) : (
-        <img
-          key={`${activeDocId}-${page.n}-${previewType}-${version || 0}`}
-          src={apiUrl(
-            `/api/page-preview?id=${encodeURIComponent(activeDocId)}&page=${
-              page.n
-            }&type=${previewType}${version ? `&v=${version}` : ''}`
-          )}
-          alt={`Page ${page.n} (${previewType})`}
-          className="size-full object-contain"
-          onError={() => setImgFailed(true)}
-          onLoad={() => setImgFailed(false)}
-        />
       )}
 
       {/* Interactive Bounding-Box Inspector & Hyperlink Overlay */}

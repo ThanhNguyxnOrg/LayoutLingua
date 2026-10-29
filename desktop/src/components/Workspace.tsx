@@ -207,7 +207,6 @@ function IntegrityStrip({
           </div>
         ))}
       </dl>
-      <span className="text-[11.5px] text-muted font-mono" title="Pipeline: PyMuPDF Document IR → TypesetEngine v2.0.0">Engine: PyMuPDF + TypesetEngine v2.0.0</span>
     </section>
   )
 }
@@ -401,7 +400,14 @@ function Inspector(p: {
       lines.push(`#${idx + 1} [Page ${iss.page}] ${iss.severity.toUpperCase()} - ${iss.code || 'ISSUE'}`)
       lines.push(`Title: ${iss.title}`)
       if (iss.detail) lines.push(`Detail: ${iss.detail}`)
-      if (iss.region) lines.push(`Region / ID: ${iss.region}`)
+      if (iss.region) {
+        const rAny = iss.region as any
+        const regStr =
+          typeof rAny === 'object'
+            ? `${rAny.label || iss.id} (x=${rAny.x}%, y=${rAny.y}%, w=${rAny.w}%, h=${rAny.h}%)`
+            : String(iss.region)
+        lines.push(`Region / ID: ${regStr}`)
+      }
       lines.push('')
     })
 
@@ -831,9 +837,30 @@ export default function Workspace({
     tr: 'Turkish',
     uk: 'Ukrainian',
   }
+  const langCodeMap: Record<string, string> = {
+    'English': 'en',
+    'Vietnamese': 'vi',
+    'Chinese (Simplified)': 'zh',
+    'Chinese (Traditional)': 'zh-tw',
+    'Japanese': 'ja',
+    'Korean': 'ko',
+    'French': 'fr',
+    'German': 'de',
+    'Spanish': 'es',
+    'Russian': 'ru',
+    'Italian': 'it',
+    'Portuguese': 'pt',
+    'Indonesian': 'id',
+    'Dutch': 'nl',
+    'Polish': 'pl',
+    'Turkish': 'tr',
+    'Ukrainian': 'uk',
+  }
   const [src, setSrc] = useState(() => isoToLabelMap[docInfo?.detectedLang || 'en'] || 'English')
   const [tgt, setTgt] = useState(() => (docInfo?.detectedLang === 'vi' ? 'English' : 'Vietnamese'))
   const [pageRange, setPageRange] = useState('all')
+  const resolvedTargetLang = langCodeMap[tgt] || (tgt === 'Vietnamese' ? 'vi' : 'en')
+  const resolvedSourceLang = langCodeMap[src] || (src === 'Vietnamese' ? 'vi' : 'auto')
 
   const [rangeFrom, rangeTo] = useMemo(() => {
     if (!pageRange || pageRange === 'all') return [1, totalPages]
@@ -870,6 +897,9 @@ export default function Workspace({
       .then((pData) => {
         if (!active || !pData) return
         if (pData.status === 'done') {
+          if (pData.target_lang && isoToLabelMap[String(pData.target_lang).toLowerCase()]) {
+            setTgt(isoToLabelMap[String(pData.target_lang).toLowerCase()])
+          }
           setDone(isFullDoc ? totalPages : activeSelectedCount)
           setOverallPct(100)
           setBackendStage(stages.length)
@@ -894,118 +924,107 @@ export default function Workspace({
     let active = true
     let progressTimer: any = null
     let consecutiveFails = 0
+    let activeJobId = ''
 
     const activeDocId = docInfo?.id || 'sample_academic'
     if (activeDocId) {
-      progressTimer = setInterval(async () => {
+      const startPolling = () => {
         if (!active) return
-        try {
-          const pRes = await fetch(apiUrl(`/api/progress?id=${encodeURIComponent(activeDocId)}`))
-          if (pRes.ok) {
-            const pData = await pRes.json()
-            if (pData.current_page != null && active) {
-              setDone(pData.current_page)
+        progressTimer = setInterval(async () => {
+          if (!active) return
+          try {
+            const pRes = await fetch(
+              apiUrl(
+                `/api/progress?id=${encodeURIComponent(activeDocId)}&lang=${encodeURIComponent(resolvedTargetLang)}${
+                  activeJobId ? `&job_id=${encodeURIComponent(activeJobId)}` : ''
+                }`
+              )
+            )
+            if (pRes.ok) {
+              const pData = await pRes.json()
+              if (activeJobId && pData.job_id && pData.job_id !== activeJobId) {
+                return
+              }
+              if (pData.target_lang && String(pData.target_lang).toLowerCase() !== resolvedTargetLang) {
+                return
+              }
+              if (pData.current_page != null && active) {
+                setDone(pData.current_page)
+              }
+              if (pData.stage_index != null && active) {
+                setBackendStage(pData.stage_index)
+              }
+              if (pData.overall_pct != null && active) {
+                setOverallPct(pData.overall_pct)
+              }
+              if (active) {
+                if (pData.integrity) {
+                  setIntegrity((prev: any) => ({
+                    ...prev,
+                    ...pData.integrity,
+                    page_statuses: pData.integrity.page_statuses ?? prev?.page_statuses ?? {},
+                    page_block_counts: pData.integrity.page_block_counts ?? prev?.page_block_counts ?? {},
+                    completed_pages: pData.integrity.completed_pages ?? prev?.completed_pages ?? {},
+                    issues: pData.integrity.issues ?? prev?.issues ?? [],
+                  }))
+                }
+                if (pData.subtitle) {
+                  setProgressSubtitle(pData.subtitle)
+                } else if (pData.stage_index === 2 && pData.segments_total) {
+                  setProgressSubtitle(`segment ${pData.segments_done || 0} of ${pData.segments_total}`)
+                } else if (pData.current_page > 0) {
+                  setProgressSubtitle(`page ${pData.current_page} of ${pData.total_pages}`)
+                }
+                setTelemetry({
+                  eta: pData.eta_seconds,
+                  speed: pData.speed,
+                  message: pData.message,
+                })
+              }
+              if (pData.status === 'idle' && active) {
+                if (progressTimer) clearInterval(progressTimer)
+                setPhase('idle')
+                return
+              }
+              if (pData.status === 'done' && active) {
+                if (progressTimer) clearInterval(progressTimer)
+                setDone(isFullDoc ? totalPages : activeSelectedCount)
+                setOverallPct(100)
+                setBackendStage(stages.length)
+                setPhase('done')
+                setPreviewVersion(Date.now())
+                if (docInfo?.id || docInfo?.name) {
+                  updateHistoryStatus(docInfo.id || docInfo.name, 'translated')
+                }
+                return
+              }
+              if (pData.status === 'rate-limited' && active) {
+                if (progressTimer) clearInterval(progressTimer)
+                setPhase('rate-limited')
+                if (docInfo?.id || docInfo?.name) {
+                  updateHistoryStatus(docInfo.id || docInfo.name, 'failed')
+                }
+                return
+              }
+              if (pData.status === 'error' && active) {
+                if (progressTimer) clearInterval(progressTimer)
+                setPhase('provider-error')
+                if (docInfo?.id || docInfo?.name) {
+                  updateHistoryStatus(docInfo.id || docInfo.name, 'failed')
+                }
+                return
+              }
             }
-            if (pData.stage_index != null && active) {
-              setBackendStage(pData.stage_index)
-            }
-            if (pData.overall_pct != null && active) {
-              setOverallPct(pData.overall_pct)
-            }
+          } catch {
             if (active) {
-              if (pData.integrity) {
-                setIntegrity(pData.integrity)
+              consecutiveFails++
+              if (consecutiveFails > 8) {
+                if (progressTimer) clearInterval(progressTimer)
+                setPhase('idle')
               }
-              if (pData.subtitle) {
-                setProgressSubtitle(pData.subtitle)
-              } else if (pData.stage_index === 2 && pData.segments_total) {
-                setProgressSubtitle(`segment ${pData.segments_done || 0} of ${pData.segments_total}`)
-              } else if (pData.current_page > 0) {
-                setProgressSubtitle(`page ${pData.current_page} of ${pData.total_pages}`)
-              }
-              setTelemetry({
-                eta: pData.eta_seconds,
-                speed: pData.speed,
-                message: pData.message,
-              })
-            }
-            if (pData.status === 'idle' && active) {
-              if (progressTimer) clearInterval(progressTimer)
-              setPhase('idle')
-              return
-            }
-            if (pData.status === 'done' && active) {
-              if (progressTimer) clearInterval(progressTimer)
-              setDone(isFullDoc ? totalPages : activeSelectedCount)
-              setOverallPct(100)
-              setBackendStage(stages.length)
-              setPhase('done')
-              setPreviewVersion(Date.now())
-              if (docInfo?.id || docInfo?.name) {
-                updateHistoryStatus(docInfo.id || docInfo.name, 'translated')
-              }
-              return
-            }
-            if (pData.status === 'rate-limited' && active) {
-              if (progressTimer) clearInterval(progressTimer)
-              setPhase('rate-limited')
-              if (docInfo?.id || docInfo?.name) {
-                updateHistoryStatus(docInfo.id || docInfo.name, 'failed')
-              }
-              return
-            }
-            if (pData.status === 'error' && active) {
-              if (progressTimer) clearInterval(progressTimer)
-              setPhase('provider-error')
-              if (docInfo?.id || docInfo?.name) {
-                updateHistoryStatus(docInfo.id || docInfo.name, 'failed')
-              }
-              return
             }
           }
-        } catch {
-          if (active) {
-            consecutiveFails++
-            if (consecutiveFails > 8) {
-              if (progressTimer) clearInterval(progressTimer)
-              setPhase('idle')
-            }
-          }
-        }
-      }, 350)
-
-      const langCodeMap: Record<string, string> = {
-        'English': 'en',
-        'Vietnamese': 'vi',
-        'Chinese (Simplified)': 'zh',
-        'Chinese (Traditional)': 'zh-tw',
-        'Japanese': 'ja',
-        'Korean': 'ko',
-        'French': 'fr',
-        'German': 'de',
-        'Spanish': 'es',
-        'Russian': 'ru',
-        'Italian': 'it',
-        'Portuguese': 'pt',
-        'Indonesian': 'id',
-        'Dutch': 'nl',
-        'Polish': 'pl',
-        'Turkish': 'tr',
-        'Ukrainian': 'uk',
-      }
-      const resolvedTargetLang = langCodeMap[tgt] || (tgt === 'Vietnamese' ? 'vi' : 'en')
-      const resolvedSourceLang = langCodeMap[src] || (src === 'Vietnamese' ? 'vi' : 'auto')
-
-      // Same-language guard: a vi->vi (or en->en) run would silently replace the
-      // document with an untranslated copy - fail loudly before touching the server.
-      const detected = docInfo?.detectedLang || ''
-      const effectiveSource = resolvedSourceLang === 'auto' ? detected : resolvedSourceLang
-      if (effectiveSource && resolvedTargetLang === effectiveSource) {
-        setTelemetry({
-          message: `Target language matches the document language (${effectiveSource.toUpperCase()}). Pick a different target language - a same-language run would replace the document with an untranslated copy.`,
-        })
-        setPhase('provider-error')
-        return
+        }, 350)
       }
 
       fetch(apiUrl('/api/translate'), {
@@ -1042,6 +1061,12 @@ export default function Workspace({
             if (docInfo?.id || docInfo?.name) {
               updateHistoryStatus(docInfo.id || docInfo.name, 'failed')
             }
+          } else {
+            const startData = await res.json().catch(() => ({}))
+            if (startData?.job_id) {
+              activeJobId = String(startData.job_id)
+            }
+            startPolling()
           }
         })
         .catch(() => {
@@ -1095,7 +1120,7 @@ export default function Workspace({
   }, [integrity])
 
   const visibleIssues = docInfo?.id
-    ? backendIssues.filter((i) => (isFullDoc ? i.page <= done : i.page >= rangeFrom && i.page <= rangeTo) && phase !== 'idle')
+    ? backendIssues.filter(() => phase !== 'idle')
     : issues.filter((i) => i.page <= done && phase !== 'idle')
 
   const page = docPages[cur - 1] || docPages[0]
@@ -1104,7 +1129,7 @@ export default function Workspace({
       return {
         blocks: integrity.blocks_translated ?? 0,
         cells: 0,
-        review: integrity.needs_review ?? 0,
+        review: visibleIssues.length > 0 ? visibleIssues.length : (integrity.needs_review ?? 0),
         preserved: integrity.preserved_pages ?? 0,
       }
     }
@@ -1134,6 +1159,10 @@ export default function Workspace({
     setDone(0)
     setOverallPct(4)
     setBackendStage(0)
+    setIntegrity(null)
+    setHighlight(undefined)
+    setActiveIssue(undefined)
+    setPreviewVersion(Date.now())
     setRunId((r) => r + 1)
     setPhase('processing')
     setTab('translation')
@@ -1151,6 +1180,8 @@ export default function Workspace({
     setSrc(newSrc)
     if (phase === 'done' || phase === 'cancelled' || phase === 'provider-error' || phase === 'rate-limited') {
       setPhase('idle')
+      setDone(0)
+      setIntegrity(null)
     }
   }
 
@@ -1161,6 +1192,8 @@ export default function Workspace({
     setTgt(newTgt)
     if (phase === 'done' || phase === 'cancelled' || phase === 'provider-error' || phase === 'rate-limited') {
       setPhase('idle')
+      setDone(0)
+      setIntegrity(null)
     }
   }
 
@@ -1221,19 +1254,20 @@ export default function Workspace({
       isCurrentPageInSelectedRange &&
       (Boolean(integrity?.completed_pages?.[page.n]) ||
         Boolean(integrity?.page_block_counts?.[page.n] > 0) ||
-        page.n - rangeFrom + 1 <= done))
+        (backendStage != null && backendStage >= 3 && page.n - rangeFrom + 1 <= done)))
 
   const output = () => {
     if (isCurrentPageTranslated) {
       return (
         <div className="relative">
           <PdfPage
-            key={`trans-${docInfo?.id}-${page.n}-${runId}-${tgt}`}
+            key={`trans-${docInfo?.id}-${page.n}-${runId}-${resolvedTargetLang}-${previewVersion}`}
             page={page}
             type="translated"
+            targetLang={resolvedTargetLang}
             width={width}
             docId={docInfo?.id}
-            version={runId}
+            version={previewVersion || runId}
             onNavigatePage={select}
             {...mark}
           />
@@ -1345,7 +1379,7 @@ export default function Workspace({
               {mode === 'side' ? (
                 <>
                   <PageFrame label="Source" sub={<>{src} · <span className="font-mono">p.{page.n}</span></>} width={width}>
-                    <PdfPage page={page} type="source" width={width} docId={docInfo?.id} onNavigatePage={select} {...mark} />
+                    <PdfPage key={`src-${docInfo?.id}-${page.n}`} page={page} type="source" width={width} docId={docInfo?.id} onNavigatePage={select} {...mark} />
                   </PageFrame>
                   <PageFrame label="Translated" sub={<>{tgt} · <PageState s={s} idle={phase === 'idle'} /></>} width={width}>
                     {output()}
@@ -1360,7 +1394,7 @@ export default function Workspace({
                   </span>
                 }>
                   <div className="relative">
-                    <PdfPage page={page} type="source" width={width} docId={docInfo?.id} onNavigatePage={select} {...mark} />
+                    <PdfPage key={`src-ov-${docInfo?.id}-${page.n}`} page={page} type="source" width={width} docId={docInfo?.id} onNavigatePage={select} {...mark} />
                     <div className="absolute inset-0" style={{ opacity: blend / 100 }}>{output()}</div>
                   </div>
                 </PageFrame>
