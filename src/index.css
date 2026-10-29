@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #F3F6F7;
+  --color-paper: #FFFFFF;
+  --color-ink: #20333D;
+  --color-muted: #5C6E77;
+  --color-faint: #8A989F;
+  --color-line: #DCE3E6;
+  --color-line-strong: #C7D1D5;
+  --color-teal: #147D80;
+  --color-teal-soft: #E3F1F1;
+  --color-amber: #B97827;
+  --color-amber-ink: #8A5617;
+  --color-amber-soft: #FBF1E3;
+  --color-red: #B64C4C;
+  --color-red-soft: #F8E8E8;
+  --color-info: #3D6A8F;
+  --color-info-soft: #E6EEF5;
+  --font-sans: 'Manrope', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --font-serif: 'Source Serif 4', Georgia, serif;
+}
+
+html, body, #root { height: 100%; }
+body { font-family: var(--font-sans); color: var(--color-ink); background: var(--color-canvas); -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--color-teal); outline-offset: 2px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+@keyframes ll-pulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+.ll-pulse { animation: ll-pulse 1.4s ease-in-out infinite; }
+
+/* Global custom visible scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #EDF2F4;
+}
+::-webkit-scrollbar-thumb {
+  background: #94A3B8;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #64748B;
+}
+
+/* Always-visible vertical scrollbar with dedicated track for Page Navigator */
+.custom-scrollbar {
+  overflow-y: scroll !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #8A989F #EDF2F4 !important;
+  scrollbar-gutter: stable;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px !important;
+  display: block !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #EDF2F4 !important;
+  border-left: 1px solid #DCE3E6 !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #8A989F !important;
+  border-radius: 4px !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #5C6E77 !important;
+}

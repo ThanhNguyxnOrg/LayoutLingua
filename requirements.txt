@@ -1,13 +1,13 @@
 # LayoutLingua Core Engine
-pymupdf>=1.28.2
-platformdirs>=4.12.4
-ftfy>=6.3.1
-numpy>=2.2.6
+pymupdf>=1.25.0
+platformdirs>=4.3.0
+ftfy>=6.2.0
+numpy>=2.0.0
 
 # Vision & Neural Document Layout Acceleration (DocLayout-YOLO ONNX)
-onnxruntime>=1.24.3
-opencv-python-headless>=5.0.0.93
-shapely>=2.1.2
+onnxruntime>=1.20.0
+opencv-python-headless>=4.10.0
+shapely>=2.0.0
 
 # Optional Scanned PDF OCR Pre-flight
-rapidocr-onnxruntime>=1.4.4
+rapidocr-onnxruntime>=1.4.0

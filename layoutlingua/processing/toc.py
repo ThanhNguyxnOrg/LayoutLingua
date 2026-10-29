@@ -1,4 +1,4 @@
-﻿"""PDF Table of Contents (outlines/bookmarks) translation and bilingual page adjustment."""
+"""PDF Table of Contents (outlines/bookmarks) translation and bilingual page adjustment."""
 
 from __future__ import annotations
 

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var desc = Object.getOwnPropertyDescriptor(window, 'fetch');
+          if (desc && desc.get && !desc.set && desc.configurable) {
+            var currentFetch = window.fetch.bind(window);
+            Object.defineProperty(window, 'fetch', {
+              configurable: true,
+              enumerable: true,
+              get: function () {
+                return currentFetch;
+              },
+              set: function (fn) {
+                if (typeof fn === 'function') {
+                  currentFetch = fn;
+                }
+              },
+            });
+          }
+        } catch (_e) {}
+        window.addEventListener(
+          'error',
+          function (ev) {
+            var msg = String((ev && ev.message) || '');
+            var file = String((ev && ev.filename) || '');
+            if (
+              file.indexOf('chrome-extension://') === 0 ||
+              msg.indexOf('Cannot set property fetch of #<Window>') !== -1
+            ) {
+              ev.stopImmediatePropagation();
+              ev.preventDefault();
+            }
+          },
+          true
+        );
+      })();
+    </script>
+    <title>LayoutLingua</title>
+    <meta name="description" content="High-precision Academic PDF Translation & Formula-Preserving Typesetting Engine powered by Python." />
+    <meta property="og:title" content="LayoutLingua" />
+    <meta property="og:description" content="High-precision Academic PDF Translation & Formula-Preserving Typesetting Engine powered by Python." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
