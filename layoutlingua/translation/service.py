@@ -46,6 +46,8 @@ def extract_document_segments(
     doc_ir: DocumentIR,
     isolator: FormulaIsolator | None = None,
     page_numbers: set[int] | None = None,
+    source_lang: str | None = None,
+    target_lang: str | None = None,
 ) -> list[TextSegment]:
     """Extract translatable TextSegments from DocumentIR, enforcing fail-closed block suppression.
 
@@ -53,6 +55,7 @@ def extract_document_segments(
     - blocks with block_type == "formula"
     - blocks with block_type == "table_rejected"
     - blocks whose ID is registered in doc_ir.metadata["preserved_block_ids"] or page.metadata["preserved_block_ids"]
+    - blocks already authored in target_lang (e.g. English biographical footnotes in a non-English book)
     - pages not included in page_numbers (if page_numbers is provided)
     """
     iso = isolator or FormulaIsolator()
@@ -68,6 +71,16 @@ def extract_document_segments(
     running_h_f = detect_running_headers_footers(doc_ir.pages)
     if running_h_f:
         doc_preserved.update(running_h_f)
+
+    tgt_code = (target_lang or "").strip().lower()
+    src_code = (source_lang or "").strip().lower()
+    check_already_target = bool(tgt_code and tgt_code != src_code)
+    if check_already_target:
+        from layoutlingua.processing.text_sanitizer import detect_language_from_text
+        _VN_DIACRITIC_RE = re.compile(
+            r"[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]",
+            re.IGNORECASE,
+        )
 
     segments: list[TextSegment] = []
     for page in doc_ir.pages:
@@ -90,13 +103,35 @@ def extract_document_segments(
                 or block.block_id in page_preserved
             ):
                 continue
-            if not block.text.strip():
+            b_text = block.text.strip()
+            if not b_text:
                 continue
 
+            if check_already_target and len(b_text.split()) >= 4:
+                if tgt_code == "en" and _VN_DIACRITIC_RE.search(b_text):
+                    pass
+                elif detect_language_from_text(b_text) == tgt_code:
+                    doc_preserved.add(block.block_id)
+                    if hasattr(doc_ir, "metadata") and isinstance(doc_ir.metadata, dict):
+                        existing_p = doc_ir.metadata.get("preserved_block_ids")
+                        if isinstance(existing_p, set):
+                            existing_p.add(block.block_id)
+                        elif isinstance(existing_p, list):
+                            if block.block_id not in existing_p:
+                                existing_p.append(block.block_id)
+                        else:
+                            doc_ir.metadata["preserved_block_ids"] = set(doc_preserved)
+                    continue
+
             segment = iso.isolate_block(block)
+            if segment.tokens:
+                prose_outside_tags = _XML_TAG_PATTERN.sub("", segment.masked_text).strip()
+                if not any(ch.isalpha() for ch in prose_outside_tags):
+                    continue
             segments.append(segment)
 
     return segments
+
 
 
 class TranslationService:

@@ -313,6 +313,56 @@ class GlossaryManager:
 
         return "".join(new_parts)
 
+    # Source-anchored MT polysemy corrections for mathematical/scientific terms
+    # Only triggered when the source text actually contains the specific source domain term.
+    _MT_POLYSEMY_HEALING_VI_EN: tuple[tuple[str, re.Pattern, str], ...] = (
+        ("trung bình điều hòa", re.compile(r"\bair[- ]conditioning average\b", re.IGNORECASE), "harmonic mean"),
+        ("nghiệm đúng với mọi", re.compile(r"\b(?:the )?experience is true for everyone\b", re.IGNORECASE), "holds for all"),
+        ("nghiệm đúng với", re.compile(r"\b(?:correct experience with|with all true solutions)\b", re.IGNORECASE), "holds for"),
+        ("nghiệm kép", re.compile(r"\bdouble (?:test|solution)\b", re.IGNORECASE), "double root"),
+        ("nghiệm", re.compile(r"\b(?:experience|test)\b", re.IGNORECASE), "root"),
+        ("tính chât", re.compile(r"\b(?:quality|tính chât)\b", re.IGNORECASE), "properties"),
+        ("logarith", re.compile(r"\blogarith\b", re.IGNORECASE), "logarithm"),
+        ("chỉnh hợp", re.compile(r"\b(?:convolutions?|alignments?|concordances?|convolutional concordances?)\b", re.IGNORECASE), "arrangements"),
+        ("tổ hợp", re.compile(r"\bconvolutional combinations?\b", re.IGNORECASE), "combinations"),
+        ("cấp số nhân lùi vô hạn", re.compile(r"\b(?:(?:the )?exponential progression goes back infinitely|infinite backward multiplier)\b", re.IGNORECASE), "infinite geometric progression"),
+        ("cấp số nhân", re.compile(r"\b(?:exponential progressions?|exponential)\b", re.IGNORECASE), "geometric progression"),
+        ("tâm sai", re.compile(r"\b(?:the )?wrong center\b", re.IGNORECASE), "eccentricity"),
+        ("tham số tiêu", re.compile(r"\btarget parameters?\b", re.IGNORECASE), "focal parameter"),
+        ("cosin chỉ phương", re.compile(r"\b(?:the )?cosine indicates the direction\b", re.IGNORECASE), "direction cosines"),
+        ("hệ số pháp dạng", re.compile(r"\bformat coefficients?\b", re.IGNORECASE), "normalizing factor"),
+        ("tiết diện", re.compile(r"\bsecretions?\b", re.IGNORECASE), "cross-section"),
+        ("tiết", re.compile(r"\bsecretions?\b", re.IGNORECASE), "cross-sections"),
+        ("trong đó", re.compile(r"\bin measuring buzzing\b", re.IGNORECASE), "where"),
+        ("trong đo", re.compile(r"\bin measuring buzzing\b", re.IGNORECASE), "where"),
+        ("k là số loại", re.compile(r"\bk is the number of types\b", re.IGNORECASE), "k: number of types"),
+        ("hàm lồi", re.compile(r"\bconvex jaw\b", re.IGNORECASE), "convex function"),
+        ("viên phân", re.compile(r"\bfecal pellets\b", re.IGNORECASE), "circular segment"),
+        ("quạt tròn", re.compile(r"\bround fan\b", re.IGNORECASE), "circular sector"),
+        ("tâm đẳng phương", re.compile(r"\bisometric mind\b", re.IGNORECASE), "radical center"),
+        ("trục đẳng phương", re.compile(r"\bisometric axis\b", re.IGNORECASE), "radical axis"),
+        ("công bội", re.compile(r"\bcontribution\b", re.IGNORECASE), "common ratio"),
+        ("công sai", re.compile(r"\bjustice\b", re.IGNORECASE), "common difference"),
+        ("tiệm cận", re.compile(r"\b(?:nearsight|shops?)\b", re.IGNORECASE), "asymptote"),
+        ("tiện cận", re.compile(r"\bnearsight\b", re.IGNORECASE), "asymptote"),
+        ("khai triển", re.compile(r"\bdevelopment\b", re.IGNORECASE), "expansion"),
+        ("khối tròn xoay", re.compile(r"\bcircular block\b", re.IGNORECASE), "solid of revolution"),
+    )
+
+    _MT_POLYSEMY_HEALING_VI_RU: tuple[tuple[str, re.Pattern, str], ...] = (
+        ("lũy thừa", re.compile(r"\bв силу\b", re.IGNORECASE), "в степени"),
+        ("cơ số", re.compile(r"\b(?:система счисления|базовый номер|по основанию)\b", re.IGNORECASE), "основание"),
+        ("có vô số nghiệm", re.compile(r"\bсуществует бесчисленное множество решений\b", re.IGNORECASE), "бесконечно много решений"),
+        ("vô số nghiệm", re.compile(r"\bбесчисленное множество решений\b", re.IGNORECASE), "бесконечно много решений"),
+        ("nghiệm đúng với mọi", re.compile(r"\b(?:опыт верен для всех|верно для всех опытов)\b", re.IGNORECASE), "верно при всех"),
+        ("nghiệm đúng với", re.compile(r"\b(?:правильный опыт с|со всеми верными решениями|опыт верен с)\b", re.IGNORECASE), "верно при"),
+        ("vô nghiệm", re.compile(r"\b(?:неэффективно|бесполезно)\b", re.IGNORECASE), "нет решений"),
+        ("đơn vị ảo", re.compile(r"\bвиртуальный блок\b", re.IGNORECASE), "мнимая единица"),
+        ("đoạn thẳng", re.compile(r"\bсегмент линии\b", re.IGNORECASE), "отрезок"),
+        ("trong đó", re.compile(r"\bв этом\b", re.IGNORECASE), "где"),
+        ("trong đo", re.compile(r"\bв измерении жужжания\b", re.IGNORECASE), "где"),
+    )
+
     @classmethod
     def normalize_translation(
         cls,
@@ -321,6 +371,7 @@ class GlossaryManager:
         source_lang: str = "auto",
         target_lang: str = "en",
         custom_glossary: str | Mapping[str, str] | None = None,
+        masked_source_text: str | None = None,
     ) -> str:
         """Heal untranslated terms and MT terminology drifts using structural layout anchors from source text."""
         if not translated_text:
@@ -332,6 +383,59 @@ class GlossaryManager:
             return result
 
         source_lower = source_text.lower()
+        uses_xml_tags = bool(re.search(r"<b\d+></b\d+>", result))
+        anchor_src = re.sub(r"<b(\d+)></b\1>", r"⟦LL_FORMULA_\1⟧", masked_source_text or source_text)
+        result_opaque = re.sub(r"<b(\d+)></b\1>", r"⟦LL_FORMULA_\1⟧", result)
+
+        # 0. Exact standalone phrase match (ignoring outer whitespace, section/list prefixes like '3. ' or 'a) ',
+        # surrounding formula placeholders ⟦LL_FORMULA_k⟧, and trailing punctuation or index page references like ' · 29')
+        for cand_src in (anchor_src, source_text) if anchor_src != source_text else (source_text,):
+            m_outer = re.match(
+                r"^(\s*(?:(?:\d+|[a-zA-Z]|[IVXLCDM]+)[\.\)]\s+|[•\-\*]\s+|[\(\[\{\.\,\:\;\—\–\-]\s*|⟦LL_FORMULA_\d+⟧\s*)*)([^\s⟦⟧].*?[^\s⟦⟧]|[^\s⟦⟧])(\s*(?:⟦LL_FORMULA_\d+⟧\s*|[·•]\s*\d+(?:\s*,\s*\d+)*|[\:\.\,;!\?\)\]\}])*\s*)$",
+                cand_src,
+                re.DOTALL,
+            )
+            if m_outer:
+                lead_punct, core_src, trail_punct = m_outer.group(1), m_outer.group(2), m_outer.group(3)
+                if "⟦LL_FORMULA_" not in core_src:
+                    src_formulas = re.findall(r"⟦LL_FORMULA_\d+⟧", cand_src)
+                    res_formulas = re.findall(r"⟦LL_FORMULA_\d+⟧", result_opaque)
+                    if not src_formulas or src_formulas == res_formulas:
+                        core_lower = core_src.lower()
+                        for s_term, t_term in glossary.items():
+                            if s_term.lower() == core_lower:
+                                if core_src[0].isupper() and len(t_term) > 1:
+                                    t_rep = t_term[0].upper() + t_term[1:]
+                                elif core_src.isupper() and len(core_src) > 1:
+                                    t_rep = t_term.upper()
+                                else:
+                                    t_rep = t_term
+                                lead_clean = re.sub(r"([(\[{])\s+$", r"\1", lead_punct.lstrip())
+                                trail_clean = re.sub(r"\s+([)\]}.,:;!?])", r"\1", trail_punct.rstrip())
+                                if trail_clean.startswith("⟦LL_FORMULA_"):
+                                    trail_clean = " " + trail_clean
+                                out_str = f"{lead_clean}{t_rep}{trail_clean}"
+                                if uses_xml_tags:
+                                    out_str = re.sub(r"⟦LL_FORMULA_(\d+)⟧", r"<b\1></b\1>", out_str)
+                                return out_str
+
+        # 0b. Source-anchored polysemy healing for VI -> EN / VI -> RU mathematical terms
+        tgt_norm = (target_lang or "en").lower().strip()
+        if tgt_norm.startswith("en"):
+            for src_trigger, mt_pat, fix_str in cls._MT_POLYSEMY_HEALING_VI_EN:
+                if src_trigger in source_lower and mt_pat.search(result):
+                    def _heal_poly(m: re.Match, _fix: str = fix_str) -> str:
+                        s = m.group(0)
+                        return _fix[0].upper() + _fix[1:] if s and s[0].isupper() else _fix
+                    result = mt_pat.sub(_heal_poly, result)
+        elif tgt_norm.startswith("ru"):
+            for src_trigger, mt_pat, fix_str in cls._MT_POLYSEMY_HEALING_VI_RU:
+                if src_trigger in source_lower and mt_pat.search(result):
+                    def _heal_poly_ru(m: re.Match, _fix: str = fix_str) -> str:
+                        s = m.group(0)
+                        return _fix[0].upper() + _fix[1:] if s and s[0].isupper() else _fix
+                    result = mt_pat.sub(_heal_poly_ru, result)
+
         result_lower = result.lower()
 
         # Scan for glossary terms that appear in source_text (ordered by term length descending)
@@ -347,7 +451,7 @@ class GlossaryManager:
             is_cjk_src = any("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u30ff" or "\uac00" <= c <= "\ud7af" for c in s_term)
             p_src = cls._get_term_pattern(s_term, is_cjk_src)
 
-            m_src = p_src.search(source_text)
+            m_src = p_src.search(anchor_src) or p_src.search(source_text)
             if not m_src:
                 continue
 
@@ -367,10 +471,14 @@ class GlossaryManager:
                 continue
 
             # 2. Structural layout anchor alignment: find shared pre/suf tokens (indices, dot leaders, tags, formulas)
-            m_pre = re.search(r"(\d+[\.\)]\s*|[•\-\*]\s*|\S+\s*)$", source_text[:m_src.start()])
+            active_src = anchor_src if p_src.search(anchor_src) else source_text
+            m_src_active = p_src.search(active_src)
+            if not m_src_active:
+                continue
+            m_pre = re.search(r"(\d+[\.\)]\s*|[•\-\*]\s*|\S+\s*)$", active_src[:m_src_active.start()])
             pre_anchor = m_pre.group(0) if m_pre else ""
 
-            m_suf = re.search(r"^(\s*[\.\:\-_–—…]{2,}\s*\d+|\s*[\.\:\-_–—…]+|\s*⟦LL_[^⟧]+⟧)", source_text[m_src.end():])
+            m_suf = re.search(r"^(\s*[\.\:\-_–—…]{2,}\s*\d+|\s*[\.\:\-_–—…]+|\s*⟦LL_[^⟧]+⟧)", active_src[m_src_active.end():])
             suf_anchor = m_suf.group(0) if m_suf else ""
 
             if pre_anchor and suf_anchor:
