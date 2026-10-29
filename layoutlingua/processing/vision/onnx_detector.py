@@ -13,7 +13,10 @@ from pathlib import Path
 from typing import Any, Sequence
 import logging
 
-import cv2
+try:
+    import cv2
+except ImportError:
+    cv2 = None  # type: ignore[assignment]
 import numpy as np
 
 try:
@@ -24,6 +27,48 @@ except ImportError:
 from layoutlingua.core.ir import GlyphSpan
 
 logger = logging.getLogger(__name__)
+
+
+def _numpy_nms_boxes(
+    boxes: list[list[int]],
+    scores: list[float],
+    score_threshold: float,
+    nms_threshold: float,
+) -> list[int]:
+    """Pure-NumPy Non-Maximum Suppression fallback when OpenCV is unavailable."""
+    if not boxes:
+        return []
+    b = np.asarray(boxes, dtype=np.float32)
+    s = np.asarray(scores, dtype=np.float32)
+    keep_mask = s >= score_threshold
+    idxs = np.nonzero(keep_mask)[0]
+    if idxs.size == 0:
+        return []
+    order = idxs[np.argsort(s[idxs])[::-1]]
+    x1 = b[:, 0]
+    y1 = b[:, 1]
+    x2 = b[:, 0] + np.maximum(0.0, b[:, 2])
+    y2 = b[:, 1] + np.maximum(0.0, b[:, 3])
+    areas = np.maximum(0.0, x2 - x1) * np.maximum(0.0, y2 - y1)
+
+    picked: list[int] = []
+    while order.size > 0:
+        i = int(order[0])
+        picked.append(i)
+        if order.size == 1:
+            break
+        rest = order[1:]
+        xx1 = np.maximum(x1[i], x1[rest])
+        yy1 = np.maximum(y1[i], y1[rest])
+        xx2 = np.minimum(x2[i], x2[rest])
+        yy2 = np.minimum(y2[i], y2[rest])
+        w = np.maximum(0.0, xx2 - xx1)
+        h = np.maximum(0.0, yy2 - yy1)
+        inter = w * h
+        union = areas[i] + areas[rest] - inter
+        iou = np.where(union > 0.0, inter / union, 0.0)
+        order = rest[iou <= nms_threshold]
+    return picked
 
 
 class LayoutCategory(str, Enum):
@@ -175,16 +220,25 @@ class OnnxLayoutDetector:
         dh = (target_h - new_unpad_h) / 2.0
 
         if shape[1] != new_unpad_w or shape[0] != new_unpad_h:
-            resized = cv2.resize(image, (new_unpad_w, new_unpad_h), interpolation=cv2.INTER_LINEAR)
+            if cv2 is not None:
+                resized = cv2.resize(image, (new_unpad_w, new_unpad_h), interpolation=cv2.INTER_LINEAR)
+            else:
+                y_idx = np.clip(np.linspace(0, shape[0] - 1, new_unpad_h).round().astype(int), 0, shape[0] - 1)
+                x_idx = np.clip(np.linspace(0, shape[1] - 1, new_unpad_w).round().astype(int), 0, shape[1] - 1)
+                resized = image[np.ix_(y_idx, x_idx)]
         else:
             resized = image
 
         top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
         left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
 
-        padded = cv2.copyMakeBorder(
-            resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
-        )
+        if cv2 is not None:
+            padded = cv2.copyMakeBorder(
+                resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(114, 114, 114)
+            )
+        else:
+            pad_width = ((top, bottom), (left, right), (0, 0)) if resized.ndim == 3 else ((top, bottom), (left, right))
+            padded = np.pad(resized, pad_width, mode="constant", constant_values=114)
         return padded, ratio, (left, top)
 
     def preprocess(
@@ -199,7 +253,10 @@ class OnnxLayoutDetector:
         
         # Convert BGR to RGB
         if len(padded.shape) == 3 and padded.shape[2] == 3:
-            rgb = cv2.cvtColor(padded, cv2.COLOR_BGR2RGB)
+            if cv2 is not None:
+                rgb = cv2.cvtColor(padded, cv2.COLOR_BGR2RGB)
+            else:
+                rgb = padded[..., ::-1]
         else:
             rgb = padded
 
@@ -276,18 +333,27 @@ class OnnxLayoutDetector:
             return []
 
         # Run Non-Maximum Suppression (NMS)
-        indices = cv2.dnn.NMSBoxes(
-            boxes_list,
-            confidences_list,
-            self.conf_threshold,
-            self.iou_threshold,
-        )
+        if cv2 is not None and hasattr(cv2, "dnn"):
+            indices = cv2.dnn.NMSBoxes(
+                boxes_list,
+                confidences_list,
+                self.conf_threshold,
+                self.iou_threshold,
+            )
+            if len(indices) == 0:
+                return []
+            indices_flat = indices.flatten() if hasattr(indices, "flatten") else [i[0] for i in indices]
+        else:
+            indices_flat = _numpy_nms_boxes(
+                boxes_list,
+                confidences_list,
+                self.conf_threshold,
+                self.iou_threshold,
+            )
+            if not indices_flat:
+                return []
 
         regions: list[LayoutRegion] = []
-        if len(indices) == 0:
-            return regions
-
-        indices_flat = indices.flatten() if hasattr(indices, "flatten") else [i[0] for i in indices]
 
         for idx in indices_flat:
             bx, by, bw, bh = boxes_list[idx]

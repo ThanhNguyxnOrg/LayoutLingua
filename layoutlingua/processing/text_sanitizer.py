@@ -126,3 +126,56 @@ def unshield_academic_abbreviations(text: str, mapping: dict[str, str]) -> str:
         result = result.replace(token, original)
 
     return result
+
+
+def detect_language_from_text(sample_text: str) -> str:
+    """Detect source language code across 17 languages using Unicode script ranges and stopword frequency."""
+    s = (sample_text or "")[:4000]
+    if not s.strip():
+        return "en"
+    if re.search(
+        r"[ăđơưĂĐƠƯảạằắẳẵặầấẩẫậẻẽẹềếểễệỉĩịỏọồốổỗộờớởỡợủũụừứửữựỷỹỵ"
+        r"ẢẠẰẮẲẴẶẦẤẨẪẬẺẼẸỀẾỂỄỆỈĨỊỎỌỒỐỔỖỘỜỚỞỠỢỦŨỤỪỨỬỮỰỶỸỴ]",
+        s,
+    ):
+        return "vi"
+    if re.search(r"[\u3040-\u30ff]", s):
+        return "ja"
+    if re.search(r"[\uac00-\ud7af]", s):
+        return "ko"
+    if re.search(r"[\u4e00-\u9fff]", s):
+        return (
+            "zh-TW"
+            if re.search(r"[\u7E41\u9AD4\u570B\u5B78\u6578\u984C\u8AD6\u8207\u70BA\u9019\u5011\u500B\u6703\u767C\u5BE6]", s)
+            else "zh-CN"
+        )
+    if re.search(r"[\u0400-\u04ff]", s):
+        return "uk" if re.search(r"[іїєґІЇЄҐ]", s) else "ru"
+    if re.search(r"[ąćęłńśźżĄĆĘŁŃŚŹŻ]", s):
+        return "pl"
+    if re.search(r"[ğışĞİŞ]", s):
+        return "tr"
+
+    s_low = f" {s.lower()} "
+    en_hits = sum(
+        1 for w in (" the ", " was ", " and ", " of ", " in ", " for ", " with ", " from ", " that ", " are ")
+        if w in s_low
+    )
+    if en_hits >= 2 and not re.search(r"[äöüßÄÖÜœæçŒÆÇñ¿¡ãõÃÕ]", s):
+        return "en"
+    if re.search(r"[äöüßÄÖÜ]", s) and any(w in s_low for w in (" der ", " die ", " das ", " und ", " ist ", " mit ")):
+        return "de"
+    if re.search(r"[œæçŒÆÇ]", s) or any(w in s_low for w in (" les ", " des ", " une ", " dans ", " avec ", " sont ")):
+        return "fr"
+    if re.search(r"[ñ¿¡]", s) or any(w in s_low for w in (" los ", " las ", " una ", " para ", " por ", " con ")):
+        return "es"
+    if re.search(r"[ãõÃÕ]", s) or any(w in s_low for w in (" não ", " são ", " uma ", " dos ", " das ")):
+        return "pt"
+    if any(w in s_low for w in (" degli ", " della ", " nella ", " sono ", " gli ")):
+        return "it"
+    if any(w in s_low for w in (" het ", " een ", " van ", " voor ", " met ", " zijn ")):
+        return "nl"
+    if any(w in s_low for w in (" yang ", " dan ", " untuk ", " dengan ", " pada ", " dari ")):
+        return "id"
+    return "en"
+

@@ -103,10 +103,7 @@ class FormulaIsolator:
 
         use_words = bool(word_tokens)
         if use_words:
-            # Sort by the 3pt-baseline-cluster line index (not a coarse y-bucket:
-            # sub/superscript words sit a few points lower and a y-bucket sort
-            # scrambles them out of their formula group).
-            items = sorted(word_tokens, key=lambda w: (w.line_index, w.bbox[0]))
+            items = list(word_tokens)
         else:
             items = sorted(block.spans, key=lambda s: (round(s.bbox[1] / 8.0) * 8.0, s.bbox[0]))
 
@@ -119,51 +116,180 @@ class FormulaIsolator:
         n = len(items)
         i = 0
 
+        def _paren_closes_in_math(start_idx: int) -> bool:
+            depth = 0
+            for k in range(start_idx, n):
+                if abs(items[k].bbox[1] - items[start_idx].bbox[1]) > 8.0 and k > start_idx:
+                    break
+                t_k = items[k].text
+                is_m = is_math_list[k] or bool(re.match(r"^[\d\s.,:;+=\-*/!_~^…≤≥()\[\]{}|]+$", t_k))
+                if not is_m and depth > 0:
+                    return False
+                depth += t_k.count("(") - t_k.count(")")
+                if depth <= 0 and "(" in items[start_idx].text:
+                    return True
+                if not is_m:
+                    break
+            return False
+
         while i < n:
             span = items[i]
             # Check if this span is math or starts a math expression
-            # A leading number/operator can start a math group if directly followed by a math span
+            # A leading number/operator can start a math group if directly followed by a math span on the same line
             starts_math = is_math_list[i]
             if not starts_math and i + 1 < n and is_math_list[i + 1]:
                 txt_strip = span.text.strip()
-                if txt_strip and re.match(r"^[\d.,:;+=\-*/_~^…≤≥()\[\]{}]+$", txt_strip) and len(txt_strip) <= 6:
-                    starts_math = True
+                same_line = (
+                    abs(span.bbox[1] - items[i + 1].bbox[1]) <= 6.0
+                    and -1.0 <= (items[i + 1].bbox[0] - span.bbox[2]) <= 6.0
+                )
+                if (
+                    same_line
+                    and txt_strip
+                    and not txt_strip.endswith((",", ";", ":", ".", "…"))
+                    and re.match(r"^[\d+=\-*/_~^≤≥()\[\]{}|]+$", txt_strip)
+                    and len(txt_strip) <= 6
+                ):
+                    if "(" in txt_strip and ")" not in txt_strip:
+                        starts_math = _paren_closes_in_math(i)
+                    else:
+                        starts_math = True
 
             if starts_math:
                 j = i
                 group = []
+                open_paren_balance = 0
                 while j < n:
+                    it_j = items[j]
+                    txt_j = it_j.text.strip()
+                    ref_prev = group[-1] if group else it_j
+                    # If group already has balanced parens and items[j] opens a new '(' that does not close before prose
+                    # (e.g. "k=tanα (α là góc...)" or "(-1)S × (1 + Fraction)"), break before '('
+                    if (
+                        group
+                        and open_paren_balance <= 0
+                        and txt_j.startswith("(")
+                        and it_j.text.count("(") > it_j.text.count(")")
+                        and not _paren_closes_in_math(j)
+                    ):
+                        break
+
                     if is_math_list[j]:
-                        group.append(items[j])
+                        group.append(it_j)
+                        open_paren_balance += it_j.text.count("(") - it_j.text.count(")")
                         j += 1
-                    elif not items[j].text.strip() and j + 1 < n and is_math_list[j + 1]:
-                        group.append(items[j])
+                    elif not txt_j and j + 1 < n and is_math_list[j + 1]:
+                        group.append(it_j)
                         j += 1
                     elif (
-                        j + 1 < n and is_math_list[j + 1] and
-                        re.match(r"^[\d\s.,:;+=\-*/_~^…≤≥()\[\]{}]+$", items[j].text) and
-                        len(items[j].text.strip()) <= 6
+                        group
+                        and open_paren_balance > 0
+                        and txt_j.startswith(")")
+                        and abs(it_j.bbox[1] - ref_prev.bbox[1]) <= 6.0
+                        and (it_j.bbox[0] - ref_prev.bbox[2]) <= 4.0
                     ):
-                        group.append(items[j])
+                        group.append(it_j)
+                        open_paren_balance += it_j.text.count("(") - it_j.text.count(")")
+                        j += 1
+                    elif (
+                        group
+                        and txt_j == "!"
+                        and abs(it_j.bbox[1] - ref_prev.bbox[1]) <= 6.0
+                        and (it_j.bbox[0] - ref_prev.bbox[2]) <= 3.0
+                    ):
+                        group.append(it_j)
+                        j += 1
+                    elif (
+                        j + 1 < n
+                        and is_math_list[j + 1]
+                        and abs(it_j.bbox[1] - ref_prev.bbox[1]) <= 6.0
+                        and abs(items[j + 1].bbox[1] - it_j.bbox[1]) <= 6.0
+                        and re.match(r"^[\d\s.,:;+=\-*/!_~^…≤≥()\[\]{}|]+$", it_j.text)
+                        and len(txt_j) <= 6
+                        and not (txt_j in (",", ";", ":") and "(" in items[j + 1].text)
+                    ):
+                        if "(" in txt_j and ")" not in txt_j and not _paren_closes_in_math(j):
+                            break
+                        group.append(it_j)
+                        open_paren_balance += it_j.text.count("(") - it_j.text.count(")")
                         j += 1
                     else:
                         break
 
-                raw_content = "".join(s.text for s in group).strip()
+                if use_words and len(group) > 1:
+                    parts_g: list[str] = [group[0].text]
+                    for k_idx in range(1, len(group)):
+                        prev_g = group[k_idx - 1]
+                        curr_g = group[k_idx]
+                        gap_x = curr_g.bbox[0] - prev_g.bbox[2]
+                        ref_sz = getattr(prev_g, "font_size", 10.0) or 10.0
+                        is_rel_boundary = (
+                            curr_g.text.startswith(("=", "<", ">", "≤", "≥", "≠", "≈"))
+                            or prev_g.text.endswith(("=", "<", ">", "≤", "≥", "≠", "≈"))
+                        )
+                        if (
+                            prev_g.text.endswith((",", ";", ":"))
+                            or (not is_rel_boundary and gap_x >= max(2.2, ref_sz * 0.20))
+                        ):
+                            parts_g.append(" ")
+                        parts_g.append(curr_g.text)
+                    raw_content = "".join(parts_g).strip()
+                else:
+                    raw_content = "".join(s.text for s in group).strip()
+
+                # Peel unmatched leading opening brackets and trailing clause punctuation / unmatched closing brackets
+                orig_len = max(1, len(raw_content))
+                prefix_peeled = ""
+                suffix_peeled = ""
+
+                while raw_content and raw_content[0] == "(" and raw_content.count("(") > raw_content.count(")"):
+                    prefix_peeled += "("
+                    raw_content = raw_content[1:].lstrip()
+                while raw_content and raw_content[0] == "[" and raw_content.count("[") > raw_content.count("]"):
+                    prefix_peeled += "["
+                    raw_content = raw_content[1:].lstrip()
+
+                while len(raw_content) > 1:
+                    if raw_content.endswith((",", ";", ":")) or (
+                        raw_content.endswith(".") and not raw_content.endswith("..")
+                    ):
+                        suffix_peeled = raw_content[-1] + suffix_peeled
+                        raw_content = raw_content[:-1].rstrip()
+                    elif raw_content.endswith(")") and raw_content.count(")") > raw_content.count("("):
+                        suffix_peeled = ")" + suffix_peeled
+                        raw_content = raw_content[:-1].rstrip()
+                    elif raw_content.endswith("]") and raw_content.count("]") > raw_content.count("["):
+                        suffix_peeled = "]" + suffix_peeled
+                        raw_content = raw_content[:-1].rstrip()
+                    else:
+                        break
+
+                if not raw_content:
+                    masked_parts.append("".join(s.text for s in group))
+                    i = j
+                    continue
+
                 placeholder = f"<b{token_id_counter}></b{token_id_counter}>"
                 min_x0 = min(s.bbox[0] for s in group)
                 min_y0 = min(s.bbox[1] for s in group)
                 max_x1 = max(s.bbox[2] for s in group)
                 max_y1 = max(s.bbox[3] for s in group)
+                total_w = max(0.0, max_x1 - min_x0)
+                if prefix_peeled and total_w > 2.0:
+                    min_x0 += total_w * (len(prefix_peeled) / orig_len)
+                if suffix_peeled and total_w > 2.0:
+                    max_x1 -= total_w * (len(suffix_peeled) / orig_len)
+
                 token = FormulaToken(
                     token_id=token_id_counter,
                     placeholder=placeholder,
                     raw_content=raw_content,
-                    bbox=(min_x0, min_y0, max_x1, max_y1),
+                    bbox=(min_x0, min_y0, max(min_x0 + 1.0, max_x1), max_y1),
                     font_name=group[0].font_name,
                 )
                 tokens.append(token)
-                masked_parts.append(f" {placeholder} ")
+                piece = f"{prefix_peeled} {placeholder} {suffix_peeled}".strip()
+                masked_parts.append(f" {piece} ")
                 token_id_counter += 1
                 i = j
             else:
@@ -186,6 +312,14 @@ class FormulaIsolator:
         from layoutlingua.processing.dehyphen import dehyphenate_text
 
         masked_text = dehyphenate_text(masked_text)
+
+        # Strip trailing TOC dot-leader + optional page number before NMT so providers
+        # only translate the clean heading and never truncate or drop page numbers.
+        m_toc_raw = re.search(r"^(.*?\S)(\s*[\.\…]{3,}\s*(?:\d+\s*)?)$", raw_text.strip())
+        if m_toc_raw:
+            masked_text = re.sub(r"\s*[\.\…]{3,}\s*(?:<b\d+></b\d+>\s*|\d+\s*)?$", "", masked_text).strip()
+            if tokens and re.match(r"^[\.\…\s\d]+$", tokens[-1].raw_content) and tokens[-1].placeholder not in masked_text:
+                tokens.pop()
 
         return TextSegment(
             segment_id=block.block_id,
@@ -304,8 +438,44 @@ class FormulaIsolator:
 
         result = clean_text
         for token in segment.tokens:
-            result = result.replace(token.placeholder, token.raw_content)
+            result = result.replace(token.placeholder, f"⟦RESTORED_{token.token_id}⟧")
 
-        # Final safety cleanup: remove any leftover deformed XML tag artifacts
-        result = re.sub(r"<\s*/?\s*b\d*[^>]*>", "", result)
+        # Remove any leftover deformed XML placeholder tags BEFORE restoring math content
+        # so math inequalities like 'a<b then b>a' are never matched as '<b...>' tags.
+        result = re.sub(r"<\s*/?\s*b\d+\s*>", "", result, flags=re.IGNORECASE)
+
+        for token in segment.tokens:
+            marker = f"⟦RESTORED_{token.token_id}⟧"
+            ph = token.placeholder
+            had_leading_space = bool(re.search(r"\s" + re.escape(ph), segment.masked_text))
+            had_trailing_space = bool(re.search(re.escape(ph) + r"\s", segment.masked_text))
+            if had_leading_space:
+                result = re.sub(r"(?<=[^\W_])" + re.escape(marker), " " + marker, result)
+            if had_trailing_space:
+                result = re.sub(re.escape(marker) + r"(?=[^\W_])", marker + " ", result)
+            result = result.replace(marker, token.raw_content)
+
+        # Typography & punctuation spacing cleanup around restored math tokens:
+        # 1. Remove artificial spaces before punctuation/closing brackets and after opening brackets
+        result = re.sub(r"\s+([,.;:!?)\]])", r"\1", result)
+        result = re.sub(r"([(\[])\s+", r"\1", result)
+        # 2. Ensure a space after semicolons when followed by non-space
+        result = re.sub(r";(?=\S)", "; ", result)
+        # 3. Ensure a space after commas when followed by letters, Greek symbols, ellipsis, or comparisons (preserving decimal commas like 1,566)
+        result = re.sub(r",(?=[A-Za-zα-ωΑ-Ω…(])", ", ", result)
+        result = re.sub(r",(?=\d+\s*[<>≠=≤≥])", ", ", result)
+        # 4. Normalize asymmetric spacing around binary comparison operators (e.g. 'b≠ 1' -> 'b≠1')
+        result = re.sub(r"(?<=\S)([≠≤≥<>])\s+(?=\S)", r"\1", result)
+        # 5. Collapse excess spaces after section/list markers (e.g. 'A.     不定积分' -> 'A. 不定积分', '1 .  定义' -> '1. 定义')
+        result = re.sub(r"^(\s*(?:[IVXLCDM]+|\d+|[A-Za-z]))\s*([.)])\s+", r"\1\2 ", result)
+        # 6. Tighten internal spaces inside coordinate tuples (e.g. '( 0 , c )' -> '(0, c)')
+        result = re.sub(r"\(\s*([0-9a-zA-Z′']+)\s*,\s*([0-9a-zA-Z′']+)\s*\)", r"(\1, \2)", result)
+
+        # Re-attach any TOC dot-leader + page number suffix stripped prior to NMT
+        m_toc_raw = re.search(r"^(.*?\S)(\s*[\.\…]{3,}\s*(?:\d+\s*)?)$", segment.raw_text.strip())
+        if m_toc_raw:
+            toc_suffix = m_toc_raw.group(2)
+            result_clean = re.sub(r"\s*[\.\…]{2,}\s*(?:\d+\s*)?$", "", result.strip()).strip()
+            result = f"{result_clean}{toc_suffix}"
+
         return result
