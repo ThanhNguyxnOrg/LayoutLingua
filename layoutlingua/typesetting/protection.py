@@ -122,6 +122,17 @@ def compute_tight_line_clearance_regions(
         x0, y0, x1, y1 = block.bbox
         return [(x0 - padding, y0 - padding, x1 + padding, y1 + padding)]
 
+    # Detect 90°/270° rotated vertical text lines (narrow width, tall height, vertical origin progression)
+    bw = block.bbox[2] - block.bbox[0]
+    bh = block.bbox[3] - block.bbox[1]
+    if bh > max(24.0, bw * 2.5) and bw <= 28.0:
+        x0 = min(c.bbox[0] for c in all_chars) - padding
+        y0 = min(c.bbox[1] for c in all_chars) - padding
+        x1 = max(c.bbox[2] for c in all_chars) + padding
+        y1 = max(c.bbox[3] for c in all_chars) + padding
+        if x1 > x0 and y1 > y0:
+            return [(x0, y0, x1, y1)]
+
     # Cluster characters by baseline alignment (within 3.5pt) and horizontal proximity (within 4.5pt)
     clusters: list[dict[str, Any]] = []
     for c in all_chars:
@@ -160,6 +171,49 @@ def compute_tight_line_clearance_regions(
         return [(x0 - padding, y0 - padding, x1 + padding, y1 + padding)]
 
     return tight_rects
+
+
+def clip_clearance_rects_against_formulas(
+    tight_rects: list[tuple[float, float, float, float]],
+    exclusion_zones: list[ExclusionZone],
+    max_edge_trim: float = 2.0,
+    min_keep_x1: float = 0.0,
+) -> list[tuple[float, float, float, float]]:
+    """Trim clearance rect padding edges away from adjacent formula exclusion zones (BabelDOC / ts-engine pattern).
+
+    Only trims minor boundary padding contact (<= max_edge_trim) so genuine interior formula collisions
+    are still caught by `_check_block_collision`.
+    """
+    clipped: list[tuple[float, float, float, float]] = []
+    formula_zones = [
+        z for z in exclusion_zones
+        if z.zone_type in (ExclusionZoneType.FORMULA, ExclusionZoneType.ADJACENT_TEXT)
+    ]
+    for rx0, ry0, rx1, ry1 in tight_rects:
+        for fz in formula_zones:
+            fx0, fy0, fx1, fy1 = fz.bbox
+            v_ov = min(ry1, fy1) - max(ry0, fy0)
+            h_ov = min(rx1, fx1) - max(rx0, fx0)
+            if v_ov > 0.5:
+                # Formula immediately to the left of prose rect
+                if fx0 < rx0 < fx1 and (fx1 - rx0) <= max_edge_trim:
+                    rx0 = min(rx1 - 2.0, fx1 + 0.3)
+                # Formula immediately to the right of prose rect
+                if fx0 < rx1 < fx1 and (rx1 - fx0) <= max_edge_trim:
+                    target_rx1 = fx0 - 0.3
+                    if min_keep_x1 > target_rx1 and (min_keep_x1 - fx0) <= 1.8:
+                        target_rx1 = min_keep_x1
+                    rx1 = max(rx0 + 2.0, target_rx1)
+            if h_ov > 0.5:
+                # Formula immediately above prose rect
+                if fy0 < ry0 < fy1 and (fy1 - ry0) <= max_edge_trim:
+                    ry0 = min(ry1 - 2.0, fy1 + 0.3)
+                # Formula immediately below prose rect
+                if fy0 < ry1 < fy1 and (ry1 - fy0) <= max_edge_trim:
+                    ry1 = max(ry0 + 2.0, fy0 - 0.3)
+        if rx1 > rx0 and ry1 > ry0:
+            clipped.append((rx0, ry0, rx1, ry1))
+    return clipped or tight_rects
 
 
 def is_background_container(
@@ -247,7 +301,23 @@ class ClearancePlanner:
 
         # Evaluate each candidate block independently on pristine geometry
         for block in candidate_blocks:
-            tight_line_rects = compute_tight_line_clearance_regions(block, padding=self.padding_pt)
+            raw_tight_rects = compute_tight_line_clearance_regions(block, padding=self.padding_pt)
+            vni_diacritic_x1 = max(
+                (
+                    c.bbox[2]
+                    for s in block.spans
+                    if "vni" in (s.font_name or "").lower()
+                    for c in (s.chars or ())
+                    if not c.char.isspace() and (c.bbox[2] - c.bbox[0]) <= 1.2
+                ),
+                default=0.0,
+            )
+            tight_line_rects = clip_clearance_rects_against_formulas(
+                raw_tight_rects,
+                exclusion_zones,
+                max_edge_trim=max(1.8, self.padding_pt * 2.5),
+                min_keep_x1=vni_diacritic_x1,
+            )
             layout_box = block.bbox
 
             collision = self._check_block_collision(
@@ -385,6 +455,10 @@ class ClearancePlanner:
                 matching_block = block_by_id.get(
                     r.region_id.replace("_region_", "_block_")
                 )
+                if matching_block is not None and matching_block.block_type != "formula":
+                    continue
+                if matching_block is None and getattr(r, "source", "") == "pymupdf":
+                    continue
                 if matching_block and matching_block.spans:
                     f_line_rects = compute_tight_line_clearance_regions(matching_block, padding=self.padding_pt)
                     for l_idx, l_rect in enumerate(f_line_rects):
@@ -531,8 +605,53 @@ class ClearancePlanner:
                             continue
 
                         stroke_w = float(drawing.get("width") or 1.0)
-                        # Expand stroke bounds so horizontal/vertical lines have real visual geometry
                         half_w = max(stroke_w / 2.0, 0.5) if drawing.get("color") or drawing.get("type") in ("s", "fs") else 0.0
+
+                        # Decompose multi-segment unfilled stroked paths (table grids, register bit-field frames,
+                        # callout borders) into their actual 1D stroke segments so the hollow interior of a table
+                        # grid is not treated as a solid 2D obstacle.
+                        if (
+                            d_fill is None
+                            and len(d_items) >= 2
+                            and all(it and it[0] in ("l", "re") for it in d_items)
+                        ):
+                            for seg_idx, it in enumerate(d_items):
+                                kind = it[0]
+                                if kind == "l" and len(it) >= 3:
+                                    p1, p2 = it[1], it[2]
+                                    sx0, sx1 = min(float(p1.x), float(p2.x)), max(float(p1.x), float(p2.x))
+                                    sy0, sy1 = min(float(p1.y), float(p2.y)), max(float(p1.y), float(p2.y))
+                                    zones.append(
+                                        ExclusionZone(
+                                            zone_id=f"drawing_{d_idx}",
+                                            zone_type=ExclusionZoneType.VECTOR_ART,
+                                            bbox=(sx0 - half_w, sy0 - half_w, sx1 + half_w, sy1 + half_w),
+                                            source_id=str(d_idx),
+                                            confidence=1.0,
+                                            metadata={**drawing, "is_1d_stroke": True, "seg_idx": seg_idx},
+                                        )
+                                    )
+                                elif kind == "re" and len(it) >= 2:
+                                    r_box = it[1]
+                                    rx0, ry0, rx1, ry1 = float(r_box.x0), float(r_box.y0), float(r_box.x1), float(r_box.y1)
+                                    for edge_idx, edge_rect in enumerate((
+                                        (rx0 - half_w, ry0 - half_w, rx1 + half_w, ry0 + half_w),
+                                        (rx0 - half_w, ry1 - half_w, rx1 + half_w, ry1 + half_w),
+                                        (rx0 - half_w, ry0 - half_w, rx0 + half_w, ry1 + half_w),
+                                        (rx1 - half_w, ry0 - half_w, rx1 + half_w, ry1 + half_w),
+                                    )):
+                                        zones.append(
+                                            ExclusionZone(
+                                                zone_id=f"drawing_{d_idx}",
+                                                zone_type=ExclusionZoneType.VECTOR_ART,
+                                                bbox=edge_rect,
+                                                source_id=str(d_idx),
+                                                confidence=1.0,
+                                                metadata={**drawing, "is_1d_stroke": True, "seg_idx": f"{seg_idx}_{edge_idx}"},
+                                            )
+                                        )
+                            continue
+
                         rect_tuple = (
                             float(d_rect.x0) - half_w,
                             float(d_rect.y0) - half_w,
@@ -584,10 +703,27 @@ class ClearancePlanner:
                     continue
 
                 # Not a background container: check if drawing intersects tight clearance lines
-                dw = zone.bbox[2] - zone.bbox[0]
-                dh = zone.bbox[3] - zone.bbox[1]
-                vector_tol = 1.2 if (dh <= 2.5 or dw <= 2.5) else 0.5
-                intersects_clearance = any(rects_intersect(line_rect, zone.bbox, tolerance=vector_tol) for line_rect in tight_line_rects)
+                zx0, zy0, zx1, zy1 = zone.bbox
+                dw = zx1 - zx0
+                dh = zy1 - zy0
+
+                def _line_collides_with_vector(line_rect: tuple[float, float, float, float]) -> bool:
+                    rx0, ry0, rx1, ry1 = line_rect
+                    if dh <= 3.5 and dw > 3.5:
+                        # 1D horizontal stroke: only a collision if it cuts through the vertical interior
+                        # of the text line (not merely grazing the top/bottom cell border).
+                        zy_mid = (zy0 + zy1) * 0.5
+                        h_ov = min(rx1, zx1) - max(rx0, zx0)
+                        return h_ov > 4.0 and (ry0 + 2.2 < zy_mid < ry1 - 2.2)
+                    if dw <= 3.5 and dh > 3.5:
+                        # 1D vertical stroke: only a collision if it cuts through the horizontal interior
+                        # of the text line (not merely grazing the left/right cell border).
+                        zx_mid = (zx0 + zx1) * 0.5
+                        v_ov = min(ry1, zy1) - max(ry0, zy0)
+                        return v_ov > 3.5 and (rx0 + 2.5 < zx_mid < rx1 - 2.5)
+                    return rects_intersect(line_rect, zone.bbox, tolerance=0.5)
+
+                intersects_clearance = any(_line_collides_with_vector(line_rect) for line_rect in tight_line_rects)
                 if intersects_clearance:
                     return CollisionDetail(
                         collision_type=ExclusionZoneType.VECTOR_ART.value,

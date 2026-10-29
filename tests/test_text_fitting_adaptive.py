@@ -1,4 +1,4 @@
-﻿"""Unit tests for adaptive text fitting, lineheight micro-compaction, and soft margin absorption."""
+"""Unit tests for adaptive text fitting, lineheight micro-compaction, and soft margin absorption."""
 
 from layoutlingua.typesetting.fitting import TextFitTester
 from layoutlingua.typesetting.fonts import FontManager

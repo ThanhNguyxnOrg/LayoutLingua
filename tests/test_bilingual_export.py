@@ -1,4 +1,4 @@
-﻿"""Unit tests for bilingual alternating PDF export."""
+"""Unit tests for bilingual alternating PDF export."""
 
 import pymupdf
 from layoutlingua.typesetting.accumulator import DocumentAccumulator

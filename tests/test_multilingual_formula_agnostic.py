@@ -4,7 +4,7 @@ Verifies that layoutlingua.core does not rely on language-specific stopword dict
 and correctly handles English, Vietnamese, French, German, Spanish, Russian, and Chinese.
 """
 
-import pytest
+import unittest
 
 from layoutlingua.core.ir import GlyphSpan, TextBlock
 from layoutlingua.core.parser import (
@@ -93,3 +93,12 @@ def test_table_validator_config_dataclass():
     validator = TableGridValidator(config=cfg)
     assert validator.tolerance_pt == 3.5
     assert validator.min_edge_coverage == 0.85
+
+
+class TestMultilingualFormulaAgnostic(unittest.TestCase):
+    def test_all(self) -> None:
+        test_language_agnostic_prose_extraction_multilingual()
+        test_multilingual_formula_equations_have_zero_prose()
+        test_parser_config_dataclass_customization()
+        test_table_validator_config_dataclass()
+

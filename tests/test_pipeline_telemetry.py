@@ -1,10 +1,10 @@
-import pytest
+import unittest
 from layoutlingua.processing.telemetry import ExponentialMovingAverage, PipelineProgressTracker
 
 
 def test_ema_rate_smoothing():
     ema = ExponentialMovingAverage(smoothing=0.25, initial_rate=10.0)
-    assert ema.value == pytest.approx(10.0, rel=1e-2)
+    assert abs(ema.value - 10.0) < 0.1
 
     # Extreme instant spike from an empty page (e.g. 500 pages/s)
     val = ema.update(500.0)
@@ -67,3 +67,12 @@ def test_overall_pct_monotonic():
     # Strictly non-decreasing
     for i in range(len(pcts) - 1):
         assert pcts[i] <= pcts[i + 1]
+
+
+class TestPipelineTelemetry(unittest.TestCase):
+    def test_all(self) -> None:
+        test_ema_rate_smoothing()
+        test_pipeline_tracker_stage3_realistic_eta()
+        test_pipeline_tracker_stage2_segments()
+        test_overall_pct_monotonic()
+

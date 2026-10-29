@@ -1,7 +1,9 @@
 """Tests for ONNX vision layout detection module."""
 
+import tempfile
+import unittest
+from pathlib import Path
 import numpy as np
-import pytest
 
 from layoutlingua.core.ir import GlyphSpan
 from layoutlingua.processing.vision import (
@@ -159,4 +161,15 @@ def test_parse_pdf_with_layout_detector(tmp_path) -> None:
     assert onnx_regions[0].confidence == 0.98
     # 100 * (72 / 150) = 48.0 pt
     assert abs(onnx_regions[0].bbox[0] - 48.0) < 0.1
+
+
+class TestOnnxDetector(unittest.TestCase):
+    def test_all(self) -> None:
+        test_onnx_detector_availability_without_model()
+        test_onnx_detector_letterbox_and_preprocess()
+        test_onnx_detector_postprocess_direct_format()
+        test_onnx_detector_postprocess_center_format()
+        test_classify_spans_into_layout_categories()
+        with tempfile.TemporaryDirectory() as td:
+            test_parse_pdf_with_layout_detector(Path(td))
 

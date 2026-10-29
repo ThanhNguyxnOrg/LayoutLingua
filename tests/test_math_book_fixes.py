@@ -12,8 +12,8 @@ Covers:
 
 from __future__ import annotations
 
+import unittest
 import pymupdf
-import pytest
 
 from layoutlingua.core.ir import GlyphSpan, TextBlock, PageGeometry, PageIR
 from layoutlingua.core.parser import parse_pdf, _is_pure_formula_block
@@ -169,4 +169,14 @@ def test_clearance_side_by_side_symbol_table_no_false_collision():
 
     assert plan.decisions["desc_block"].is_approved is True
     assert plan.decisions["desc_block"].collision_detail is None
+
+
+class TestMathBookFixes(unittest.TestCase):
+    def test_all(self) -> None:
+        test_symbol_pua_to_unicode_mapping()
+        test_dejavusans_has_greek_and_math_glyphs()
+        test_pure_formula_fragment_detection()
+        test_formula_isolator_groups_connected_math()
+        test_clearance_mutual_interaction_tolerance()
+        test_clearance_side_by_side_symbol_table_no_false_collision()
 

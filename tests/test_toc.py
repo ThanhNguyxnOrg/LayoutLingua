@@ -1,4 +1,4 @@
-﻿"""Unit tests for PDF Table of Contents (bookmarks) translation."""
+"""Unit tests for PDF Table of Contents (bookmarks) translation."""
 
 import pymupdf
 from layoutlingua.processing.toc import translate_toc

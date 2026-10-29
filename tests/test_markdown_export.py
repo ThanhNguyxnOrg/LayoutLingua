@@ -1,4 +1,4 @@
-﻿"""Unit tests for clean Markdown document export."""
+"""Unit tests for clean Markdown document export."""
 
 from layoutlingua.core.ir import DocumentIR, PageIR, TextBlock, GlyphSpan, PageGeometry
 from layoutlingua.processing.markdown_export import export_document_markdown
