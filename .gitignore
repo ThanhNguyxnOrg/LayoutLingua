@@ -1,64 +1,13 @@
-# Python & Virtual Environments
-.venv/
-.venv*/
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
 .pytest_cache/
-.ruff_cache/
-
-# Node, Electron & UI Build Artifacts
-node_modules/
-**/node_modules/
-dist/
-dist-electron/
-build/
-out/
-release/
-.vite/
-.turbo/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# Application Runtime Output & Session Cache
-.cache/
-output/
-tmp/
-scratch/
-translated/
-public/assets/aistudio/
-*.log
-pdf-translate.log
-*.zip
-
-# Editor & OS Artifacts
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Agent & Local Overrides
-/CLAUDE.local.md
-/.claude/settings.local.json
-.agents/
-skills-lock.json
-
-# Desktop Application Builds
-desktop/node_modules/
-desktop/dist/
-desktop/src-tauri/target/
-*.exe
-*.msi
-test_*.pdf
-tests/test_live_output.png
-translated_*.png
-hard_testcase_*.pdf
-hard_testcase_*.png
+.layoutlingua_cache/
 
