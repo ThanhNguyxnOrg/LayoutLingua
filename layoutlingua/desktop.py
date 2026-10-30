@@ -155,12 +155,21 @@ def launch_desktop_app(port: int | None = None) -> int:
     app_url = f"http://127.0.0.1:{actual_port}/"
     window_title = "LayoutLingua — AI Document Translation Studio"
 
-    # Resolve application brand icon
-    brand_icon = root_dir / "public" / "icon.ico"
-    if not brand_icon.is_file():
-        brand_icon = root_dir / "layoutlingua" / "resources" / "icon.ico"
-    if not brand_icon.is_file():
+    # Resolve application brand icon per platform
+    if sys.platform.startswith("linux"):
         brand_icon = root_dir / "public" / "logo.png"
+        if not brand_icon.is_file():
+            brand_icon = root_dir / "layoutlingua" / "resources" / "logo.png"
+    elif sys.platform == "darwin":
+        brand_icon = root_dir / "public" / "icon.icns"
+        if not brand_icon.is_file():
+            brand_icon = root_dir / "public" / "logo.png"
+    else:
+        brand_icon = root_dir / "public" / "icon.ico"
+        if not brand_icon.is_file():
+            brand_icon = root_dir / "layoutlingua" / "resources" / "icon.ico"
+        if not brand_icon.is_file():
+            brand_icon = root_dir / "public" / "logo.png"
 
     try:
         # 1. Primary: Native OS WebView window via pywebview (WebView2 on Windows, WebKit on macOS)

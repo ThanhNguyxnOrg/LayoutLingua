@@ -219,6 +219,9 @@ jobs:
           if [ -d "release/LayoutLingua.app" ]; then
             cp -r release/LayoutLingua.app dmg_stage/
           fi
+          cp public/icon.icns dmg_stage/.VolumeIcon.icns 2>/dev/null || true
+          SetFile -c icnC dmg_stage/.VolumeIcon.icns 2>/dev/null || true
+          SetFile -a C dmg_stage 2>/dev/null || true
           ln -s /Applications dmg_stage/Applications
 
           hdiutil create -volname "LayoutLingua" -srcfolder dmg_stage -ov -format UDZO "dist-release/LayoutLingua-macos-${{ matrix.arch }}.dmg"
