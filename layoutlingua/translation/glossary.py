@@ -300,10 +300,10 @@ class GlossaryManager:
 
                 def _replace_match(m: re.Match) -> str:
                     matched_str = m.group(0)
-                    if matched_str and matched_str[0].isupper() and len(replacement) > 1:
-                        return replacement[0].upper() + replacement[1:]
-                    elif matched_str.isupper() and len(matched_str) > 1:
+                    if matched_str.isupper() and len(matched_str) > 1:
                         return replacement.upper()
+                    elif matched_str and matched_str[0].isupper() and len(replacement) > 1:
+                        return replacement[0].upper() + replacement[1:]
                     return replacement
 
                 processed_part = pattern.sub(_replace_match, processed_part)
@@ -347,6 +347,17 @@ class GlossaryManager:
         ("tiện cận", re.compile(r"\bnearsight\b", re.IGNORECASE), "asymptote"),
         ("khai triển", re.compile(r"\bdevelopment\b", re.IGNORECASE), "expansion"),
         ("khối tròn xoay", re.compile(r"\bcircular block\b", re.IGNORECASE), "solid of revolution"),
+        ("công thức hạ bậc", re.compile(r"\bdowngrade formulas?\b", re.IGNORECASE), "power-reduction formulas"),
+        ("thể tích và diện tích xung quanh", re.compile(r"\bvolume and surrounding area\b", re.IGNORECASE), "volume and lateral surface area"),
+        ("đạo hàm và vi phân", re.compile(r"\bdifferential and differential\b", re.IGNORECASE), "derivatives and differentials"),
+        ("cấp số; một số tổng hữu hạn", re.compile(r"\bnumber progression;\s*some finite sums?\b", re.IGNORECASE), "progressions; some finite sums"),
+        ("biến đổi tổng và hiệu của hai hàm số lượng giác", re.compile(r"\btransform the sum and difference of two trigonometric functions\b", re.IGNORECASE), "sum-to-product formulas"),
+        ("biến đổi tích của hai hàm số lượng giác", re.compile(r"\btransform the product of two trigonometric functions\b", re.IGNORECASE), "product-to-sum formulas"),
+        ("góc phẳng", re.compile(r"\bflat corners?\b", re.IGNORECASE), "plane angle"),
+        ("đơn vị ảo", re.compile(r"\bvirtual units?\b", re.IGNORECASE), "imaginary unit"),
+        ("nhân", re.compile(r"\bhuman\b", re.IGNORECASE), "multiplication"),
+        ("cung", re.compile(r"\bpalace\b", re.IGNORECASE), "arc"),
+        ("bằng", re.compile(r"\bdegree\b", re.IGNORECASE), "equal to"),
     )
 
     _MT_POLYSEMY_HEALING_VI_RU: tuple[tuple[str, re.Pattern, str], ...] = (
@@ -361,6 +372,9 @@ class GlossaryManager:
         ("đoạn thẳng", re.compile(r"\bсегмент линии\b", re.IGNORECASE), "отрезок"),
         ("trong đó", re.compile(r"\bв этом\b", re.IGNORECASE), "где"),
         ("trong đo", re.compile(r"\bв измерении жужжания\b", re.IGNORECASE), "где"),
+        ("bằng", re.compile(r"\bстепень\b", re.IGNORECASE), "равно"),
+        ("nhân", re.compile(r"\bчеловек\b", re.IGNORECASE), "умножение"),
+        ("cung", re.compile(r"\bпоклон\b", re.IGNORECASE), "дуга"),
     )
 
     @classmethod
@@ -386,17 +400,26 @@ class GlossaryManager:
         uses_xml_tags = bool(re.search(r"<b\d+></b\d+>", result))
         anchor_src = re.sub(r"<b(\d+)></b\1>", r"⟦LL_FORMULA_\1⟧", masked_source_text or source_text)
         result_opaque = re.sub(r"<b(\d+)></b\1>", r"⟦LL_FORMULA_\1⟧", result)
+        m_toc_res = re.search(r"(\s*[\.\…]{2,}\s*(?:\d+\s*)?)$", result.strip())
 
         # 0. Exact standalone phrase match (ignoring outer whitespace, section/list prefixes like '3. ' or 'a) ',
-        # surrounding formula placeholders ⟦LL_FORMULA_k⟧, and trailing punctuation or index page references like ' · 29')
+        # surrounding formula placeholders ⟦LL_FORMULA_k⟧, and trailing punctuation, dot leaders, or index page references)
         for cand_src in (anchor_src, source_text) if anchor_src != source_text else (source_text,):
             m_outer = re.match(
-                r"^(\s*(?:(?:\d+|[a-zA-Z]|[IVXLCDM]+)[\.\)]\s+|[•\-\*]\s+|[\(\[\{\.\,\:\;\—\–\-]\s*|⟦LL_FORMULA_\d+⟧\s*)*)([^\s⟦⟧].*?[^\s⟦⟧]|[^\s⟦⟧])(\s*(?:⟦LL_FORMULA_\d+⟧\s*|[·•]\s*\d+(?:\s*,\s*\d+)*|[\:\.\,;!\?\)\]\}])*\s*)$",
+                r"^(\s*(?:(?:\d+|[a-zA-Z]|[IVXLCDM]+)[\.\)]\s+|[•\-\*]\s+|[\(\[\{\.\,\:\;\—\–\-]\s*|⟦LL_FORMULA_\d+⟧\s*)*)([^\s⟦⟧].*?[^\s⟦⟧]|[^\s⟦⟧])(\s*(?:⟦LL_FORMULA_\d+⟧\s*|[·•]\s*\d+(?:\s*,\s*\d+)*|[\.\…]{2,}\s*\d+(?:\s*,\s*\d+)*|[\.\…]{3,}|[\:\.\,;!\?\)\]\}])*\s*)$",
                 cand_src,
                 re.DOTALL,
             )
             if m_outer:
                 lead_punct, core_src, trail_punct = m_outer.group(1), m_outer.group(2), m_outer.group(3)
+                while core_src.count("(") > core_src.count(")") and trail_punct.lstrip().startswith(")"):
+                    idx_p = trail_punct.find(")")
+                    core_src = core_src + trail_punct[: idx_p + 1]
+                    trail_punct = trail_punct[idx_p + 1 :]
+                while core_src.count("[") > core_src.count("]") and trail_punct.lstrip().startswith("]"):
+                    idx_b = trail_punct.find("]")
+                    core_src = core_src + trail_punct[: idx_b + 1]
+                    trail_punct = trail_punct[idx_b + 1 :]
                 if "⟦LL_FORMULA_" not in core_src:
                     src_formulas = re.findall(r"⟦LL_FORMULA_\d+⟧", cand_src)
                     res_formulas = re.findall(r"⟦LL_FORMULA_\d+⟧", result_opaque)
@@ -404,17 +427,19 @@ class GlossaryManager:
                         core_lower = core_src.lower()
                         for s_term, t_term in glossary.items():
                             if s_term.lower() == core_lower:
-                                if core_src[0].isupper() and len(t_term) > 1:
-                                    t_rep = t_term[0].upper() + t_term[1:]
-                                elif core_src.isupper() and len(core_src) > 1:
+                                if core_src.isupper() and len(core_src) > 1:
                                     t_rep = t_term.upper()
+                                elif core_src[0].isupper() and len(t_term) > 1:
+                                    t_rep = t_term[0].upper() + t_term[1:]
                                 else:
                                     t_rep = t_term
                                 lead_clean = re.sub(r"([(\[{])\s+$", r"\1", lead_punct.lstrip())
-                                trail_clean = re.sub(r"\s+([)\]}.,:;!?])", r"\1", trail_punct.rstrip())
+                                trail_clean = re.sub(r"\s+([)\]},:;!?]|\.(?!\.))", r"\1", trail_punct.rstrip())
                                 if trail_clean.startswith("⟦LL_FORMULA_"):
                                     trail_clean = " " + trail_clean
                                 out_str = f"{lead_clean}{t_rep}{trail_clean}"
+                                if m_toc_res and not re.search(r"[\.\…]{2,}\s*(?:\d+\s*)?$", out_str.strip()):
+                                    out_str = f"{out_str.rstrip()}{m_toc_res.group(1)}"
                                 if uses_xml_tags:
                                     out_str = re.sub(r"⟦LL_FORMULA_(\d+)⟧", r"<b\1></b\1>", out_str)
                                 return out_str
@@ -465,13 +490,20 @@ class GlossaryManager:
             # 1. Direct healing: if untranslated s_term exists in translated text
             if p_src.search(result):
                 def _rep(m: re.Match) -> str:
-                    return t_term[0].upper() + t_term[1:] if m.group(0).istitle() else t_term
+                    matched_s = m.group(0)
+                    if matched_s.isupper() and len(matched_s) > 1:
+                        return t_term.upper()
+                    return t_term[0].upper() + t_term[1:] if (matched_s and matched_s[0].isupper()) else t_term
                 result = p_src.sub(_rep, result)
                 result_lower = result.lower()
                 continue
 
             # 2. Structural layout anchor alignment: find shared pre/suf tokens (indices, dot leaders, tags, formulas)
-            active_src = anchor_src if p_src.search(anchor_src) else source_text
+            active_src = (
+                source_text
+                if (m_toc_res and p_src.search(source_text))
+                else (anchor_src if p_src.search(anchor_src) else source_text)
+            )
             m_src_active = p_src.search(active_src)
             if not m_src_active:
                 continue
@@ -482,12 +514,26 @@ class GlossaryManager:
             suf_anchor = m_suf.group(0) if m_suf else ""
 
             if pre_anchor and suf_anchor:
-                anchor_pat = re.compile(
-                    rf"({re.escape(pre_anchor.strip())}\s+)(.*?)(\s*{re.escape(suf_anchor.strip())})",
-                    re.DOTALL,
-                )
+                src_matched = m_src_active.group(0)
+                if src_matched.isupper() and len(src_matched) > 1:
+                    t_sub = t_term.upper()
+                elif src_matched and src_matched[0].isupper() and len(t_term) > 1:
+                    t_sub = t_term[0].upper() + t_term[1:]
+                else:
+                    t_sub = t_term
+
+                if re.match(r"^\s*[\.\…]{2,}", suf_anchor):
+                    anchor_pat = re.compile(
+                        rf"({re.escape(pre_anchor.strip())}\s+)(.*?)(\s*[\.\…]{2,}\s*(?:\d+\s*)?)$",
+                        re.DOTALL,
+                    )
+                else:
+                    anchor_pat = re.compile(
+                        rf"({re.escape(pre_anchor.strip())}\s+)(.*?)(\s*{re.escape(suf_anchor.strip())})",
+                        re.DOTALL,
+                    )
                 if anchor_pat.search(result):
-                    result = anchor_pat.sub(rf"\g<1>{t_term}\g<3>", result)
+                    result = anchor_pat.sub(rf"\g<1>{t_sub}\g<3>", result)
                     result_lower = result.lower()
                     continue
 

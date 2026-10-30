@@ -49,7 +49,7 @@ _PREVIEW_CACHE: dict[tuple[str, str, str, int, int, str], bytes] = {}
 MAX_PREVIEW_CACHE = 2500
 MAX_SESSIONS = 15
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB upload limit
-PARSER_VERSION = "2.15"
+PARSER_VERSION = "2.18"
 
 _SAFE_DOC_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _BLOCKED_SSRF_HOSTS = frozenset({

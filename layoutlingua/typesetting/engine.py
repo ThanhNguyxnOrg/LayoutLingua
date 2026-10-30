@@ -234,9 +234,20 @@ def compute_expanded_layout_box(
             for drw in scratch_page.get_drawings():
                 dr = drw.get("rect")
                 if dr and (dr.width > 12.0 or dr.height > 12.0):
+                    d_fill = drw.get("fill")
+                    if (
+                        drw.get("type") == "f"
+                        and drw.get("color") is None
+                        and dr.width >= 6.0
+                        and 8.0 <= dr.height <= 24.0
+                        and isinstance(d_fill, (tuple, list))
+                        and len(d_fill) >= 3
+                        and min(float(c) for c in d_fill[:3]) >= 0.70
+                    ):
+                        continue
                     # If the drawing is an enclosing container box around this text block (e.g. cover panel or callout box),
                     # preserve symmetric inner padding relative to the container's right border.
-                    if dr.x0 <= x0 + 1.0 and dr.x1 >= x1 - 1.0 and dr.y0 <= y0 + 2.0 and dr.y1 >= y1 - 2.0:
+                    if dr.x0 <= x0 + 2.5 and dr.x1 >= x1 - 2.5 and dr.y0 <= y0 + 2.5 and dr.y1 >= y1 - 2.5:
                         left_inner_pad = max(0.0, x0 - dr.x0)
                         if 8.0 <= left_inner_pad <= 60.0 and dr.width > page_width * 0.45:
                             right_inner_pad = min(28.0, max(18.0, left_inner_pad * 1.25))
@@ -676,8 +687,16 @@ class TypesetEngine:
                     if b.block_type == "text" and b.block_id not in preserved_ids:
                         b_txt = b.text.strip()
                         alpha_words = [w for w in _re.findall(r"[a-zA-ZÀ-ỹ]+", b_txt) if len(w) >= 2]
+                        en_stop_hits = len(
+                            _re.findall(
+                                r"\b(?:the|of|and|in|to|is|for|that|with|on|as|are|this|by|be|at|or|from|an|which)\b",
+                                b_txt,
+                                _re.IGNORECASE,
+                            )
+                        )
                         if (
                             len(alpha_words) >= 5
+                            and en_stop_hits >= 2
                             and not any(ch.lower() in vn_diacritics for ch in b_txt)
                             and detect_language_from_text(b_txt) == "en"
                         ):
@@ -1340,6 +1359,53 @@ class TypesetEngine:
                     graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
                     text=pymupdf.PDF_REDACT_TEXT_REMOVE,
                 )
+
+                # Erase partial-width inline code/highlight pills inside replaced prose blocks
+                # so old source-language pill offsets do not sit beneath shifted translated words.
+                try:
+                    page_drawings = scratch_page.get_drawings()
+                    for block, tight_line_rects, *rest in fitting_plan:
+                        t_specs = rest[-1] if rest and isinstance(rest[-1], list) else None
+                        if t_specs:
+                            continue
+                        bx0, by0, bx1, by1 = block.bbox
+                        parent_bg: tuple[float, float, float] = (1.0, 1.0, 1.0)
+                        for drw in page_drawings:
+                            dr = drw.get("rect")
+                            d_fill = drw.get("fill")
+                            if (
+                                dr
+                                and isinstance(d_fill, (tuple, list))
+                                and len(d_fill) >= 3
+                                and dr.x0 <= bx0 + 2.5
+                                and dr.x1 >= bx1 - 2.5
+                                and dr.y0 <= by0 + 2.5
+                                and dr.y1 >= by1 - 2.5
+                                and (dr.width > (bx1 - bx0) + 8.0 or dr.height > 26.0)
+                            ):
+                                parent_bg = (float(d_fill[0]), float(d_fill[1]), float(d_fill[2]))
+                        for drw in page_drawings:
+                            dr = drw.get("rect")
+                            d_fill = drw.get("fill")
+                            if (
+                                dr
+                                and drw.get("type") == "f"
+                                and drw.get("color") is None
+                                and dr.width >= 6.0
+                                and 8.0 <= dr.height <= 24.0
+                                and isinstance(d_fill, (tuple, list))
+                                and len(d_fill) >= 3
+                                and min(float(c) for c in d_fill[:3]) >= 0.70
+                                and (dr.x0 > bx0 + 3.0 or dr.x1 < bx1 - 3.0)
+                                and any(
+                                    min(dr.x1, rx1) - max(dr.x0, rx0) > 2.0
+                                    and min(dr.y1, ry1) - max(dr.y0, ry0) > 4.0
+                                    for (rx0, ry0, rx1, ry1) in tight_line_rects
+                                )
+                            ):
+                                scratch_page.draw_rect(dr, color=None, fill=parent_bg)
+                except Exception:
+                    pass
 
                 drawn_ink_boxes: list[tuple[float, float, float, float]] = []
 

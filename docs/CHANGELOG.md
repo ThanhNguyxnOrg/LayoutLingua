@@ -23,17 +23,27 @@ All notable changes to **LayoutLingua** are documented in this file.
 
 ---
 
+## [2.1.1] — 2026-10-30
+
+### 🩹 Fixed
+- **Intra-Word Font Fallback Coalescing**: Natural prose words split mid-word across fallback font spans (e.g., `T` + `ổ` + `ng h` + `ợ` + `p` -> `Tổng hợp`) now cleanly coalesce into single prose tokens without creating false-positive math obstacles.
+- **VNI Spaced Composite Normalization**: Re-ordered VNI decoding replacements so circumflex and breve rules execute before acute/grave, preventing `Hoaùn` / `Ho a ù n` from wrongly mutating to `Hốn`. Added idempotence guard to protect pre-composed Unicode text.
+- **TOC Dot Leaders & Academic Glossary Alignment**: Fixed capitalization preservation for all-caps headings (`matched_str.isupper()`), prevented dot-leader stripping during post-restore glossary normalization, and refined target-language skipping heuristics to avoid falsely bypassing Vietnamese TOC headers like `7. Logarith ... 30`.
+- **Inline Code Pill Vector Art Protection**: Added detection and parent-background clearance for borderless inline code/highlight pill rectangles (height 8–24pt), eliminating false `VECTOR_ART` collision fallbacks.
+- **Test Suite Expansion**: Added 5 new regression tests in `test_math_book_fixes.py` and `test_slice4c_protection.py`, bringing the automated test count to **270 passed (100%)**.
+
+---
+
 ## [2.1.0] — 2026-10-29
 
 ### 🚀 Added
 - **Full-Stack AI Studio Web Architecture**: Integrated the Google AI Studio runtime (`server.ts` Express + Vite dev proxy on port 3000, Python core engine on port 8765, React 19 + TypeScript + Tailwind CSS UI in `src/`).
-- **Consolidated Clean Repository**: Retired obsolete legacy subfolders, streamlined dependency management (`package.json`, `package-lock.json`), and validated 265/265 automated tests with live browser end-to-end verification.
+- **Consolidated Clean Repository**: Retired obsolete legacy subfolders, streamlined dependency management (`package.json`, `package-lock.json`), and validated automated tests with live browser end-to-end verification.
 - **Multi-Family Font Suite**: Packaged 21 TrueType font files in `layoutlingua/typesetting/assets/fonts/` (`DejaVuSans`, `DejaVuSerif`, `FreeSans`, `FreeSerif`, `DejaVuSansMono` with complete bold/italic variants), enabling rich typographic fidelity and automatic CJK inline fallback (`china-s`, `china-t`, `japan`, `korea`).
 - **Phonological Syllabic Hyphenation**: Added `hyphenate_word` for Romance and Germanic languages, supporting narrow multi-line column header fitting and stacked label leftward expansion.
-- **Server Disk Session Recovery**: Added `/api/recent-sessions` endpoint allowing desktop windows to discover and rehydrate existing sessions directly from disk cache across restarts.
+- **Server Disk Session Recovery**: Added `/api/recent-sessions` endpoint allowing clients to discover and rehydrate existing sessions directly from disk cache across restarts.
 - **Enhanced DocumentIR Parser**: Added horizontal gap line splitting (`_split_lines_across_horizontal_gaps`), vertical graphic divider extraction (`_extract_page_vertical_dividers`), and vertical hyphenated fragment rejoining.
-- **Desktop UI Rehydration & Lazy Rendering**: Added automatic session discovery on `OpenScreen`, retry and IntersectionObserver lazy loading in `PdfPage`, and complete 17-language code mapping in `Workspace`.
-- **Test Suite Expansion**: Added 3 new test suites (`test_multilingual_layout_and_hyphenation.py`, `test_glossary_and_single_line_fitting.py`, `test_ts_engine_port.py`), bringing the automated test count to **265 passed (100%)**.
+- **Web UI Rehydration & Lazy Rendering**: Added automatic session discovery on `OpenScreen`, retry and IntersectionObserver lazy loading in `PdfPage`, and complete 17-language code mapping in `Workspace`.
 
 ---
 
@@ -42,8 +52,6 @@ All notable changes to **LayoutLingua** are documented in this file.
 🎉 **First stable release** — the complete layout-aware PDF translation engine, verified end-to-end on a 96-page Vietnamese mathematical handbook (921 prose groups, legacy VNI encoding, dense 2D equations) with **0 overflow warnings, 0 PUA leaks, and 100% vector preservation**.
 
 ### 🚀 Added
-- **Full-Stack AI Studio Web Architecture**: Integrated the Google AI Studio runtime (`server.ts` Express + Vite dev proxy on port 3000, Python core engine on port 8765, React 19 + TypeScript + Tailwind CSS UI in `src/`).
-- **Consolidated Clean Repository**: Retired obsolete legacy subfolders, streamlined dependency management (`package.json`, `package-lock.json`), and validated 265/265 automated tests with live browser end-to-end verification.
 
 **🧮 Translation & Typesetting Engine**
 - **Two-Pass Selective Prose Erasure**: only verified natural-language prose spans are removed from the PDF content stream (MuPDF-native redaction pre-pass on a private document copy, obstacle-clipped, with paint-over rectangles as the fail-closed fallback) — mathematical equations, vector arrows, curly braces, table grids, and geometric diagrams stay 100% untouched in the original vector paths. Copy/paste from the exported PDF yields only translated text + original math. 📋

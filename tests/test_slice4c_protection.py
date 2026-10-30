@@ -432,6 +432,81 @@ class TestSlice4CProtection(unittest.TestCase):
         self.assertIn("block_a", plan.collision_blocks)
         self.assertIn("block_b", plan.collision_blocks)
 
+    def test_inline_code_pill_background_is_approved_and_cleaned(self) -> None:
+        """Verify inline <code> rounded-rect pill backgrounds do not trigger false-positive VECTOR_ART collisions."""
+        doc = pymupdf.open()
+        page = doc.new_page(width=595, height=842)
+        # 1. Leading prose before inline code
+        page.insert_text((50, 111), "Chu kỳ xung nhịp", fontsize=11)
+        # 2. Inline code rounded-rect background pill (borderless fill, height ~15pt)
+        page.draw_rect(
+            pymupdf.Rect(145, 99, 195, 114),
+            fill=(0.953, 0.945, 0.925),
+            color=None,
+            width=0.0,
+        )
+        # 3. Inline code span and trailing prose
+        page.insert_text((149, 111), "T = 1/f", fontsize=9.5)
+        page.insert_text((200, 111), "là nghịch đảo của tần số.", fontsize=11)
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        candidate_block = TextBlock(
+            block_id="p1_block_inline_code",
+            bbox=(50.0, 99.0, 340.0, 114.0),
+            spans=[
+                GlyphSpan(
+                    span_id="s_lead",
+                    text="Chu kỳ xung nhịp ",
+                    bbox=(50.0, 100.0, 144.0, 113.0),
+                    font_name="DejaVuSans",
+                    font_size=11.0,
+                    color="#000000",
+                ),
+                GlyphSpan(
+                    span_id="s_code",
+                    text="T = 1/f",
+                    bbox=(149.0, 101.0, 191.0, 112.0),
+                    font_name="DejaVuSansMono",
+                    font_size=9.5,
+                    color="#000000",
+                ),
+                GlyphSpan(
+                    span_id="s_trail",
+                    text=" là nghịch đảo của tần số.",
+                    bbox=(200.0, 100.0, 340.0, 113.0),
+                    font_name="DejaVuSans",
+                    font_size=11.0,
+                    color="#000000",
+                ),
+            ],
+            block_type="text",
+        )
+        page_ir = PageIR(
+            page_number=1,
+            geometry=PageGeometry(width=595, height=842),
+            blocks=[candidate_block],
+        )
+        doc_ir = DocumentIR(
+            doc_id="doc_inline_pill",
+            filename="inline_pill.pdf",
+            page_count=1,
+            pages=[page_ir],
+        )
+
+        engine = TypesetEngine()
+        result = engine.typeset(
+            original_pdf=pdf_bytes,
+            document_ir=doc_ir,
+            translated_segments={
+                "p1_block_inline_code": "Clock cycle T = 1/f is the reciprocal of frequency."
+            },
+        )
+
+        self.assertEqual(result.fitting_report.collision_blocks, 0)
+        self.assertEqual(result.fitting_report.replaced_blocks, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
+

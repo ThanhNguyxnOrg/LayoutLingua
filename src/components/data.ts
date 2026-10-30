@@ -21,7 +21,7 @@ export type Issue = {
   id: string
   severity: Severity
   page: number
-  region?: string
+  region?: string | { label?: string; x?: number | string; y?: number | string; w?: number | string; h?: number | string }
   title: string
   detail: string
   next: string

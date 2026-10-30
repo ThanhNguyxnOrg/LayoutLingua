@@ -8,7 +8,7 @@
 *Strict Typographic Geometry Preservation • Sub-Line Formula Pinning • 17-Language Neural Typesetting*
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.0-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.0.0" />
+  <img src="https://img.shields.io/badge/Version-2.1.1-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.1.1" />
   <img src="https://img.shields.io/badge/Engine-PyMuPDF_Vector_Core-0284C7?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" alt="PyMuPDF Engine" />
   <img src="https://img.shields.io/badge/TypeScript-5.8%20Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5.8" />
   <img src="https://img.shields.io/badge/React-19.0-149ECA?style=for-the-badge&logo=react&logoColor=white" alt="React 19" />
@@ -276,7 +276,7 @@ npm run dev                         # 🚀 http://localhost:3000 (auto-spawns Py
 
 ### 3️⃣ Verification Suite
 ```bash
-pytest tests/ -q                                # 🧪 265 automated engine tests
+pytest tests/ -q                                # 🧪 270 automated engine tests
 python scripts/test_live_translation.py         # ⚡ live end-to-end translation smoke test
 ```
 

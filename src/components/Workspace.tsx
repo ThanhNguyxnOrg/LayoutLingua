@@ -401,10 +401,11 @@ function Inspector(p: {
       lines.push(`Title: ${iss.title}`)
       if (iss.detail) lines.push(`Detail: ${iss.detail}`)
       if (iss.region) {
+        const reg = iss.region as any
         const regStr =
-          typeof iss.region === 'object'
-            ? `${iss.region.label || iss.id} (x=${iss.region.x}%, y=${iss.region.y}%, w=${iss.region.w}%, h=${iss.region.h}%)`
-            : String(iss.region)
+          typeof reg === 'object' && reg !== null
+            ? `${reg.label || iss.id} (x=${reg.x}%, y=${reg.y}%, w=${reg.w}%, h=${reg.h}%)`
+            : String(reg)
         lines.push(`Region / ID: ${regStr}`)
       }
       lines.push('')
@@ -1153,7 +1154,13 @@ export default function Workspace({
   const setZ = (d: number) => setZoom(Math.min(2.5, Math.max(0.4, Math.round((width / PAGE_W + d) * 10) / 10)))
 
   const select = (n: number) => { setCur(n); setHighlight(undefined); setActiveIssue(undefined) }
-  const openIssue = (i: Issue) => { setCur(i.page); setHighlight(i.region); setActiveIssue(i.id); setTab('quality') }
+  const openIssue = (i: Issue) => {
+    setCur(i.page)
+    const hl = typeof i.region === 'string' ? i.region : (i.region ? i.region.label || i.id : undefined)
+    setHighlight(hl)
+    setActiveIssue(i.id)
+    setTab('quality')
+  }
   const start = () => {
     setDone(0)
     setOverallPct(4)

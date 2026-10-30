@@ -18,25 +18,16 @@ from layoutlingua.processing.normalizers.base import BaseTextNormalizer, Normali
 # 1. Composite VNI horn pairs (ôù -> ớ, ôø -> ờ, ôû -> ở, ôõ -> ỡ, ôï -> ợ) run first
 # 2. Bare VNI horn ('ô' -> 'ơ', 'Ô' -> 'Ơ') runs BEFORE 'oâ' -> 'ô' so 'oâ' does not get clobbered into 'ơ'
 _VNI_REPLACEMENTS: tuple[tuple[str, str], ...] = (
-    # Spaced VNI composite pairs
-    ("o ù", "ó"), ("o ø", "ò"), ("o û", "ỏ"), ("o õ", "õ"), ("o ï", "ọ"),
-    ("o á", "ố"), ("o à", "ồ"), ("o å", "ổ"), ("o ã", "ỗ"), ("o ä", "ộ"),
+    # 1. Spaced & unspaced VNI horn composite pairs (must precede bare 'ô' -> 'ơ')
     ("ô ù", "ớ"), ("ô ø", "ờ"), ("ô û", "ở"), ("ô õ", "ỡ"), ("ô ï", "ợ"),
-    ("a ù", "á"), ("a ø", "à"), ("a û", "ả"), ("a õ", "ã"), ("a ï", "ạ"),
-    ("a á", "ấ"), ("a à", "ầ"), ("a å", "ẩ"), ("a ã", "ẫ"), ("a ä", "ậ"), ("a â", "â"),
-    ("a é", "ắ"), ("a è", "ằ"), ("a ú", "ẳ"), ("a ü", "ẵ"), ("a ë", "ặ"), ("a ê", "ă"),
-    ("e ù", "é"), ("e ø", "è"), ("e û", "ẻ"), ("e õ", "ẽ"), ("e ï", "ẹ"),
-    ("e á", "ế"), ("e à", "ề"), ("e å", "ể"), ("e ã", "ễ"), ("e ä", "ệ"), ("e â", "ê"),
-    ("i ù", "í"), ("i ø", "ì"), ("i û", "ỉ"), ("i õ", "ĩ"), ("i ï", "ị"),
-    ("u ù", "ú"), ("u ø", "ù"), ("u û", "ủ"), ("u õ", "ũ"), ("u ï", "ụ"),
     ("ö ù", "ứ"), ("ö ø", "ừ"), ("ö û", "ử"), ("ö õ", "ữ"), ("ö ï", "ự"),
-    ("y ù", "ý"), ("y ø", "ỳ"), ("y û", "ỷ"), ("y õ", "ỹ"), ("y ï", "ỵ"),
-    # Standard VNI horn composite pairs (must precede bare 'ô' -> 'ơ')
     ("ôù", "ớ"), ("ôø", "ờ"), ("ôû", "ở"), ("ôõ", "ỡ"), ("ôï", "ợ"),
     ("ÔÙ", "Ớ"), ("ÔØ", "Ờ"), ("ÔÛ", "Ở"), ("ÔÕ", "Ỡ"), ("ÔÏ", "Ợ"),
-    # Bare VNI horn ('ô' -> 'ơ') BEFORE 'oâ' -> 'ô' so 'oâ' is not clobbered into 'ơ'
+    ("öù", "ứ"), ("öø", "ừ"), ("öû", "ử"), ("öõ", "ữ"), ("öï", "ự"), ("ö", "ư"),
+    ("ÖÙ", "Ứ"), ("ÖØ", "Ừ"), ("ÖÛ", "Ử"), ("ÖÕ", "Ữ"), ("ÖÏ", "Ự"), ("Ö", "Ư"),
+    # 2. Bare VNI horn ('ô' -> 'ơ') BEFORE 'oâ' -> 'ô' so 'oâ' is not clobbered into 'ơ'
     ("ô", "ơ"), ("Ô", "Ơ"),
-    # Words with VNI prefix stems
+    # 3. Words with VNI prefix stems
     ("vo ânghieäm", "vô nghiệm"),
     ("vo â nghieäm", "vô nghiệm"),
     ("voâ nghieäm", "vô nghiệm"),
@@ -48,30 +39,39 @@ _VNI_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("VO Â", "VÔ "),
     ("VOÂ", "VÔ"),
     ("o â", "ô"), ("O Â", "Ô"),
-    # Standard VNI composite pairs (including full i/y/u/o/a/e coverage from TS engine)
+    # 4. Circumflex & breve VNI composite pairs (MUST run BEFORE acute/grave 'aù'->'á', 'aø'->'à'
+    # so 'Ho a ù n' / 'Hoaùn' -> 'Hoán' never chains into 'oá' -> 'ố')
+    ("o á", "ố"), ("o à", "ồ"), ("o å", "ổ"), ("o ã", "ỗ"), ("o ä", "ộ"),
+    ("a á", "ấ"), ("a à", "ầ"), ("a å", "ẩ"), ("a ã", "ẫ"), ("a ä", "ậ"), ("a â", "â"),
+    ("a é", "ắ"), ("a è", "ằ"), ("a ú", "ẳ"), ("a ü", "ẵ"), ("a ë", "ặ"), ("a ê", "ă"),
+    ("e á", "ế"), ("e à", "ề"), ("e å", "ể"), ("e ã", "ễ"), ("e ä", "ệ"), ("e â", "ê"),
     ("oá", "ố"), ("oà", "ồ"), ("oå", "ổ"), ("oã", "ỗ"), ("oä", "ộ"), ("oâ", "ô"),
-    ("où", "ó"), ("oø", "ò"), ("oû", "ỏ"), ("oõ", "õ"), ("oï", "ọ"),
     ("aá", "ấ"), ("aà", "ầ"), ("aå", "ẩ"), ("aã", "ẫ"), ("aä", "ậ"), ("aâ", "â"),
     ("aé", "ắ"), ("aè", "ằ"), ("aú", "ẳ"), ("aü", "ẵ"), ("aë", "ặ"), ("aê", "ă"),
-    ("aù", "á"), ("aø", "à"), ("aû", "ả"), ("aõ", "ã"), ("aï", "ạ"),
     ("eá", "ế"), ("eà", "ề"), ("eå", "ể"), ("eã", "ễ"), ("eä", "ệ"), ("eâ", "ê"),
-    ("eù", "é"), ("eø", "è"), ("eû", "ẻ"), ("eõ", "ẽ"), ("eï", "ẹ"),
-    ("iù", "í"), ("iø", "ì"), ("iû", "ỉ"), ("iõ", "ĩ"), ("iï", "ị"),
-    ("öù", "ứ"), ("öø", "ừ"), ("öû", "ử"), ("öõ", "ữ"), ("öï", "ự"), ("ö", "ư"),
-    ("uù", "ú"), ("uø", "ù"), ("uû", "ủ"), ("uõ", "ũ"), ("uï", "ụ"),
-    ("yù", "ý"), ("yø", "ỳ"), ("yû", "ỷ"), ("yõ", "ỹ"), ("yï", "ỵ"),
-    # Uppercase VNI composite pairs
-    ("OÙ", "Ó"), ("OØ", "Ò"), ("OÛ", "Ỏ"), ("OÕ", "Õ"), ("OÏ", "Ọ"),
     ("OÂ", "Ô"), ("OÁ", "Ố"), ("OÀ", "Ồ"), ("OÅ", "Ổ"), ("OÃ", "Ỗ"), ("OÄ", "Ộ"),
-    ("AÙ", "Á"), ("AØ", "À"), ("AÛ", "Ả"), ("AÕ", "Ã"), ("AÏ", "Ạ"),
     ("AÂ", "Â"), ("AÁ", "Ấ"), ("AÀ", "Ầ"), ("AÅ", "Ẩ"), ("AÃ", "Ẫ"), ("AÄ", "Ậ"),
     ("AÊ", "Ă"), ("AÉ", "Ắ"), ("AÈ", "Ằ"), ("AÚ", "Ẳ"), ("AÜ", "Ẵ"), ("AË", "Ặ"),
-    ("EÙ", "É"), ("EØ", "È"), ("EÛ", "Ẻ"), ("EÕ", "Ẽ"), ("EÏ", "Ẹ"),
     ("EÂ", "Ê"), ("EÁ", "Ế"), ("EÀ", "Ề"), ("EÅ", "Ể"), ("EÃ", "Ẫ"), ("EÄ", "Ệ"),
+    # 5. Acute, grave, hook, tilde, and dot-below VNI pairs
+    ("o ù", "ó"), ("o ø", "ò"), ("o û", "ỏ"), ("o õ", "õ"), ("o ï", "ọ"),
+    ("a ù", "á"), ("a ø", "à"), ("a û", "ả"), ("a õ", "ã"), ("a ï", "ạ"),
+    ("e ù", "é"), ("e ø", "è"), ("e û", "ẻ"), ("e õ", "ẽ"), ("e ï", "ẹ"),
+    ("i ù", "í"), ("i ø", "ì"), ("i û", "ỉ"), ("i õ", "ĩ"), ("i ï", "ị"),
+    ("u ù", "ú"), ("u ø", "ù"), ("u û", "ủ"), ("u õ", "ũ"), ("u ï", "ụ"),
+    ("y ù", "ý"), ("y ø", "ỳ"), ("y û", "ỷ"), ("y õ", "ỹ"), ("y ï", "ỵ"),
+    ("où", "ó"), ("oø", "ò"), ("oû", "ỏ"), ("oõ", "õ"), ("oï", "ọ"),
+    ("aù", "á"), ("aø", "à"), ("aû", "ả"), ("aõ", "ã"), ("aï", "ạ"),
+    ("eù", "é"), ("eø", "è"), ("eû", "ẻ"), ("eõ", "ẽ"), ("eï", "ẹ"),
+    ("iù", "í"), ("iø", "ì"), ("iû", "ỉ"), ("iõ", "ĩ"), ("iï", "ị"),
+    ("uù", "ú"), ("uø", "ù"), ("uû", "ủ"), ("uõ", "ũ"), ("uï", "ụ"),
+    ("yù", "ý"), ("yø", "ỳ"), ("yû", "ỷ"), ("yõ", "ỹ"), ("yï", "ỵ"),
+    ("OÙ", "Ó"), ("OØ", "Ò"), ("OÛ", "Ỏ"), ("OÕ", "Õ"), ("OÏ", "Ọ"),
+    ("AÙ", "Á"), ("AØ", "À"), ("AÛ", "Ả"), ("AÕ", "Ã"), ("AÏ", "Ạ"),
+    ("EÙ", "É"), ("EØ", "È"), ("EÛ", "Ẻ"), ("EÕ", "Ẽ"), ("EÏ", "Ẹ"),
     ("IÙ", "Í"), ("IØ", "Ì"), ("IÛ", "Ỉ"), ("IÕ", "Ĩ"), ("IÏ", "Ị"),
-    ("ÖÙ", "Ứ"), ("ÖØ", "Ừ"), ("ÖÛ", "Ử"), ("ÖÕ", "Ữ"), ("ÖÏ", "Ự"), ("Ö", "Ư"),
     ("UÙ", "Ú"), ("UØ", "Ù"), ("UÛ", "Ủ"), ("UÕ", "Ũ"), ("UÏ", "Ụ"),
-    ("YÙ", "Ý"), ("YØ", "Ỳ"), ("YÛ", "Ỷ"), ("YÕ", "Ỹ"), ("YÏ", "Ỵ"),
+    ("YÙ", "Ý"), ("YØ", "Ỳ"), ("YÛ", "Ỳ"), ("YÕ", "Ỹ"), ("YÏ", "Ỵ"),
     ("ñ", "đ"), ("Ñ", "Đ"),
 )
 
@@ -89,8 +89,9 @@ _VNI_SIGNATURE_RE = re.compile(
 )
 
 # Precomposed Unicode Vietnamese codepoints outside 8-bit Latin-1 (U+0100..U+1EF9).
-# Genuine VNI Windows text only uses 8-bit Windows-1252 characters; if a span in a non-VNI font
-# already contains these Unicode Vietnamese codepoints, it is already Unicode and must not be VNI-decoded.
+# Genuine VNI Windows text only uses 8-bit Windows-1252 characters; if a span
+# already contains these Unicode Vietnamese codepoints without raw VNI signatures,
+# it is already Unicode and must not be VNI-decoded a second time.
 _UNICODE_VIET_RE = re.compile(
     r"[\u0102\u0103\u0110\u0111\u0128\u0129\u0168\u0169\u01A0\u01A1\u01AF\u01B0\u1EA0-\u1EF9]"
 )
@@ -122,6 +123,8 @@ _MODERN_UNICODE_FONTS = (
 def has_vni_encoding(text: str, font_name: str | None = None) -> bool:
     """Return True if text or font_name indicates VNI Windows encoding."""
     if not text:
+        return False
+    if _UNICODE_VIET_RE.search(text) and not _VNI_SIGNATURE_RE.search(text):
         return False
     fn = (font_name or "").lower()
     if "vni" in fn:
@@ -158,6 +161,9 @@ class VietnameseLegacyNormalizer(BaseTextNormalizer):
         metadata: dict[str, Any] | None = None,
     ) -> bool:
         if not text:
+            return False
+
+        if _UNICODE_VIET_RE.search(text) and not _VNI_SIGNATURE_RE.search(text):
             return False
 
         fn = (font_name or "").lower()

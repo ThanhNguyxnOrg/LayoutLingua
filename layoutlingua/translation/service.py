@@ -107,8 +107,19 @@ def extract_document_segments(
             if not b_text:
                 continue
 
-            if check_already_target and len(b_text.split()) >= 4:
-                if tgt_code == "en" and _VN_DIACRITIC_RE.search(b_text):
+            alpha_words = re.findall(r"[A-Za-zÀ-ỹ\u0400-\u04FF]{2,}", b_text)
+            if check_already_target and len(alpha_words) >= 5:
+                if tgt_code == "en" and (
+                    _VN_DIACRITIC_RE.search(b_text)
+                    or len(
+                        re.findall(
+                            r"\b(?:the|of|and|in|to|is|for|that|with|on|as|are|this|by|be|at|or|from|an|which)\b",
+                            b_text,
+                            re.IGNORECASE,
+                        )
+                    )
+                    < 2
+                ):
                     pass
                 elif detect_language_from_text(b_text) == tgt_code:
                     doc_preserved.add(block.block_id)

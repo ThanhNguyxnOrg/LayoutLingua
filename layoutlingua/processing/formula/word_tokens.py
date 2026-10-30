@@ -121,6 +121,8 @@ class WordToken:
     has_adjacent_sub_sup: bool = False
     line_index: int = 0
     is_math: bool = False
+    is_span_start: bool = False
+    is_span_end: bool = False
 
 
 def vflag_pdf2zh(
@@ -212,6 +214,8 @@ class _RawWord:
     italic: bool
     bold: bool
     span_id: str
+    is_span_start: bool = False
+    is_span_end: bool = False
 
 
 def _words_from_span(span) -> list[_RawWord]:
@@ -225,7 +229,8 @@ def _words_from_span(span) -> list[_RawWord]:
 
     _vni_floating_diacritics = set("ùúûõïäëâêáàåãéèüøòóìíÙÚÛÕÏÄËÂÊÁÀÅÃÉÈÜØÒÓÌÍ")
     _vni_base_vowels = set("aeiouyôöAEIOUYÔÖ")
-    is_vni_span = "vni" in fn_lower or has_vni_encoding("".join(c.char for c in chars), span.font_name)
+    span_raw_str = "".join(c.char for c in chars)
+    is_vni_span = has_vni_encoding(span_raw_str, span.font_name)
 
     words: list[list] = []
     cur: list = []
@@ -267,7 +272,10 @@ def _words_from_span(span) -> list[_RawWord]:
 
     vni_norm = VietnameseLegacyNormalizer()
     out: list[_RawWord] = []
-    for group in words:
+    span_starts_ws = bool(span_raw_str and span_raw_str[0] in (" ", "\t", "\n", "\xa0"))
+    span_ends_ws = bool(span_raw_str and span_raw_str[-1] in (" ", "\t", "\n", "\xa0"))
+    n_words = len(words)
+    for w_idx, group in enumerate(words):
         raw_text = decode_symbol_pua("".join(c.char for c in group))
         if is_vni_span or vni_norm.should_apply(raw_text, font_name=span.font_name):
             text = vni_norm.normalize(raw_text, font_name=span.font_name).text
@@ -277,7 +285,20 @@ def _words_from_span(span) -> list[_RawWord]:
         y0 = min(c.bbox[1] for c in group)
         x1 = max(c.bbox[2] for c in group)
         y1 = max(c.bbox[3] for c in group)
-        out.append(_RawWord(text, (x0, y0, x1, y1), span.font_name, span.font_size, span.flags, is_italic, is_bold, span.span_id))
+        out.append(
+            _RawWord(
+                text,
+                (x0, y0, x1, y1),
+                span.font_name,
+                span.font_size,
+                span.flags,
+                is_italic,
+                is_bold,
+                span.span_id,
+                is_span_start=(w_idx == 0 and not span_starts_ws),
+                is_span_end=(w_idx == n_words - 1 and not span_ends_ws),
+            )
+        )
     return out
 
 
@@ -332,7 +353,6 @@ def build_word_tokens(block: TextBlock) -> list[WordToken]:
         best_idx = min(range(len(rows)), key=lambda idx: abs(sw_cy - row_cys[idx]))
         rows[best_idx].append(sw)
 
-    span_by_id = {s.span_id: s for s in block.spans}
     tokens: list[WordToken] = []
     for line_index, row in enumerate(rows):
         row.sort(key=lambda w: (round(w.bbox[0], 1), 1 if id(w) in sub_sup_ids else 0))
@@ -353,25 +373,22 @@ def build_word_tokens(block: TextBlock) -> list[WordToken]:
                 has_vni_font="vni" in fn_lower,
                 has_adjacent_sub_sup=is_sub_sup,
                 line_index=line_index,
+                is_span_start=w.is_span_start,
+                is_span_end=w.is_span_end,
             )
             # Coalesce touching sub-word fragments split across adjacent spans on the same baseline
-            # (e.g. 'f(x' + '₁' + ')<f(x' + '₂' + ');', or 'f’’(x' + '₀' + ')=0', or '(x' + '₁,')
+            # (1) Math expressions split across spans (e.g. 'f(x' + '₁' + ')<f(x' + '₂' + ');')
+            # (2) Natural-language words split mid-word due to Unicode/Vietnamese glyph font fallback
+            #     (e.g. 'Ch' [AnthropicSans] + 'ươ' [DejaVuSans] + 'ng' [AnthropicSans] -> 'Chương')
             if (
                 row_tokens
                 and not is_sub_sup
                 and not row_tokens[-1].has_adjacent_sub_sup
                 and row_tokens[-1].span_id != wt_new.span_id
-                and -1.5 <= (wt_new.bbox[0] - row_tokens[-1].bbox[2]) <= 1.5
+                and -4.5 <= (wt_new.bbox[0] - row_tokens[-1].bbox[2]) <= 1.5
             ):
                 prev_rt = row_tokens[-1]
-                sp_prev = span_by_id.get(prev_rt.span_id)
-                sp_curr = span_by_id.get(wt_new.span_id)
-                no_boundary_space = (
-                    sp_prev is not None
-                    and sp_curr is not None
-                    and not (sp_prev.text or "").endswith((" ", "\t", "\n", "\xa0"))
-                    and not (sp_curr.text or "").startswith((" ", "\t", "\n", "\xa0"))
-                )
+                no_boundary_space = prev_rt.is_span_end and wt_new.is_span_start
                 prev_is_prose = _is_prose_word(prev_rt.text, prev_rt.has_vni_font) and prev_rt.text.strip().lower() not in _ISO_MATH_FUNCTIONS
                 curr_is_prose = _is_prose_word(wt_new.text, wt_new.has_vni_font) and wt_new.text.strip().lower() not in _ISO_MATH_FUNCTIONS
                 unmatched_close_delim = (
@@ -380,8 +397,9 @@ def build_word_tokens(block: TextBlock) -> list[WordToken]:
                     and prev_rt.text.count("[") <= prev_rt.text.count("]")
                 )
                 combined_txt = prev_rt.text + wt_new.text
-                if (
+                is_split_math = (
                     no_boundary_space
+                    and -1.5 <= (wt_new.bbox[0] - prev_rt.bbox[2]) <= 1.5
                     and not prev_is_prose
                     and not curr_is_prose
                     and not unmatched_close_delim
@@ -389,7 +407,16 @@ def build_word_tokens(block: TextBlock) -> list[WordToken]:
                         _is_explicit_math(combined_txt)
                         or any(ch in combined_txt for ch in "()[]{}+-*/=<>≤≥≠≈₀₁₂₃₄₅₆₇₈₉⁰¹²³⁴⁵⁶₇⁸⁹ₙₖᵢⱼₘₚₛₜ")
                     )
-                ):
+                )
+                is_split_prose_word = (
+                    no_boundary_space
+                    and not prev_rt.has_symbol_font
+                    and not wt_new.has_symbol_font
+                    and abs(prev_rt.font_size - wt_new.font_size) <= 1.5
+                    and any(ord(ch) > 127 and ch.isalpha() and not (0x0370 <= ord(ch) <= 0x03FF) for ch in combined_txt)
+                    and bool(re.match(r"^[(\[{«\"']*[a-zA-ZÀ-ỹ0-9]+(?:[-/][a-zA-ZÀ-ỹ0-9]+)*[)\]}»\"'.,:;!?…]*$", combined_txt))
+                )
+                if is_split_math or is_split_prose_word:
                     prev_rt.text = combined_txt
                     prev_rt.bbox = (
                         min(prev_rt.bbox[0], wt_new.bbox[0]),
@@ -400,6 +427,7 @@ def build_word_tokens(block: TextBlock) -> list[WordToken]:
                     prev_rt.italic = prev_rt.italic or wt_new.italic
                     prev_rt.has_symbol_font = prev_rt.has_symbol_font or wt_new.has_symbol_font
                     prev_rt.span_id = wt_new.span_id
+                    prev_rt.is_span_end = wt_new.is_span_end
                     continue
             row_tokens.append(wt_new)
         for idx_t, tok in enumerate(row_tokens):

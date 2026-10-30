@@ -221,7 +221,7 @@ def is_background_container(
     block_bbox: tuple[float, float, float, float],
     drawing_seqno: int | None = None,
     text_seqno: int | None = None,
-    margin_tolerance: float = 1.0,
+    margin_tolerance: float = 2.5,
 ) -> bool:
     """Determine whether a vector drawing serves as a background container for a text block.
 
@@ -294,7 +294,7 @@ class ClearancePlanner:
                     if t_bbox and t_seq is not None:
                         for block in candidate_blocks:
                             if rects_intersect(t_bbox, block.bbox):
-                                if block.block_id not in block_seqno_map or t_seq < block_seqno_map[block.block_id]:
+                                if block.block_id not in block_seqno_map or t_seq > block_seqno_map[block.block_id]:
                                     block_seqno_map[block.block_id] = t_seq
             except Exception:
                 pass
@@ -702,10 +702,25 @@ class ClearancePlanner:
                     # It encloses the block as a valid container -> safe, not a collision
                     continue
 
-                # Not a background container: check if drawing intersects tight clearance lines
+                # Not a full-block container: check if it is an inline code/highlight pill painted behind a text line
                 zx0, zy0, zx1, zy1 = zone.bbox
                 dw = zx1 - zx0
                 dh = zy1 - zy0
+                d_type = zone.metadata.get("type")
+                d_color = zone.metadata.get("color")
+                d_fill = zone.metadata.get("fill")
+                if (
+                    d_type == "f"
+                    and d_color is None
+                    and dw >= 6.0
+                    and 8.0 <= dh <= 24.0
+                    and isinstance(d_fill, (tuple, list))
+                    and len(d_fill) >= 3
+                    and min(float(c) for c in d_fill[:3]) >= 0.70
+                    and zy0 >= block.bbox[1] - 3.5
+                    and zy1 <= block.bbox[3] + 3.5
+                ):
+                    continue
 
                 def _line_collides_with_vector(line_rect: tuple[float, float, float, float]) -> bool:
                     rx0, ry0, rx1, ry1 = line_rect

@@ -61,7 +61,7 @@ npm run build        # 📦 production build
 ```bash
 python -m venv .venv && .venv\Scripts\Activate.ps1   # 🐧 Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"                              # 🐍 engine + dev tools
-pytest tests/ -q                                     # 🧪 265 engine tests
+pytest tests/ -q                                     # 🧪 270 engine tests
 
 npm install --legacy-peer-deps                       # 📦 web studio dependencies
 npm run dev                                          # 🚀 web studio + engine (localhost:3000)
