@@ -129,9 +129,13 @@ jobs:
         run: |
           git config --global user.name "ThanhNguyxnAgent[bot]"
           git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
-          echo "Updating tag $TAG_NAME to point to current commit..."
-          git tag -fa "$TAG_NAME" -m "Release $TAG_NAME"
-          git push origin "$TAG_NAME" --force
+          if ! git ls-remote --tags origin "refs/tags/$TAG_NAME" | grep -q "$TAG_NAME"; then
+            echo "Creating tag $TAG_NAME..."
+            git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+            git push origin "$TAG_NAME"
+          else
+            echo "Tag $TAG_NAME already exists on remote. Proceeding to release update..."
+          fi
 
   windows:
     name: Windows (x86_64)
