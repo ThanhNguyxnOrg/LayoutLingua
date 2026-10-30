@@ -53,9 +53,17 @@ jobs:
       version: ${{ steps.check.outputs.version }}
       tag: ${{ steps.check.outputs.tag }}
     steps:
+      - name: 🤖 Generate GitHub App Token via ThanhNguyxnAgent
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
+          token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
 
       - name: Parse release trigger & resolve semantic version
@@ -113,16 +121,16 @@ jobs:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           INPUT_VERSION: ${{ github.event.inputs.version }}
 
-      - name: 🏷️ Auto-create and Push Tag via github-actions[bot]
+      - name: 🏷️ Auto-create and Push Tag via ThanhNguyxnAgent
         if: steps.check.outputs.should_release == 'true' && !startsWith(github.ref, 'refs/tags/')
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG_NAME: ${{ steps.check.outputs.tag }}
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "ThanhNguyxnAgent[bot]"
+          git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
           if ! git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
-            echo "Tag $TAG_NAME not found on remote. Creating and pushing tag..."
+            echo "Tag $TAG_NAME not found on remote. Creating and pushing tag via ThanhNguyxnAgent..."
             git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
             git push origin "$TAG_NAME"
           else
@@ -255,7 +263,16 @@ jobs:
     if: needs.check-and-tag.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
+      - name: 🤖 Generate GitHub App Token via ThanhNguyxnAgent
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+
       - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Download all desktop artifacts
         uses: actions/download-artifact@v8
@@ -282,7 +299,7 @@ jobs:
           Path("release-notes.md").write_text(body, encoding="utf-8")
           print(f"Extracted {len(body)} chars for version {version}")
 
-      - name: Publish to GitHub Releases
+      - name: Publish to GitHub Releases via ThanhNguyxnAgent
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.check-and-tag.outputs.tag }}
@@ -292,14 +309,15 @@ jobs:
           generate_release_notes: false
           draft: false
           prerelease: ${{ contains(needs.check-and-tag.outputs.tag, 'alpha') || contains(needs.check-and-tag.outputs.tag, 'beta') || contains(needs.check-and-tag.outputs.tag, 'rc') }}
+          token: ${{ steps.app-token.outputs.token }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
       - name: Sync version back to layoutlingua/_version.py and package.json if needed
         if: github.ref == 'refs/heads/main'
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           python3 -c "
           import re
@@ -316,8 +334,8 @@ jobs:
               f.write(p)
           "
           if ! git diff --quiet; then
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git config --global user.name "ThanhNguyxnAgent[bot]"
+            git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
             git add layoutlingua/_version.py package.json
             git commit -m "chore(release): bump version to ${{ needs.check-and-tag.outputs.version }} [skip ci]"
             git push origin main
