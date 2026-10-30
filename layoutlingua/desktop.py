@@ -160,6 +160,7 @@ def build_desktop_executable() -> int:
     sep = ";" if sys.platform == "win32" else ":"
     dist_src = root_dir / "dist"
     res_src = root_dir / "layoutlingua" / "resources"
+    fonts_src = root_dir / "layoutlingua" / "typesetting" / "assets" / "fonts"
     release_dir = root_dir / "release"
     build_work_dir = root_dir / "build_desktop_tmp"
 
@@ -177,12 +178,24 @@ def build_desktop_executable() -> int:
         str(release_dir),
         "--workpath",
         str(build_work_dir),
+        "--collect-all",
+        "pymupdf",
+        "--collect-all",
+        "webview",
+        "--hidden-import",
+        "fitz",
+        "--hidden-import",
+        "ftfy",
+        "--hidden-import",
+        "platformdirs",
         "--add-data",
         f"{dist_src}{sep}dist",
         "--add-data",
         f"{res_src}{sep}layoutlingua/resources",
-        str(root_dir / "layoutlingua" / "desktop.py"),
     ]
+    if fonts_src.exists():
+        cmd.extend(["--add-data", f"{fonts_src}{sep}layoutlingua/typesetting/assets/fonts"])
+    cmd.append(str(root_dir / "layoutlingua" / "desktop.py"))
 
     print("[LayoutLingua Desktop] Building standalone native application...")
     res = subprocess.run(cmd, cwd=str(root_dir))
@@ -194,7 +207,7 @@ def build_desktop_executable() -> int:
     if res.returncode == 0:
         exe_ext = ".exe" if sys.platform == "win32" else ""
         exe_path = release_dir / "LayoutLingua" / f"LayoutLingua{exe_ext}"
-        print(f"\n[✓] Standalone Desktop App built successfully: {exe_path}")
+        print(f"\n[OK] Standalone Desktop App built successfully: {exe_path}")
     return res.returncode
 
 

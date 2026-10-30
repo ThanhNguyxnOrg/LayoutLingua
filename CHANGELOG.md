@@ -33,10 +33,11 @@ All notable changes to **LayoutLingua** are documented in this file.
 - **Preflight & Session Discovery**: Drag-and-drop PDF upload, scanned-PDF detection with OCR triage notices, and disk session recovery (`/api/recent-sessions`) allowing instant restoration of translation sessions across application restarts.
 - **Flexible Export Matrix**: Monolingual translated PDF, bilingual interleaved PDF (source page alternating with translated page and synchronized TOC page numbering), and structured Markdown export.
 
-### 📦 Cross-Platform Desktop Distributions (3 OS Support)
-- **🪟 Windows (`LayoutLingua-windows-x86_64.zip`)**: Complete desktop distribution bundling the compiled Vite frontend, Express proxy, Python core engine, and double-click `start_app.bat` launcher with automatic dependency auto-discovery.
-- **🍎 macOS (`LayoutLingua-macos-apple-silicon.dmg`)**: Native Apple Silicon disk image (`.dmg`) created with `hdiutil`, containing the full application suite, Applications folder symlink, and executable `start_app.sh`.
-- **🐧 Linux (`LayoutLingua-linux-x86_64.tar.gz`)**: Standalone archive containing the packaged application suite and executable `start_app.sh` with automatic browser launching via `xdg-open`.
+### 📦 Cross-Platform Desktop Distributions (3 OS & Dual Mac Architectures)
+- **🪟 Windows (`LayoutLingua-windows-x86_64.zip`)**: Standalone desktop application bundling the compiled native executable (`LayoutLingua.exe`), production web studio bundle, bundled Python Document AI runtime, and `LayoutLingua.bat` launcher for seamless 1-click startup without manual dependencies.
+- **🍎 macOS Apple Silicon (`LayoutLingua-macos-apple-silicon.dmg`)**: Native Apple Silicon disk image (`.dmg`) bundling `LayoutLingua.app` compiled specifically for ARM64 (M1/M2/M3/M4 chips) with `/Applications` drag-and-drop installer symlink and `LayoutLingua.command`.
+- **🍎 macOS Intel (`LayoutLingua-macos-intel.dmg`)**: Native Intel Mac disk image (`.dmg`) bundling `LayoutLingua.app` compiled for x86_64 Intel Macs with `/Applications` drag-and-drop installer symlink and `LayoutLingua.command`.
+- **🐧 Linux (`LayoutLingua-linux-x86_64.tar.gz`)**: Standalone Linux bundle containing the compiled native ELF binary (`LayoutLingua`), FreeDesktop desktop shortcut (`LayoutLingua.desktop`), and `LayoutLingua.sh` launcher.
 
 ### 📦 Argos Offline AI Engine & Privacy
 - **100% Offline Translation**: Integrated CTranslate2 and Argos Translate runtime support for complete data confidentiality without sending a single byte to external clouds.

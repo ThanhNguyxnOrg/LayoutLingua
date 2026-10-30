@@ -129,13 +129,9 @@ jobs:
         run: |
           git config --global user.name "ThanhNguyxnAgent[bot]"
           git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
-          if ! git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
-            echo "Tag $TAG_NAME not found on remote. Creating and pushing tag via ThanhNguyxnAgent..."
-            git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
-            git push origin "$TAG_NAME"
-          else
-            echo "Tag $TAG_NAME already exists."
-          fi
+          echo "Updating tag $TAG_NAME to point to current commit..."
+          git tag -fa "$TAG_NAME" -m "Release $TAG_NAME"
+          git push origin "$TAG_NAME" --force
 
   windows:
     name: Windows (x86_64)
@@ -156,18 +152,22 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements.txt pywebview pyinstaller
 
-      - name: Package Windows desktop distribution
+      - name: Build Standalone Windows Desktop App (.exe)
         shell: pwsh
         run: |
           if (Test-Path "package.json") {
             npm ci --legacy-peer-deps
             npm run build
           }
+          python -m layoutlingua.desktop --build-exe
           New-Item -ItemType Directory -Force -Path "dist-release" | Out-Null
           New-Item -ItemType Directory -Force -Path "pack-stage/LayoutLingua" | Out-Null
-          Copy-Item -Recurse -Force layoutlingua, requirements.txt, README.md, LICENSE, dist, package.json, package-lock.json, server.ts, LayoutLingua.bat, start_app.bat, start_app.sh, src, public, index.html, vite.config.ts, tsconfig.json pack-stage/LayoutLingua/
+          if (Test-Path "release/LayoutLingua") {
+            Copy-Item -Recurse -Force release/LayoutLingua/* pack-stage/LayoutLingua/
+          }
+          Copy-Item -Force LayoutLingua.bat, README.md, LICENSE pack-stage/LayoutLingua/ -ErrorAction SilentlyContinue
           Compress-Archive -Path pack-stage/LayoutLingua -DestinationPath "dist-release/LayoutLingua-windows-x86_64.zip" -Force
 
       - uses: actions/upload-artifact@v7
@@ -177,10 +177,18 @@ jobs:
           if-no-files-found: warn
 
   macos:
-    name: macOS (apple-silicon)
+    name: macOS (${{ matrix.arch }})
     needs: check-and-tag
     if: needs.check-and-tag.outputs.should_release == 'true'
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: apple-silicon
+            runner: macos-latest
+          - arch: intel
+            runner: macos-13
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
 
@@ -195,25 +203,35 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements.txt pywebview pyinstaller
 
-      - name: Package macOS DMG distribution
+      - name: Build and Package macOS DMG (${{ matrix.arch }})
         shell: bash
         run: |
           if [ -f "package.json" ]; then
             npm ci --legacy-peer-deps
             npm run build
           fi
+          python -m layoutlingua.desktop --build-exe
           mkdir -p dist-release
-          mkdir -p dmg_stage/LayoutLingua
-          cp -r layoutlingua requirements.txt README.md LICENSE dist package.json package-lock.json server.ts LayoutLingua.bat start_app.bat start_app.sh src public index.html vite.config.ts tsconfig.json dmg_stage/LayoutLingua/
-          chmod +x dmg_stage/LayoutLingua/start_app.sh
+          mkdir -p dmg_stage
+
+          if [ -d "release/LayoutLingua.app" ]; then
+            cp -r release/LayoutLingua.app dmg_stage/
+          elif [ -d "release/LayoutLingua" ]; then
+            cp -r release/LayoutLingua dmg_stage/LayoutLingua.app
+          fi
+
+          cp LayoutLingua.command dmg_stage/ 2>/dev/null || true
+          cp README.md LICENSE dmg_stage/ 2>/dev/null || true
+          chmod +x dmg_stage/LayoutLingua.command 2>/dev/null || true
           ln -s /Applications dmg_stage/Applications
-          hdiutil create -volname "LayoutLingua" -srcfolder dmg_stage -ov -format UDZO dist-release/LayoutLingua-macos-apple-silicon.dmg
+
+          hdiutil create -volname "LayoutLingua" -srcfolder dmg_stage -ov -format UDZO "dist-release/LayoutLingua-macos-${{ matrix.arch }}.dmg"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: LayoutLingua-macos-apple-silicon
+          name: LayoutLingua-macos-${{ matrix.arch }}
           path: dist-release/LayoutLingua-macos-*.dmg
           if-no-files-found: warn
 
@@ -233,22 +251,34 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgirepository1.0-dev libcairo2-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev || true
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements.txt pywebview pyinstaller
 
-      - name: Package Linux desktop distribution
+      - name: Build Standalone Linux Application
         shell: bash
         run: |
           if [ -f "package.json" ]; then
             npm ci --legacy-peer-deps
             npm run build
           fi
+          python -m layoutlingua.desktop --build-exe
           mkdir -p dist-release
           mkdir -p pack_stage/LayoutLingua
-          cp -r layoutlingua requirements.txt README.md LICENSE dist package.json package-lock.json server.ts LayoutLingua.bat start_app.bat start_app.sh src public index.html vite.config.ts tsconfig.json pack_stage/LayoutLingua/
-          chmod +x pack_stage/LayoutLingua/start_app.sh
+
+          if [ -d "release/LayoutLingua" ]; then
+            cp -r release/LayoutLingua/* pack_stage/LayoutLingua/
+          fi
+          cp LayoutLingua.sh LayoutLingua.desktop README.md LICENSE pack_stage/LayoutLingua/ 2>/dev/null || cp LayoutLingua.sh README.md LICENSE pack_stage/LayoutLingua/ 2>/dev/null || true
+          chmod +x pack_stage/LayoutLingua/LayoutLingua 2>/dev/null || true
+          chmod +x pack_stage/LayoutLingua/LayoutLingua.sh 2>/dev/null || true
+
           tar -czf dist-release/LayoutLingua-linux-x86_64.tar.gz -C pack_stage LayoutLingua
 
       - uses: actions/upload-artifact@v7
@@ -258,7 +288,7 @@ jobs:
           if-no-files-found: warn
 
   publish:
-    name: Publish Release (3 Desktop OS)
+    name: Publish Release (All Desktop OS)
     needs: [check-and-tag, windows, macos, linux]
     if: needs.check-and-tag.outputs.should_release == 'true'
     runs-on: ubuntu-latest

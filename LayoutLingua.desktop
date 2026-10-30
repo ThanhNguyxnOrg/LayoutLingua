@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=LayoutLingua
+Comment=Document AI Translation Studio
+Exec=LayoutLingua
+Icon=layoutlingua
+Terminal=false
+Categories=Office;Publishing;Translation;
+StartupNotify=true
