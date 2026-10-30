@@ -57,7 +57,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
+          client-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
 
       - name: Checkout repository
@@ -145,6 +145,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -159,7 +163,7 @@ jobs:
         run: |
           $ver = "${{ needs.check-and-tag.outputs.version }}"
           if (Test-Path "package.json") {
-            npm ci
+            npm ci --legacy-peer-deps
             npm run build
           }
           New-Item -ItemType Directory -Force -Path "dist-release" | Out-Null
@@ -180,12 +184,14 @@ jobs:
       matrix:
         include:
           - arch: apple-silicon
-            runner: macos-15
-          - arch: intel
-            runner: macos-13
+            runner: macos-latest
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
 
       - uses: actions/setup-python@v7
         with:
@@ -201,7 +207,7 @@ jobs:
         run: |
           VER="${{ needs.check-and-tag.outputs.version }}"
           if [ -f "package.json" ]; then
-            npm ci
+            npm ci --legacy-peer-deps
             npm run build
           fi
           mkdir -p dist-release
@@ -221,6 +227,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -235,7 +245,7 @@ jobs:
         run: |
           VER="${{ needs.check-and-tag.outputs.version }}"
           if [ -f "package.json" ]; then
-            npm ci
+            npm ci --legacy-peer-deps
             npm run build
           fi
           mkdir -p dist-release
@@ -257,7 +267,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
+          client-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
 
       - uses: actions/checkout@v7
