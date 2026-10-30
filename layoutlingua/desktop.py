@@ -86,6 +86,64 @@ def _find_native_app_host_binary() -> str | None:
     return None
 
 
+def _schedule_window_icon_setup(window_title: str) -> None:
+    """Ensure native OS window titlebar and taskbar inherit LayoutLingua brand icon."""
+    if sys.platform != "win32":
+        return
+
+    def _worker():
+        import ctypes
+        from ctypes import wintypes
+        import time
+
+        for _ in range(20):
+            time.sleep(0.3)
+            root_dir = _get_bundle_root()
+            icon_path = root_dir / "public" / "icon.ico"
+            if not icon_path.is_file():
+                icon_path = root_dir / "layoutlingua" / "resources" / "icon.ico"
+            if not icon_path.is_file():
+                return
+
+            try:
+                user32 = ctypes.windll.user32
+                IMAGE_ICON = 1
+                LR_LOADFROMFILE = 0x00000010
+                WM_SETICON = 0x0080
+                ICON_SMALL = 0
+                ICON_BIG = 1
+
+                hicon_big = user32.LoadImageW(None, str(icon_path), IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
+                hicon_small = user32.LoadImageW(None, str(icon_path), IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+
+                applied = False
+
+                def enum_cb(hwnd, _):
+                    nonlocal applied
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        buf = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(hwnd, buf, length + 1)
+                        if window_title in buf.value or "LayoutLingua" in buf.value:
+                            if hicon_big:
+                                user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon_big)
+                            if hicon_small:
+                                user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon_small)
+                            applied = True
+                    return True
+
+                WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+                user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+                if applied:
+                    break
+            except Exception:
+                pass
+
+    import threading
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+
 def launch_desktop_app(port: int | None = None) -> int:
     """Start the local engine and open the native LayoutLingua desktop window."""
     root_dir = _get_bundle_root()
@@ -96,6 +154,13 @@ def launch_desktop_app(port: int | None = None) -> int:
     server = start_server(host="127.0.0.1", port=actual_port)
     app_url = f"http://127.0.0.1:{actual_port}/"
     window_title = "LayoutLingua — AI Document Translation Studio"
+
+    # Resolve application brand icon
+    brand_icon = root_dir / "public" / "icon.ico"
+    if not brand_icon.is_file():
+        brand_icon = root_dir / "layoutlingua" / "resources" / "icon.ico"
+    if not brand_icon.is_file():
+        brand_icon = root_dir / "public" / "logo.png"
 
     try:
         # 1. Primary: Native OS WebView window via pywebview (WebView2 on Windows, WebKit on macOS)
@@ -110,7 +175,11 @@ def launch_desktop_app(port: int | None = None) -> int:
                 min_size=(1080, 720),
                 text_select=True,
             )
-            webview.start()
+            _schedule_window_icon_setup(window_title)
+            if brand_icon.is_file():
+                webview.start(icon=str(brand_icon))
+            else:
+                webview.start()
             return 0
         except ImportError:
             pass
@@ -196,6 +265,31 @@ def build_desktop_executable(onefile: bool = False, output_name: str | None = No
         "--add-data",
         f"{res_src}{sep}layoutlingua/resources",
     ]
+
+    public_src = root_dir / "public"
+    if public_src.is_dir():
+        cmd.extend(["--add-data", f"{public_src}{sep}public"])
+
+    icon_path = None
+    if sys.platform == "win32":
+        for cand in [public_src / "icon.ico", res_src / "icon.ico"]:
+            if cand.is_file():
+                icon_path = cand
+                break
+    elif sys.platform == "darwin":
+        for cand in [public_src / "icon.icns", res_src / "icon.icns"]:
+            if cand.is_file():
+                icon_path = cand
+                break
+    else:
+        for cand in [public_src / "logo.png", res_src / "logo.png"]:
+            if cand.is_file():
+                icon_path = cand
+                break
+
+    if icon_path:
+        cmd.extend(["--icon", str(icon_path)])
+
     if fonts_src.exists():
         cmd.extend(["--add-data", f"{fonts_src}{sep}layoutlingua/typesetting/assets/fonts"])
     cmd.append(str(root_dir / "layoutlingua" / "desktop.py"))
