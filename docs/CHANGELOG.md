@@ -25,6 +25,13 @@ All notable changes to **LayoutLingua** are documented in this file.
 
 ## [2.1.3] — 2026-10-30
 
+### 🚀 Added
+- 📦 **Multi-Platform Desktop Packaging in CI/CD**:
+  - Upgraded `.github/workflows/release.yml` desktop packaging pipelines for Windows (`.zip`), macOS (`.tar.gz`), and Linux (`.tar.gz`).
+  - Bundles compiled Vite Web Studio assets (`dist/`), Express proxy (`server.ts`), core Python engine (`layoutlingua/`), dependencies (`requirements.txt`, `package.json`), and documentation into clean standalone release distributions.
+- 🔬 **Empirical Root Cause Analysis & Resolution**:
+  - Investigated and documented the PyMuPDF 2.0 layout-model gating failure mechanism, primary source evidence, and multi-tier defensive corroboration.
+
 ### 🩹 Fixed
 - 📦 **PyMuPDF 2.0 & Cross-Platform CI Compatibility**:
   - Resolved `AssertionError: 0 != 1` in `TableGridValidator` on Linux (`ubuntu-latest`), macOS (`macos-latest`), and Windows (`windows-latest`) runners under Python 3.12.
@@ -33,6 +40,7 @@ All notable changes to **LayoutLingua** are documented in this file.
 - 🧮 **Documentation & Typographic Formulas Clean-up**:
   - Fixed syntax formatting errors in `docs/ALGORITHM.md` line 49/50 (resolved KaTeX percent escape handling and unbalanced parenthetical code formatting).
   - Synchronized 100% of all repository markdown documentation (`docs/*.md`, `README.md`) into fluent, professional English with rich visual badges, stickers, and emojis.
+  - Bumped project semantic version to `2.1.3` across `package.json` and `layoutlingua/_version.py`.
 
 ---
 
