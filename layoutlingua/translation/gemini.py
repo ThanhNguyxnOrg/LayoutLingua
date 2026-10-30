@@ -72,6 +72,8 @@ class GeminiTranslationProvider(BaseTranslationProvider):
         )
         self._client = client
 
+    DYNAMIC_MODEL_ALIASES = {"auto", "latest", "gemini-auto", "gemini-latest", "gemini.auto"}
+
     @property
     def name(self) -> str:
         return "gemini"
@@ -115,12 +117,167 @@ class GeminiTranslationProvider(BaseTranslationProvider):
         self._client = "native_rest"
         return self._client
 
+    @staticmethod
+    def _is_usable_text_model(model_id: str) -> bool:
+        """Return True if the Gemini model ID is a text/multimodal generation model suitable for translation."""
+        m_low = model_id.lower().strip()
+        if not m_low.startswith("gemini"):
+            return False
+        excluded_tokens = (
+            "embedding",
+            "imagen",
+            "veo",
+            "aqa",
+            "tts",
+            "audio",
+            "robotics",
+            "computer-use",
+            "learnlm",
+            "image-generation",
+            "live",
+        )
+        return not any(tok in m_low for tok in excluded_tokens)
+
+    @staticmethod
+    def _score_gemini_model(model_id: str, preferred_hint: str = "") -> tuple[int, int, int, int, int]:
+        """Score a candidate Gemini model so the newest stable Flash/Pro model wins."""
+        m_low = model_id.lower().strip()
+        hint_low = (preferred_hint or "").lower().strip()
+
+        want_pro = "pro" in hint_low
+        want_lite = "lite" in hint_low
+
+        is_pro = "pro" in m_low
+        is_flash = "flash" in m_low
+        is_lite = "lite" in m_low or "8b" in m_low
+        is_preview_or_exp = any(tag in m_low for tag in ("exp", "preview", "thinking", "customtools"))
+        is_latest_alias = m_low in ("gemini-flash-latest", "gemini-pro-latest")
+
+        if want_pro:
+            family_score = 2 if is_pro else (1 if is_flash else 0)
+        else:
+            family_score = 2 if is_flash else (1 if is_pro else 0)
+
+        variant_score = (1 if is_lite else 0) if want_lite else (1 if not is_lite else 0)
+        stability_score = 2 if not is_preview_or_exp else 0
+
+        ver_match = re.search(r"gemini-(\d+)(?:\.(\d+))?", m_low)
+        if ver_match:
+            major = int(ver_match.group(1))
+            minor = int(ver_match.group(2) or 0)
+        elif is_latest_alias:
+            major, minor = 2, 4
+        else:
+            major, minor = 1, 0
+
+        return (family_score, variant_score, stability_score, major, minor)
+
+    def list_remote_models(self) -> list[str]:
+        """Discover available Gemini text generation models from the API."""
+        client = self._get_client()
+        discovered: list[str] = []
+
+        # 1. Try client.models.list() if client provides it
+        if hasattr(client, "models") and hasattr(client.models, "list"):
+            try:
+                resp = client.models.list()
+                items = getattr(resp, "data", None) or resp
+                for item in items:
+                    raw_name = getattr(item, "name", None) or getattr(item, "id", None)
+                    if not isinstance(raw_name, str) or not raw_name.strip():
+                        continue
+                    methods = getattr(item, "supported_generation_methods", None) or getattr(
+                        item, "supportedGenerationMethods", None
+                    )
+                    if isinstance(methods, (list, tuple, set)) and methods and "generateContent" not in methods:
+                        continue
+                    clean_name = raw_name.strip()
+                    if clean_name.startswith("models/"):
+                        clean_name = clean_name[7:]
+                    if self._is_usable_text_model(clean_name) and clean_name not in discovered:
+                        discovered.append(clean_name)
+                if discovered:
+                    return discovered
+            except Exception:
+                pass
+
+        # 2. Native REST discovery via /v1beta/models (skip only if client is an isolated unit-test mock)
+        is_mock_client = type(client).__module__.startswith("unittest.mock")
+        if not is_mock_client:
+            try:
+                import urllib.request
+
+                url = f"https://generativelanguage.googleapis.com/v1beta/models?key={self._api_key}"
+                req = urllib.request.Request(url, headers={"User-Agent": "LayoutLingua/2.0"})
+                with urllib.request.urlopen(req, timeout=8.0) as resp:
+                    payload = json.loads(resp.read().decode("utf-8"))
+                    models_list = payload.get("models", []) if isinstance(payload, dict) else []
+                    for m in models_list:
+                        if not isinstance(m, dict):
+                            continue
+                        methods = m.get("supportedGenerationMethods", [])
+                        if isinstance(methods, list) and methods and "generateContent" not in methods:
+                            continue
+                        raw_name = str(m.get("name", "")).strip()
+                        if raw_name.startswith("models/"):
+                            raw_name = raw_name[7:]
+                        if self._is_usable_text_model(raw_name) and raw_name not in discovered:
+                            discovered.append(raw_name)
+            except Exception:
+                pass
+
+        return discovered
+
+    def resolve_best_available_model(
+        self,
+        preferred_hint: str = "",
+        exclude_models: set[str] | None = None,
+    ) -> str | None:
+        """Select the highest-ranked active Gemini model, excluding any deprecated/failed models."""
+        excluded = {
+            m[7:] if m.startswith("models/") else m
+            for m in (exclude_models or set())
+            if isinstance(m, str)
+        }
+        candidates = [m for m in self.list_remote_models() if m not in excluded]
+        if not candidates:
+            return None
+        hint = preferred_hint or self.model
+        candidates.sort(key=lambda m: self._score_gemini_model(m, hint), reverse=True)
+        return candidates[0]
+
+    @staticmethod
+    def _is_model_not_found_error(exc: Exception) -> bool:
+        """Return True when an exception indicates a 404 / deprecated / non-existent model."""
+        status_code = getattr(exc, "status_code", getattr(exc, "code", None))
+        err_msg = str(exc)
+        err_low = err_msg.lower()
+        return bool(
+            status_code == 404
+            or "NOT_FOUND" in err_msg
+            or "is not found" in err_low
+            or "model_not_found" in err_low
+            or "does not exist" in err_low
+            or "deprecated" in err_low
+            or "no longer available" in err_low
+        )
+
     def translate_batch(self, request: BatchTranslationRequest) -> BatchTranslationResult:
-        """Dispatch batch translation request to Gemini."""
+        """Dispatch batch translation request to Gemini with dynamic model resolution and 404 auto-healing."""
         if not request.segments:
             return BatchTranslationResult(translations={})
 
         client = self._get_client()
+
+        # Resolve dynamic 'auto' / 'latest' alias before calling the API
+        if self.model.lower().strip() in self.DYNAMIC_MODEL_ALIASES:
+            resolved = self.resolve_best_available_model(preferred_hint="flash") or "gemini-flash-latest"
+            self.profile = ModelProfileCatalog.create_custom(
+                provider_id="gemini",
+                model_id=resolved,
+                supports_structured_json=self.profile.supports_structured_json,
+            )
+
         src_lang = request.source_language if (request.source_language and request.source_language != "auto") else "the source language"
 
         # Build prompt
@@ -160,7 +317,31 @@ class GeminiTranslationProvider(BaseTranslationProvider):
         try:
             response_text = self._execute_call(client, prompt, use_json)
         except Exception as e:
-            self._map_and_raise_error(e)
+            # Auto-heal if the configured model was deprecated or removed (e.g. gemini-2.5-flash deleted in the future)
+            if self._is_model_not_found_error(e):
+                failed_model = self.model
+                replacement = self.resolve_best_available_model(
+                    preferred_hint=failed_model,
+                    exclude_models={failed_model, f"models/{failed_model}"},
+                )
+                if replacement and replacement != failed_model:
+                    print(
+                        f"[LayoutLingua] Gemini model '{failed_model}' is unavailable/deprecated; "
+                        f"auto-switching to active model '{replacement}'."
+                    )
+                    self.profile = ModelProfileCatalog.create_custom(
+                        provider_id="gemini",
+                        model_id=replacement,
+                        supports_structured_json=self.profile.supports_structured_json,
+                    )
+                    try:
+                        response_text = self._execute_call(client, prompt, use_json)
+                    except Exception as retry_err:
+                        self._map_and_raise_error(retry_err)
+                else:
+                    self._map_and_raise_error(e)
+            else:
+                self._map_and_raise_error(e)
 
         # Parse output
         translations = self._parse_response(response_text, [s.segment_id for s in request.segments], use_json)

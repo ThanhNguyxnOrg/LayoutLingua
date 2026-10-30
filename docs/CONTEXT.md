@@ -36,16 +36,18 @@ The initial end-to-end operational pipeline combining the IR, a Mock Translation
 
 ## 2. Translation Architecture & Resiliency
 
-**Track A (Stable Zero-Key Offline)**:
-Local offline neural machine translation powered by open-source engines like **Argos Translate** (OpenNMT models cached locally). Zero API keys, zero rate limits, zero privacy leakage.
+**Track A (100% Local Air-Gapped Offline AI)** 📦:
+Local offline neural machine translation powered by open-source engines like **Argos Translate** and **CTranslate2** (OpenNMT models cached locally). Zero API keys, zero rate limits, zero privacy leakage. Includes in-app model manager (`/api/argos/status`, `/api/argos/install`) allowing one-click runtime and language package downloads directly from Settings.
 
-**Track B (Experimental Web Translation)**:
-Free Google Translate RPC utilizing Intelligent Batch Packing, disk caching, and rate throttling. If a CAPTCHA or hard block is encountered, the provider aborts immediately and reports to the user without attempting deceptive background provider hijacking.
+**Track B (Zero-Setup Web Translation)** 🌐:
+Free Google Translate RPC utilizing Intelligent Batch Packing, disk caching, and rate throttling. Normalized across 17 languages with intelligent token sanitization.
 
-**AI Provider Tier (Configurable, Non-Hardcoded)**:
-Cloud AI translation utilizing active, user-selectable models:
-- *Google AI Studio*: Production models (e.g., `gemini-3.1-flash-lite`) with mandatory **Privacy Disclosure** alerting users that free tier inputs may be reviewed or used for model training.
-- *OpenAI-Compatible Standard*: Supports Groq (active models e.g., `openai/gpt-oss-120b`), DeepSeek, OpenAI, and local Ollama (`localhost:11434`).
+**AI Provider Tier (Configurable, Future-Proof)** 🤖:
+Cloud and local LLM translation utilizing active, user-selectable models:
+- *Google AI Studio (Gemini)*: Auto-healing architecture that dynamically queries `/v1beta/models` and switches to the newest active Flash model if an older model ID is deprecated (404 NOT_FOUND).
+- *Local LLMs*: Direct one-click presets for **Ollama** (`localhost:11434`) and **LM Studio** (`localhost:1234`).
+- *OpenAI-Compatible Standard*: Supports DeepSeek, Groq, OpenRouter, and OpenAI via zero-dependency `native_rest` fallback.
+- *Live Connection Benchmark*: Real-time endpoint testing via `/api/test-provider`, verifying round-trip latency and formula token invariants (`<b0></b0>`).
 
 **Persistent Segment Cache**:
 An on-disk SQLite store (`layoutlingua_translations.db`) indexed by SHA-256 fingerprint (`source_lang + target_lang + provider_model + masked_text`). Guarantees that every translated segment is persisted across application restarts, session terminations, or rate limit halts, eliminating duplicate API costs and redundant network requests.

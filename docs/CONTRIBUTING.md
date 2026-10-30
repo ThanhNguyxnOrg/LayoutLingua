@@ -49,21 +49,18 @@ Thank you for contributing to **LayoutLingua**! 🎉 To keep the PDF translation
 
 ## 2. 🛠 Development Workflow
 
-### 🌐 Web Stack (TS engine, port 3000)
+### 🚀 Full-Stack Web Studio (Python Engine :8765 + React UI :3000)
 ```bash
-npm install          # 📦 dependencies
-npm run dev          # 🚀 Express + Vite dev server
-npm run lint         # 🧹 TypeScript strict check
-npm run build        # 📦 production build
-```
-
-### 🖥 Web Studio Stack (Python engine, port 8765 + Web Studio UI, port 3000)
-```bash
+# 1. Setup Python virtual environment & engine dependencies
 python -m venv .venv && .venv\Scripts\Activate.ps1   # 🐧 Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"                              # 🐍 engine + dev tools
-pytest tests/ -q                                     # 🧪 274 engine tests
 
+# 2. Run automated test suite (276 tests)
+pytest tests/ -q                                     # 🧪 276 engine tests
+
+# 3. Setup and launch Web Studio
 npm install --legacy-peer-deps                       # 📦 web studio dependencies
+npm run lint                                         # 🧹 TypeScript strict check
 npm run dev                                          # 🚀 web studio + engine (localhost:3000)
 ```
 
@@ -75,8 +72,10 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) — the repo hi
 ## 3. ✅ Pull Request Checklist
 
 - [ ] `npm run build` and `npm run lint` succeed with zero TypeScript or Vite errors. 🧹
-- [ ] `pytest tests/ -v` passes if the Python engine changed. 🐍
+- [ ] `pytest tests/ -q` passes (all 276 tests pass). 🧪
 - [ ] Zero hardcoded word lists introduced in the engine. 🚫
-- [ ] Both engines kept in parity for any REST contract change. 🔁
+- [ ] Provider additions implement `BaseTranslationProvider` and formula placeholder invariance (`<b0></b0>`). 🛡️
+- [ ] Tested on multi-page mathematical PDFs (including TOC pages, symbol tables, footnotes with links, and geometric figures) with `0` PUA leaks and `0` overflow fallbacks. 📐
+- [ ] Relevant documentation (`README.md`, `ARCHITECTURE.md`, or `CHANGELOG.md`) updated. 📚
 - [ ] Tested on multi-page mathematical PDFs (including TOC pages, symbol tables, footnotes with links, and geometric figures) with `0` PUA leaks and `0` overflow fallbacks. 📐
 - [ ] Relevant documentation (`README.md`, `ARCHITECTURE.md`, or `CHANGELOG.md`) updated. 📚

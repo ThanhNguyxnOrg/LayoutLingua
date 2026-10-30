@@ -675,6 +675,169 @@ class TestSlice3CCloudProviders(unittest.TestCase):
         })
         self.assertEqual(goog_inst.name, "google_rpc")
 
+    def test_gemini_auto_heal_when_model_deprecated_or_deleted(self) -> None:
+        """Verify GeminiTranslationProvider automatically discovers and upgrades to the newest active Flash model if gemini-2.5-flash is deleted (404)."""
+        import io
+        import urllib.error
+        import urllib.request
+        from unittest.mock import patch
+
+        provider = GeminiTranslationProvider(
+            api_key="valid-gemini-key",
+            profile_or_model="gemini-2.5-flash",
+            client="native_rest",
+        )
+        self.assertEqual(provider.model, "gemini-2.5-flash")
+
+        # 1. First generateContent call for gemini-2.5-flash fails with 404 NOT_FOUND (simulating future deprecation)
+        err_404 = urllib.error.HTTPError(
+            url="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+            code=404,
+            msg="Not Found",
+            hdrs=None,  # type: ignore[arg-type]
+            fp=io.BytesIO(b'{"error": {"code": 404, "status": "NOT_FOUND", "message": "models/gemini-2.5-flash is not found"}}'),
+        )
+
+        # 2. Discovery call to /v1beta/models returns newer active models
+        models_payload = json.dumps({
+            "models": [
+                {
+                    "name": "models/text-embedding-004",
+                    "supportedGenerationMethods": ["embedContent"],
+                },
+                {
+                    "name": "models/gemini-2.0-flash",
+                    "supportedGenerationMethods": ["generateContent"],
+                },
+                {
+                    "name": "models/gemini-3.0-flash-lite",
+                    "supportedGenerationMethods": ["generateContent"],
+                },
+                {
+                    "name": "models/gemini-3.0-flash",
+                    "supportedGenerationMethods": ["generateContent"],
+                },
+                {
+                    "name": "models/gemini-3.0-pro",
+                    "supportedGenerationMethods": ["generateContent"],
+                },
+            ]
+        }).encode("utf-8")
+
+        # 3. Retry generateContent call with gemini-3.0-flash succeeds
+        gen_payload = json.dumps({
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": json.dumps({
+                                    "translations": [{"id": "s1", "text": "Định lý <b0></b0> được bảo toàn."}]
+                                })
+                            }
+                        ]
+                    }
+                }
+            ]
+        }).encode("utf-8")
+
+        class _BytesResp:
+            def __init__(self, data: bytes):
+                self._data = data
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            def read(self):
+                return self._data
+
+        with patch.object(
+            urllib.request,
+            "urlopen",
+            side_effect=[err_404, _BytesResp(models_payload), _BytesResp(gen_payload)],
+        ):
+            req = BatchTranslationRequest(
+                batch_id="b_auto_heal",
+                segments=(TextSegment("s1", "Theorem <b0></b0> is preserved.", "Theorem <b0></b0> is preserved."),),
+                source_language="en",
+                target_language="vi",
+            )
+            res = provider.translate_batch(req)
+            self.assertEqual(res.translations["s1"], "Định lý <b0></b0> được bảo toàn.")
+            # Provider automatically upgraded its active model ID to the newest stable Flash model!
+            self.assertEqual(provider.model, "gemini-3.0-flash")
+
+    def test_openai_ollama_auto_heal_when_model_missing_or_deprecated(self) -> None:
+        """Verify OpenAITranslationProvider auto-discovers and switches to an installed model when configured model returns 404."""
+        import io
+        import urllib.error
+        import urllib.request
+        from unittest.mock import patch
+
+        provider = OpenAITranslationProvider(
+            api_key="ollama",
+            model_id="llama3.1-old",
+            base_url="http://localhost:11434/v1",
+            supports_structured_json=False,
+            client="native_rest",
+        )
+
+        err_404 = urllib.error.HTTPError(
+            url="http://localhost:11434/v1/chat/completions",
+            code=404,
+            msg="Not Found",
+            hdrs=None,  # type: ignore[arg-type]
+            fp=io.BytesIO(b'{"error": {"message": "model \'llama3.1-old\' not found, try pulling it first"}}'),
+        )
+
+        models_payload = json.dumps({
+            "data": [
+                {"id": "nomic-embed-text:latest"},
+                {"id": "qwen2.5:14b"},
+            ]
+        }).encode("utf-8")
+
+        chat_payload = json.dumps({
+            "choices": [
+                {
+                    "message": {
+                        "content": '<segment id="s1">Phương trình <b0></b0> chính xác.</segment>'
+                    }
+                }
+            ]
+        }).encode("utf-8")
+
+        class _BytesResp:
+            def __init__(self, data: bytes):
+                self._data = data
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            def read(self):
+                return self._data
+
+        with patch.object(
+            urllib.request,
+            "urlopen",
+            side_effect=[err_404, _BytesResp(models_payload), _BytesResp(chat_payload)],
+        ):
+            req = BatchTranslationRequest(
+                batch_id="b_ollama_heal",
+                segments=(TextSegment("s1", "Equation <b0></b0> is exact.", "Equation <b0></b0> is exact."),),
+                source_language="en",
+                target_language="vi",
+            )
+            res = provider.translate_batch(req)
+            self.assertEqual(res.translations["s1"], "Phương trình <b0></b0> chính xác.")
+            self.assertEqual(provider.model, "qwen2.5:14b")
+
 
 if __name__ == "__main__":
     unittest.main()

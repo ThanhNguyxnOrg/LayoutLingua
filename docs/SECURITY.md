@@ -18,23 +18,24 @@
   <img src="https://img.shields.io/badge/🔐_Security-Local_First_Privacy-0D9488?style=for-the-badge" alt="Security Policy" />
   <img src="https://img.shields.io/badge/🧊_PDF_Execution-PyMuPDF_Sandboxed_Parsing-0284C7?style=for-the-badge" alt="Sandboxed PyMuPDF" />
   <img src="https://img.shields.io/badge/🛡️_Data_Leakage-Zero_(Offline_Mode)-22C55E?style=for-the-badge" alt="Zero Leakage" />
+  <img src="https://img.shields.io/badge/📴_Air--Gapped-100%25_Local_AI-8B5CF6?style=for-the-badge" alt="Air Gapped" />
 </p>
 
 ## 📌 Supported Versions
 
 | Version | Supported |
 |:---|:---:|
-| `2.1.x` | ✅ Yes |
+| `2.1.x` | ✅ Yes (Active Release) |
 | `2.0.x` | ⚠️ Security fixes only |
-| `< 2.0.0` | ❌ No |
+| `< 2.0.0` | ❌ End of Life |
 
 ## 🛡️ Privacy & Data Handling Architecture
 
-1. **🧊 Sandboxed Vector Parsing**: PDF documents are parsed in memory using WebAssembly-sandboxed MuPDF (`mupdf`) and `pdf-lib` (web engine) or PyMuPDF (desktop engine). Embedded JavaScript actions inside untrusted PDFs are never executed.
-2. **🔒 Formula Shielding Before External Calls**: Only extracted prose spans (`ProseGroup.sourceText` with inline math masked as `⟦M0⟧`) are sent to the configured translation provider; raw PDF files and vector diagrams never leave your local server.
-3. **📴 Offline Mode**: The Argos Translate (OpenNMT) provider runs 100% on-device — zero network calls, zero data leakage. 🛡️
-4. **🧭 Path Traversal Protection**: Export filenames and session cache identifiers (`docId`) are strictly sanitized (`replace(/[^a-zA-Z0-9_-]/g, '_')`) before any filesystem read/write operation.
-5. **💾 Session Cache Isolation**: Persisted sessions (`.cache/sessions/`, OS cache dir) live entirely inside the user's own profile directory and never sync anywhere automatically.
+1. **🧊 Sandboxed Vector Parsing**: PDF documents are parsed in memory using PyMuPDF (`fitz`). Embedded JavaScript actions inside untrusted PDFs are never executed.
+2. **🔒 Formula Shielding Before External Calls**: Only extracted prose spans (`ProseGroup.sourceText` with inline math masked as `⟦M0⟧` / `<b0></b0>`) are sent to the configured translation provider; raw PDF files and vector diagrams never leave your local machine.
+3. **📴 100% Offline Air-Gapped Mode**: The Argos Translate (CTranslate2) provider runs completely on-device — zero network calls, zero data leakage, zero API keys required. 🛡️
+4. **🧭 Path Traversal & Base URL SSRF Protection**: Export filenames and session cache identifiers (`docId`) are strictly sanitized. Custom OpenAI endpoints undergo SSRF validation rejecting link-local, cloud metadata (`169.254.169.254`), and loopback re-binding.
+5. **💾 Session Cache Isolation**: Persisted sessions live entirely inside the user's local operating system cache directory (`platformdirs`) and never leave the host machine.
 
 ## 🚨 Reporting a Vulnerability
 

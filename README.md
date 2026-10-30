@@ -1,41 +1,43 @@
 <div align="center">
 
-<img src="public/logo.png" alt="LayoutLingua Logo" width="96" height="96" />
+<img src="public/logo.png" alt="LayoutLingua Logo" width="112" height="112" />
 
-# LayoutLingua v2.0
+# 🚀 LayoutLingua v2.1.2 🌟
 
 ### **High-Precision Multilingual Academic & Technical PDF Translation Engine**
-*Strict Typographic Geometry Preservation • Sub-Line Formula Pinning • 17-Language Neural Typesetting*
+*Strict Typographic Geometry Preservation 📐 • Sub-Line Formula Pinning 🧮 • 17-Language Neural Typesetting 🌍*
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.1-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.1.1" />
+  <img src="https://img.shields.io/badge/Version-2.1.2-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.1.2" />
   <img src="https://img.shields.io/badge/Engine-PyMuPDF_Vector_Core-0284C7?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" alt="PyMuPDF Engine" />
   <img src="https://img.shields.io/badge/TypeScript-5.8%20Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5.8" />
   <img src="https://img.shields.io/badge/React-19.0-149ECA?style=for-the-badge&logo=react&logoColor=white" alt="React 19" />
-  <img src="https://img.shields.io/badge/Vite-8.3%20Web%20Studio-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Tauri v2" />
+  <img src="https://img.shields.io/badge/Vite-8.3%20Web%20Studio-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite Web Studio" />
+  <img src="https://img.shields.io/badge/Tests-276%20Passed-22C55E?style=for-the-badge&logo=pytest&logoColor=white" alt="276 Tests Passed" />
   <img src="https://img.shields.io/badge/License-MIT-F59E0B?style=for-the-badge&logo=opensourceinitiative&logoColor=white" alt="MIT License" />
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Languages-17%20Supported-10B981?style=flat-square&logo=googletranslate&logoColor=white" alt="17 Languages" />
-  <img src="https://img.shields.io/badge/Language%20Detection-franc--min%20(Trigram%20ISO--639--3)-6366F1?style=flat-square" alt="franc-min Trigram Detection" />
-  <img src="https://img.shields.io/badge/Math%20Isolation-PDFMathTranslate%20vflag%20%2B%202D%20Quads-8B5CF6?style=flat-square" alt="Math Isolation" />
-  <img src="https://img.shields.io/badge/CJK%20Fonts-Noto%20Sans%20SC%2FTC%2FJP%2FKR-EC4899?style=flat-square" alt="CJK Fonts" />
-  <img src="https://img.shields.io/badge/Legacy%20Encoding-VNI--Windows%20%26%20Symbol%20PUA-14B8A6?style=flat-square" alt="VNI & Symbol PUA" />
-  <img src="https://img.shields.io/badge/Zero%20Hardcode-100%25%20Algorithmic-22C55E?style=flat-square" alt="Zero Hardcode" />
-  <img src="https://img.shields.io/badge/Benchmark%2096%20Pages-0%20Overflows%20%7C%200%20PUA%20Leaks-059669?style=flat-square" alt="Benchmark Verified" />
+  <img src="https://img.shields.io/badge/Offline%20AI-Argos%20CTranslate2-8B5CF6?style=flat-square&logo=cpu&logoColor=white" alt="Argos Offline AI" />
+  <img src="https://img.shields.io/badge/Local%20LLM-Ollama%20%7C%20LM%20Studio-F97316?style=flat-square&logo=ollama&logoColor=white" alt="Local LLMs" />
+  <img src="https://img.shields.io/badge/Gemini%20API-Auto--Healing%20404-3B82F6?style=flat-square&logo=google&logoColor=white" alt="Gemini Auto-Heal" />
+  <img src="https://img.shields.io/badge/Math%20Isolation-vflag%20%2B%202D%20Quads-6366F1?style=flat-square" alt="Math Isolation" />
+  <img src="https://img.shields.io/badge/Zero%20Hardcode-100%25%20Algorithmic-059669?style=flat-square" alt="Zero Hardcode" />
+  <img src="https://img.shields.io/badge/Benchmark%2096%20Pages-0%20Overflows%20%7C%200%20PUA%20Leaks-0D9488?style=flat-square" alt="Benchmark Verified" />
 </p>
 
 <p align="center">
-  <a href="#-demo">Demo</a> •
-  <a href="#-key-innovations">Key Innovations</a> •
-  <a href="#-supported-languages--typography">17 Languages</a> •
-  <a href="#-system-architecture">Architecture</a> •
-  <a href="#-algorithmic-pipeline">Core Algorithms</a> •
-  <a href="#-benchmarks">Benchmarks</a> •
-  <a href="#-installation--quickstart">Quickstart</a> •
-  <a href="#-rest-api--dual-engine-contract">API</a> •
-  <a href="#-documentation">Docs</a>
+  <a href="#-demo">🖥️ Demo</a> •
+  <a href="#-key-innovations">✨ Key Innovations</a> •
+  <a href="#-universal-translation-providers">🤖 Providers & Offline AI</a> •
+  <a href="#-supported-languages--typography">🌍 17 Languages</a> •
+  <a href="#-system-architecture">🏛 Architecture</a> •
+  <a href="#-algorithmic-pipeline">🧮 Core Algorithms</a> •
+  <a href="#-benchmarks">📊 Benchmarks</a> •
+  <a href="#-installation--quickstart">🛠 Quickstart</a> •
+  <a href="#-rest-api-contract">🔌 API Reference</a> •
+  <a href="#-documentation">📚 Documentation</a>
 </p>
 
 </div>
@@ -146,6 +148,21 @@ Translating academic papers, mathematical handbooks, and engineering specificati
 
 ---
 
+## 🤖 Universal Translation Providers & Offline AI Engine
+
+LayoutLingua supports 4 distinct translation tracks designed for maximum privacy, accuracy, and ease of use:
+
+| Provider | Type | Privacy & Cost | Key Capabilities & Auto-Healing |
+|:---|:---:|:---:|:---|
+| 🌐 **Google Translate RPC** | Web NMT | Free • Zero Setup | Instant batching with multi-mirror fallback, 17 languages, zero API keys required. |
+| 🧠 **Google AI Studio (Gemini)** | Cloud LLM | Free/Paid Tier | **Auto-Healing 404 Deprecation**: automatically discovers newest Flash models if an older model ID is retired; supports `auto`, `gemini-2.5-flash`, `gemini-flash-latest`. |
+| 🦙 **Local LLMs & OpenAI-Compatible** | Local / Cloud | 100% Private (Local) | Zero-dependency `native_rest` fallback. Direct support for **Local Ollama** (`localhost:11434`), **LM Studio** (`localhost:1234`), DeepSeek, Groq, and OpenRouter. |
+| 📦 **Argos Translate (Offline AI)** | Local Neural | 100% Air-Gapped Offline | CTranslate2 local neural inference with zero internet connection or API keys. One-click runtime and language package download directly from Settings UI. |
+
+> ⚡ **Live Provider Connection Test**: Click **Test Connection** in Settings to measure round-trip latency (ms) and verify formula token invariance (`<b0></b0>`) in real-time before starting translations! 🎯
+
+---
+
 ## 🏗 System Architecture
 
 ```mermaid
@@ -225,7 +242,10 @@ One engine, one contract — the Python engine serves the whole app; the React W
 | `/api/cancel` | POST | Stop the job — pages already translated are kept ♻️ |
 | `/api/download` | GET | Export: monolingual PDF · bilingual interleaved PDF · Markdown |
 | `/api/save` | POST | Write the export straight to the user-chosen folder (OneDrive-aware) |
-| `/api/models` | GET | Discover OpenAI-compatible models |
+| `/api/models` | GET | Discover OpenAI-compatible, Local LLM, and Gemini models |
+| `/api/test-provider` | POST | Live provider connection, latency benchmark & formula invariant test 🎯 |
+| `/api/argos/status` | GET | Query 100% offline translation runtime & installed language models 📦 |
+| `/api/argos/install` | POST | One-click offline runtime setup & language pack download ⬇️ |
 
 ---
 

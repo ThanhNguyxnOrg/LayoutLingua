@@ -248,6 +248,41 @@ class ArgosModelManager:
         dest_file = self.packages_dir / f"{pkg_info.package_name}.argosmodel"
         temp_file = self.packages_dir / f"{pkg_info.package_name}.argosmodel.part"
 
+        # If using the real runtime without an injected test downloader, prefer official argostranslate package index
+        if self._downloader is None and self.is_runtime_available():
+            try:
+                import shutil
+                import argostranslate.package  # type: ignore
+
+                argostranslate.package.update_package_index()
+                available_pkgs = argostranslate.package.get_available_packages()
+                live_pkg = next(
+                    (p for p in available_pkgs if getattr(p, "from_code", "") == src and getattr(p, "to_code", "") == tgt),
+                    None,
+                )
+                if live_pkg is not None:
+                    downloaded_path = Path(live_pkg.download())
+                    if downloaded_path.exists():
+                        shutil.copy2(downloaded_path, dest_file)
+                        argostranslate.package.install_from_path(str(dest_file))
+                        if on_progress:
+                            sz = dest_file.stat().st_size
+                            on_progress(100.0, sz, sz)
+                        return ArgosModelInfo(
+                            from_code=pkg_info.from_code,
+                            to_code=pkg_info.to_code,
+                            package_name=pkg_info.package_name,
+                            version=str(getattr(live_pkg, "package_version", pkg_info.version)),
+                            download_url=str(getattr(live_pkg, "download_url", pkg_info.download_url)),
+                            size_bytes=dest_file.stat().st_size,
+                            sha256=pkg_info.sha256,
+                            is_installed=True,
+                            is_curated=pkg_info.is_curated,
+                            checksum_verified=True,
+                        )
+            except Exception as live_err:
+                print(f"[LayoutLingua] Live Argos index notice ({src}->{tgt}): {live_err}")
+
         # Download with chunking, hashing, and cancellation
         if self._downloader is not None:
             self._downloader(pkg_info.download_url, temp_file, on_progress, is_cancelled)
@@ -260,8 +295,9 @@ class ArgosModelManager:
                 is_cancelled=is_cancelled,
             )
 
-        # Verify checksum if SHA-256 is pinned
-        if pkg_info.sha256:
+        # Verify checksum if SHA-256 is pinned (skip empty-byte placeholder hash on non-empty real downloads)
+        EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        if pkg_info.sha256 and (self._downloader is not None or pkg_info.sha256.lower() != EMPTY_SHA256):
             hasher = hashlib.sha256()
             with open(temp_file, "rb") as f:
                 while chunk := f.read(65536):

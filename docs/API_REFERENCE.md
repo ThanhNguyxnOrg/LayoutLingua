@@ -18,6 +18,8 @@
   <img src="https://img.shields.io/badge/🔌_API-REST_+_Binary_Streams-0D9488?style=for-the-badge" alt="REST API" />
   <img src="https://img.shields.io/badge/🖥️_Engine-Python_::8765-FFC131?style=for-the-badge" alt="Engine" />
   <img src="https://img.shields.io/badge/🌐_Web_Studio-:3000_(server.ts)-646CFF?style=for-the-badge" alt="Web Studio" />
+  <img src="https://img.shields.io/badge/🎯_Connection_Test-Live_Telemetry-3B82F6?style=for-the-badge" alt="Live Connection Test" />
+  <img src="https://img.shields.io/badge/📦_Offline_Argos-Status_+_Install-8B5CF6?style=for-the-badge" alt="Offline Argos" />
   <img src="https://img.shields.io/badge/✅_Contract-100%25_Parity-22C55E?style=for-the-badge" alt="Parity" />
 </p>
 
@@ -225,6 +227,17 @@ Validates connectivity, measures latency, and verifies formula placeholder invar
 
 - **Request**: `{ "provider": "gemini|openai|google|argos", "api_key": "...", "model": "...", "base_url": "..." }`
 - **Response**: `{ "status": "ok", "provider": "...", "model": "...", "latency_ms": 142, "formula_preserved": true, "message": "Connected in 142 ms" }`
+
+### 13. `GET /api/argos/status`
+Queries the status of the 100% local offline neural translation engine, listing runtime availability, installed language models, and available packages in the catalog.
+
+- **Response**: `{ "status": "ok", "runtime_available": true, "installed_models": [...], "available_models": [...] }`
+
+### 14. `POST /api/argos/install`
+Installs the Argos Translate offline runtime via pip into the engine virtualenv, and/or downloads and installs directional language pairs (e.g. `en -> vi`, `ja -> en`).
+
+- **Request**: `{ "install_runtime": true, "from_code": "en", "to_code": "vi" }`
+- **Response**: `{ "status": "ok", "runtime_available": true, "installed_models": [...], "route": "en -> vi", "message": "Offline package installed." }`
 
 ---
 

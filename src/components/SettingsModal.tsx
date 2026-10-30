@@ -34,10 +34,96 @@ export default function SettingsModal({
     latencyMs?: number
   } | null>(null)
 
+  const [geminiModels, setGeminiModels] = useState<string[]>([])
+  const [fetchingGeminiModels, setFetchingGeminiModels] = useState(false)
+  const [argosStatus, setArgosStatus] = useState<{
+    loading: boolean
+    installing: boolean
+    runtimeAvailable: boolean
+    installedModels: Array<{ from_code: string; to_code: string; package_name: string }>
+    selectedPair: string
+    message?: string
+    error?: string
+  }>({
+    loading: false,
+    installing: false,
+    runtimeAvailable: false,
+    installedModels: [],
+    selectedPair: 'en:vi',
+  })
+
   // Keep modal provider in perfect two-way sync if changed externally
   useEffect(() => {
     setSettings((prev) => (prev.provider !== globalSettings.provider ? { ...prev, provider: globalSettings.provider } : prev))
   }, [globalSettings.provider])
+
+  const refreshArgosStatus = async () => {
+    setArgosStatus((prev) => ({ ...prev, loading: true, error: undefined }))
+    try {
+      const res = await fetch(apiUrl('/api/argos/status'))
+      const data = await res.json()
+      if (data.status === 'ok') {
+        setArgosStatus((prev) => ({
+          ...prev,
+          loading: false,
+          runtimeAvailable: Boolean(data.runtime_available),
+          installedModels: data.installed_models || [],
+        }))
+      } else {
+        setArgosStatus((prev) => ({ ...prev, loading: false, error: data.error || 'Failed to check Argos status' }))
+      }
+    } catch (err) {
+      setArgosStatus((prev) => ({
+        ...prev,
+        loading: false,
+        error: err instanceof Error ? err.message : 'Unable to query Argos status',
+      }))
+    }
+  }
+
+  useEffect(() => {
+    if (settings.provider === 'argos') {
+      refreshArgosStatus()
+    }
+  }, [settings.provider])
+
+  const installArgosOffline = async (installPack: boolean) => {
+    const [fromCode, toCode] = argosStatus.selectedPair.split(':')
+    setArgosStatus((prev) => ({ ...prev, installing: true, message: undefined, error: undefined }))
+    try {
+      const res = await fetch(apiUrl('/api/argos/install'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          install_runtime: true,
+          from_code: installPack ? fromCode : '',
+          to_code: installPack ? toCode : '',
+        }),
+      })
+      const data = await res.json()
+      if (data.status === 'ok') {
+        setArgosStatus((prev) => ({
+          ...prev,
+          installing: false,
+          runtimeAvailable: Boolean(data.runtime_available),
+          installedModels: data.installed_models || [],
+          message: data.message || 'Offline translation engine updated.',
+        }))
+      } else {
+        setArgosStatus((prev) => ({
+          ...prev,
+          installing: false,
+          error: data.message || data.error || 'Installation failed.',
+        }))
+      }
+    } catch (err) {
+      setArgosStatus((prev) => ({
+        ...prev,
+        installing: false,
+        error: err instanceof Error ? err.message : 'Network error during installation.',
+      }))
+    }
+  }
 
   const handleSelectProvider = (newProvider: ProviderType) => {
     setTestResult(null)
@@ -88,6 +174,29 @@ export default function SettingsModal({
       })
     } finally {
       setTestingProvider(false)
+    }
+  }
+
+  const fetchGeminiAvailableModels = async () => {
+    if (!settings.geminiKey.trim()) return
+    setFetchingGeminiModels(true)
+    try {
+      const res = await fetch(
+        apiUrl(`/api/models?provider=gemini&api_key=${encodeURIComponent(settings.geminiKey.trim())}`)
+      )
+      if (res.ok) {
+        const data = await res.json()
+        if (data.models && data.models.length > 0) {
+          setGeminiModels(data.models)
+          if (data.recommended && (!settings.geminiModel || settings.geminiModel === 'auto')) {
+            setSettings((prev) => ({ ...prev, geminiModel: data.recommended }))
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch Gemini models:', e)
+    } finally {
+      setFetchingGeminiModels(false)
     }
   }
 
@@ -211,22 +320,22 @@ export default function SettingsModal({
                   {
                     id: 'openai',
                     name: 'OpenAI-Compatible API',
-                    sub: 'Cloud & Local: OpenAI, Claude, DeepSeek, Ollama, LM Studio',
-                    badge: 'Universal LLM',
+                    sub: 'Cloud & Local AI: Ollama, LM Studio, OpenAI, DeepSeek',
+                    badge: 'Cloud & Local LLM',
                   },
                   {
                     id: 'gemini',
                     name: 'Google AI Studio (Gemini)',
-                    sub: 'Top mathematical reasoning & accuracy with API key',
-                    badge: 'Free Tier',
+                    sub: 'Top mathematical reasoning & auto-updating model support',
+                    badge: 'Auto-Updating',
                   },
                   {
                     id: 'argos',
                     name: 'Argos Translate (Offline)',
                     sub: isDesktopRuntime
                       ? 'Lightweight offline CTranslate2 NMT model'
-                      : 'Requires the desktop app (Python engine) — not available in the browser',
-                    badge: isDesktopRuntime ? 'Offline' : 'DESKTOP ONLY',
+                      : '100% local offline CTranslate2 neural translation engine',
+                    badge: 'Local Offline AI',
                   },
                 ].map((p) => (
                   <label
@@ -303,16 +412,55 @@ export default function SettingsModal({
                     className="h-9 rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
                   />
                 </label>
-                <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
-                  Model ID
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[12.5px] font-semibold text-ink">
+                      Model ID (Auto-Heals on Deprecation)
+                    </label>
+                    <button
+                      type="button"
+                      disabled={fetchingGeminiModels || !settings.geminiKey.trim()}
+                      onClick={fetchGeminiAvailableModels}
+                      className="text-[12px] font-semibold text-teal hover:underline disabled:opacity-50 cursor-pointer flex items-center gap-1"
+                    >
+                      {fetchingGeminiModels ? 'Scanning Gemini API...' : '🔍 Fetch Available Models'}
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={settings.geminiModel}
-                    placeholder="gemini-2.5-flash"
+                    placeholder="auto or gemini-2.5-flash"
                     onChange={(e) => setSettings({ ...settings, geminiModel: e.target.value })}
-                    className="h-9 rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
+                    className="h-9 w-full rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
                   />
-                </label>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {[
+                      { id: 'auto', label: '✨ auto (Always Latest Flash)' },
+                      { id: 'gemini-flash-latest', label: 'gemini-flash-latest' },
+                      { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
+                      ...geminiModels
+                        .filter((m) => !['gemini-flash-latest', 'gemini-2.5-flash'].includes(m))
+                        .slice(0, 6)
+                        .map((m) => ({ id: m, label: m })),
+                    ].map((chip) => (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={() => setSettings((prev) => ({ ...prev, geminiModel: chip.id }))}
+                        className={`px-2 py-0.5 rounded text-[11px] font-mono border transition-colors cursor-pointer ${
+                          settings.geminiModel === chip.id
+                            ? 'bg-teal text-white border-teal'
+                            : 'bg-white text-ink border-line hover:border-teal'
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11.5px] text-muted leading-relaxed">
+                    <strong>Future-Proof Auto-Update:</strong> Use <code>auto</code> or any specific model ID. If Google ever retires an older model (e.g. <code>gemini-2.5-flash</code>), LayoutLingua automatically queries <code>/v1beta/models</code> and upgrades to the newest active Gemini Flash model without interruption.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -320,8 +468,8 @@ export default function SettingsModal({
               <div className="rounded-lg border border-line bg-canvas/30 p-4 space-y-3.5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-[13px] font-bold text-ink">OpenAI-Compatible Endpoint Configuration</span>
-                    <p className="text-[11.5px] text-muted">Supports any inference server implementing the OpenAI /v1 API standard (Cloud & Local).</p>
+                    <span className="text-[13px] font-bold text-ink">OpenAI-Compatible Endpoint (Cloud & Local AI)</span>
+                    <p className="text-[11.5px] text-muted">Supports Local Ollama, LM Studio, vLLM, OpenAI, DeepSeek, and OpenRouter.</p>
                   </div>
                   <button
                     type="button"
@@ -330,6 +478,56 @@ export default function SettingsModal({
                   >
                     Setup guide →
                   </button>
+                </div>
+
+                {/* Quick Local & Cloud Presets */}
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    {
+                      label: '🦙 Local Ollama',
+                      endpoint: 'http://localhost:11434/v1',
+                      model: 'auto',
+                      key: 'ollama',
+                    },
+                    {
+                      label: '🖥️ Local LM Studio',
+                      endpoint: 'http://localhost:1234/v1',
+                      model: 'auto',
+                      key: 'lm-studio',
+                    },
+                    {
+                      label: '🧠 OpenAI Cloud',
+                      endpoint: 'https://api.openai.com/v1',
+                      model: 'gpt-4o-mini',
+                      key: settings.openaiKey,
+                    },
+                    {
+                      label: '🐋 DeepSeek',
+                      endpoint: 'https://api.deepseek.com/v1',
+                      model: 'deepseek-chat',
+                      key: settings.openaiKey,
+                    },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() =>
+                        setSettings((prev) => ({
+                          ...prev,
+                          openaiEndpoint: preset.endpoint,
+                          openaiModel: preset.model,
+                          openaiKey: preset.key,
+                        }))
+                      }
+                      className={`px-2.5 py-1 rounded-md text-[11.5px] font-semibold border transition-colors cursor-pointer ${
+                        settings.openaiEndpoint === preset.endpoint
+                          ? 'bg-teal text-white border-teal'
+                          : 'bg-white text-ink border-line hover:border-teal'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
                 </div>
 
                 <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
@@ -342,7 +540,7 @@ export default function SettingsModal({
                     className="h-9 rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
                   />
                   <span className="text-[11px] text-muted">
-                    Examples: <code>https://api.openai.com/v1</code>, <code>https://openrouter.ai/api/v1</code>, <code>https://api.deepseek.com/v1</code>, <code>http://localhost:11434/v1</code> (Ollama)
+                    Examples: <code>http://localhost:11434/v1</code> (Ollama), <code>http://localhost:1234/v1</code> (LM Studio), <code>https://api.openai.com/v1</code>
                   </span>
                 </label>
 
@@ -360,7 +558,7 @@ export default function SettingsModal({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-[12.5px] font-semibold text-ink">
-                      Model ID
+                      Model ID (Supports <code>auto</code> discovery)
                     </label>
                     <button
                       type="button"
@@ -376,7 +574,7 @@ export default function SettingsModal({
                     type="text"
                     list="discovered-models-list"
                     value={settings.openaiModel}
-                    placeholder="e.g. gpt-4o-mini, anthropic/claude-3.5-sonnet, deepseek-chat, llama3.2"
+                    placeholder="auto, gpt-4o-mini, deepseek-chat, llama3.2, qwen2.5"
                     onChange={(e) => setSettings({ ...settings, openaiModel: e.target.value })}
                     className="h-9 w-full rounded-md border border-line-strong bg-white px-3 font-mono text-[13px]"
                   />
@@ -413,18 +611,98 @@ export default function SettingsModal({
                   )}
 
                   <p className="text-[11.5px] text-muted">
-                    Type any custom model ID, or click <strong>Fetch Available Models</strong> to auto-load models directly from your server.
+                    Set to <code>auto</code> to automatically use the best model installed on your server, or click <strong>Fetch Available Models</strong>.
                   </p>
                 </div>
               </div>
             )}
 
             {settings.provider === 'argos' && (
-              <div className="rounded-lg border border-line bg-canvas/30 p-4 space-y-2">
-                <span className="text-[13px] font-bold text-ink">Argos Translate (Offline Model)</span>
-                <p className="text-[12px] text-muted leading-relaxed">
-                  Runs 100% offline via CTranslate2. Requires the Python package <code>pip install argostranslate</code>.
-                </p>
+              <div className="rounded-lg border border-line bg-canvas/30 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[13px] font-bold text-ink">Argos Translate (100% Local Offline AI)</span>
+                    <p className="text-[11.5px] text-muted">
+                      Runs locally on CPU/GPU via CTranslate2 without internet or API keys.
+                    </p>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                      argosStatus.runtimeAvailable
+                        ? 'bg-teal-soft/40 text-teal-ink border border-teal/30'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    {argosStatus.loading
+                      ? 'Checking...'
+                      : argosStatus.runtimeAvailable
+                      ? '✓ Engine Installed'
+                      : 'Engine Not Installed'}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {!argosStatus.runtimeAvailable && (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      disabled={argosStatus.installing}
+                      onClick={() => installArgosOffline(false)}
+                    >
+                      {argosStatus.installing
+                        ? 'Installing argostranslate...'
+                        : '⬇️ Install Offline AI Engine (argostranslate)'}
+                    </Button>
+                  )}
+
+                  <select
+                    aria-label="Offline Language Pair"
+                    value={argosStatus.selectedPair}
+                    onChange={(e) => setArgosStatus((prev) => ({ ...prev, selectedPair: e.target.value }))}
+                    className="h-8 rounded-md border border-line-strong bg-white px-2.5 text-[12px] font-semibold text-ink"
+                  >
+                    <option value="en:vi">English → Vietnamese (en → vi)</option>
+                    <option value="en:zh">English → Chinese Simplified (en → zh)</option>
+                    <option value="en:zt">English → Chinese Traditional (en → zt)</option>
+                    <option value="en:ja">English → Japanese (en → ja)</option>
+                    <option value="ja:en">Japanese → English (ja → en)</option>
+                    <option value="ja:vi">Japanese → Vietnamese (ja → en → vi Pivot)</option>
+                    <option value="en:ko">English → Korean (en → ko)</option>
+                    <option value="ko:en">Korean → English (ko → en)</option>
+                    <option value="en:fr">English → French (en → fr)</option>
+                    <option value="fr:en">French → English (fr → en)</option>
+                    <option value="en:de">English → German (en → de)</option>
+                    <option value="de:en">German → English (de → en)</option>
+                    <option value="en:es">English → Spanish (en → es)</option>
+                    <option value="es:en">Spanish → English (es → en)</option>
+                  </select>
+
+                  <Button
+                    size="sm"
+                    disabled={argosStatus.installing}
+                    onClick={() => installArgosOffline(true)}
+                  >
+                    {argosStatus.installing ? 'Downloading & Installing...' : '⬇️ Download Language Pack'}
+                  </Button>
+                </div>
+
+                {argosStatus.installedModels.length > 0 && (
+                  <div className="text-[11.5px] text-ink">
+                    <span className="font-semibold text-muted">Installed offline packs: </span>
+                    {argosStatus.installedModels.map((m) => `${m.from_code}→${m.to_code}`).join(', ')}
+                  </div>
+                )}
+
+                {argosStatus.message && (
+                  <div className="text-[12px] font-semibold text-teal-ink bg-teal-soft/20 border border-teal/30 rounded px-3 py-1.5">
+                    ✓ {argosStatus.message}
+                  </div>
+                )}
+                {argosStatus.error && (
+                  <div className="text-[12px] font-semibold text-red-800 bg-red-50 border border-red-200 rounded px-3 py-1.5">
+                    ✕ {argosStatus.error}
+                  </div>
+                )}
               </div>
             )}
 

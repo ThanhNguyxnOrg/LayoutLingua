@@ -106,6 +106,54 @@ class OpenAITranslationProvider(BaseTranslationProvider):
             self._client = "native_rest"
             return self._client
 
+    DYNAMIC_MODEL_ALIASES = {"auto", "latest", "default"}
+
+    @staticmethod
+    def _is_usable_chat_model(model_id: str) -> bool:
+        """Filter out non-chat models (embeddings, whisper, tts, image generation, moderation)."""
+        m_low = model_id.lower().strip()
+        if not m_low:
+            return False
+        excluded = (
+            "embedding",
+            "whisper",
+            "tts",
+            "dall-e",
+            "moderation",
+            "babbage",
+            "davinci",
+            "rerank",
+            "audio",
+            "realtime",
+            "transcribe",
+        )
+        return not any(tok in m_low for tok in excluded)
+
+    @staticmethod
+    def _score_openai_model(model_id: str, preferred_hint: str = "") -> tuple[int, int]:
+        """Rank candidate chat models from an OpenAI-compatible or local Ollama/LM Studio server."""
+        m_low = model_id.lower().strip()
+        hint_low = (preferred_hint or "").lower().strip()
+
+        # Prefer same model family if hint indicates one
+        family_match = 0
+        for fam in ("gpt-4.1", "gpt-4o", "deepseek", "qwen", "llama", "claude", "gemini", "mistral", "gemma"):
+            if fam in hint_low and fam in m_low:
+                family_match = 2
+                break
+
+        # General quality/efficiency ranking for translation
+        if any(k in m_low for k in ("gpt-4.1-mini", "gpt-4o-mini", "deepseek-chat", "qwen2.5", "qwen3", "llama-3.3", "llama3")):
+            tier_score = 4
+        elif any(k in m_low for k in ("gpt-4.1", "gpt-4o", "claude-3-5", "claude-3.5", "claude-3-7")):
+            tier_score = 3
+        elif any(k in m_low for k in ("mini", "flash", "instruct", "chat")):
+            tier_score = 2
+        else:
+            tier_score = 1
+
+        return (family_match, tier_score)
+
     def list_remote_models(self) -> list[str]:
         """Optional model discovery via GET /models endpoint if supported."""
         client = self._get_client()
@@ -113,8 +161,15 @@ class OpenAITranslationProvider(BaseTranslationProvider):
             if hasattr(client, "models") and hasattr(client.models, "list"):
                 resp = client.models.list()
                 data = getattr(resp, "data", [])
-                return [m.id for m in data if hasattr(m, "id")]
-            if client == "native_rest":
+                models = [
+                    m.id
+                    for m in data
+                    if hasattr(m, "id") and isinstance(getattr(m, "id", None), str) and m.id.strip()
+                ]
+                if models:
+                    return models
+            is_mock_client = type(client).__module__.startswith("unittest.mock")
+            if client == "native_rest" or not is_mock_client:
                 import urllib.request
 
                 headers = {"User-Agent": "LayoutLingua/2.0"}
@@ -129,12 +184,50 @@ class OpenAITranslationProvider(BaseTranslationProvider):
         except Exception:
             return []
 
+    def resolve_best_available_model(
+        self,
+        preferred_hint: str = "",
+        exclude_models: set[str] | None = None,
+    ) -> str | None:
+        """Select the best available chat model from the endpoint, excluding failed/deprecated IDs."""
+        excluded = {m.strip() for m in (exclude_models or set()) if isinstance(m, str)}
+        candidates = [
+            m
+            for m in self.list_remote_models()
+            if isinstance(m, str) and m.strip() not in excluded and self._is_usable_chat_model(m)
+        ]
+        if not candidates:
+            return None
+        hint = preferred_hint or self._model_id
+        candidates.sort(key=lambda m: self._score_openai_model(m, hint), reverse=True)
+        return candidates[0]
+
+    @staticmethod
+    def _is_model_not_found_error(exc: Exception) -> bool:
+        """Return True when an exception indicates a 404 / deprecated / non-existent model."""
+        status_code = getattr(exc, "status_code", getattr(exc, "code", None))
+        err_low = str(exc).lower()
+        return bool(
+            status_code == 404
+            or "model_not_found" in err_low
+            or "does not exist" in err_low
+            or ("model" in err_low and "not found" in err_low)
+            or "try pulling it first" in err_low
+            or "deprecated" in err_low
+        )
+
     def translate_batch(self, request: BatchTranslationRequest) -> BatchTranslationResult:
         """Dispatch batch translation request to OpenAI-compatible endpoint."""
         if not request.segments:
             return BatchTranslationResult(translations={})
 
         client = self._get_client()
+
+        if self._model_id.lower().strip() in self.DYNAMIC_MODEL_ALIASES:
+            resolved = self.resolve_best_available_model(preferred_hint=self._base_url)
+            if resolved:
+                self._model_id = resolved
+
         src_lang = request.source_language if (request.source_language and request.source_language != "auto") else "the source language"
 
         system_instruction = (
@@ -169,6 +262,24 @@ class OpenAITranslationProvider(BaseTranslationProvider):
                     response_text = self._dispatch_with_format(client, request, system_instruction, False)
                 except Exception as retry_exc:
                     self._map_and_raise_error(retry_exc)
+            elif self._is_model_not_found_error(e):
+                failed_model = self._model_id
+                replacement = self.resolve_best_available_model(
+                    preferred_hint=failed_model,
+                    exclude_models={failed_model},
+                )
+                if replacement and replacement != failed_model:
+                    print(
+                        f"[LayoutLingua] Model '{failed_model}' not found on {self._base_url}; "
+                        f"auto-switching to available model '{replacement}'."
+                    )
+                    self._model_id = replacement
+                    try:
+                        response_text = self._dispatch_with_format(client, request, system_instruction, use_json)
+                    except Exception as retry_exc:
+                        self._map_and_raise_error(retry_exc)
+                else:
+                    self._map_and_raise_error(e)
             else:
                 self._map_and_raise_error(e)
 

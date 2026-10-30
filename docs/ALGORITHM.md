@@ -1,4 +1,4 @@
-# Core Mathematical & Typesetting Algorithms (`docs/ALGORITHM.md`)
+# 🧮 Core Mathematical & Typesetting Algorithms (`docs/ALGORITHM.md`)
 
 <p align="center">
   <a href="../README.md">🏠 README</a> ·
@@ -18,6 +18,8 @@
   <img src="https://img.shields.io/badge/Algorithm-Sub--Line%20Formula%20Pinning-0D9488?style=for-the-badge" alt="Sub-Line Formula Pinning" />
   <img src="https://img.shields.io/badge/Classification-vflag%20%2B%20Style--Switch-6366F1?style=for-the-badge" alt="vflag" />
   <img src="https://img.shields.io/badge/Typesetting-Anisotropic%20Tz%20%2B%20Ray--Cast-0284C7?style=for-the-badge" alt="Anisotropic Tz" />
+  <img src="https://img.shields.io/badge/Zero%20Hardcode-100%25%20Algorithmic-22C55E?style=for-the-badge" alt="Zero Hardcode" />
+  <img src="https://img.shields.io/badge/Tests-276%20Passed-059669?style=for-the-badge" alt="Tests" />
 </p>
 
 ---

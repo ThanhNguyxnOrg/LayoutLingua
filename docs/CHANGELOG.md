@@ -23,6 +23,24 @@ All notable changes to **LayoutLingua** are documented in this file.
 
 ---
 
+## [2.1.2] — 2026-10-30
+
+### 🚀 Added
+- 📦 **Argos Offline AI Engine & Language Pack Manager**:
+  - Added `GET /api/argos/status` endpoint querying CTranslate2 runtime health, installed models, and available packages.
+  - Added `POST /api/argos/install` endpoint allowing one-click setup of the offline AI runtime (`pip install argostranslate`) directly from the UI, with on-demand download of language packs (`en↔vi`, `en↔zh`, `en↔ja`, `en↔ko`, `en↔fr`, `en↔de`, `en↔es`).
+  - Added `auto_install=True` route resolution in `ArgosTranslationProvider` to automatically pull missing models during offline translation jobs.
+- 🧠 **Gemini 404 Deprecation Auto-Healing**:
+  - Implemented dynamic model alias resolution (`auto`, `latest`, `gemini-auto`) with multi-factor model scoring (`_score_gemini_model`) favoring newest active Flash models.
+  - Built-in 404 Auto-Healing: if Google retires an older model in the future, LayoutLingua automatically queries `/v1beta/models`, switches to the newest active Flash model, and retries seamlessly without job interruption.
+  - Added model discovery query in `GET /api/models?provider=gemini&api_key=...` with UI model chips in `SettingsModal.tsx`.
+- 🦙 **Universal Local & Cloud LLM Presets**:
+  - Added one-click UI presets in `SettingsModal.tsx` for **Local Ollama** (`http://localhost:11434/v1`), **Local LM Studio** (`http://localhost:1234/v1`), **OpenAI Cloud**, and **DeepSeek**.
+  - Added auto-healing model fallback for local and OpenAI-compatible endpoints when a requested model ID is not loaded or deprecated.
+- 🧪 **Test Suite Expansion**: Added unit tests in `test_slice3c_cloud_providers.py` for Gemini 404 auto-healing and Argos model auto-installation, bringing the automated test count to **276 passed (100%)**.
+
+---
+
 ## [2.1.1] — 2026-10-30
 
 ### 🚀 Added

@@ -654,12 +654,12 @@ def _instantiate_provider(req_json: dict[str, Any]):
     elif provider_type == "argos":
         from layoutlingua.translation.argos.provider import ArgosTranslationProvider
 
-        argos = ArgosTranslationProvider()
+        argos = ArgosTranslationProvider(auto_install=True)
         if argos.manager.is_runtime_available():
             return argos
         raise ValueError(
             "Argos Translate offline runtime is not installed in this Python environment. "
-            "Install it with: pip install argostranslate"
+            "Click 'Install Offline Engine' in Settings or run: pip install argostranslate"
         )
     elif provider_type in ("openai", "ollama") or base_url:
         from layoutlingua.translation.openai_compat import OpenAITranslationProvider
@@ -1730,10 +1730,39 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
             self.wfile.write(pdf_bytes)
             return
 
-        # 5. Query models from any OpenAI-compatible provider
+        # 5. Query models from Gemini or any OpenAI-compatible / Local LLM provider
         if path in ("/api/models", "/api/fetch-models"):
-            raw_base_url = query.get("base_url", ["https://api.openai.com/v1"])[0].rstrip("/")
+            provider_param = query.get("provider", [""])[0].strip().lower()
             api_key = query.get("api_key", [""])[0].strip()
+
+            if provider_param == "gemini":
+                if not api_key:
+                    self._send_json(
+                        {"models": [], "status": "error", "error": "Gemini API key is required to list available models."},
+                        status=400,
+                    )
+                    return
+                try:
+                    from layoutlingua.translation.gemini import GeminiTranslationProvider
+
+                    gem = GeminiTranslationProvider(api_key=api_key, profile_or_model="auto")
+                    models = gem.list_remote_models()
+                    recommended = gem.resolve_best_available_model(preferred_hint="flash")
+                    self._send_json({
+                        "models": models,
+                        "recommended": recommended or "gemini-2.5-flash",
+                        "status": "ok",
+                    })
+                    return
+                except Exception as ge:
+                    self._send_json({
+                        "models": [],
+                        "status": "error",
+                        "error": f"Failed to fetch Gemini models: {ge}",
+                    })
+                    return
+
+            raw_base_url = query.get("base_url", ["https://api.openai.com/v1"])[0].rstrip("/")
 
             try:
                 base_url = _validate_provider_base_url(raw_base_url)
@@ -1747,7 +1776,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
             models_url = f"{base_url}/models"
             try:
                 headers = {"User-Agent": "LayoutLingua/2.0"}
-                if api_key:
+                if api_key and api_key != "ollama":
                     headers["Authorization"] = f"Bearer {api_key}"
                 req = urllib.request.Request(models_url, headers=headers)
                 with urllib.request.urlopen(req, timeout=4.0) as resp:
@@ -1762,6 +1791,41 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                     "error": f"Failed to fetch models from {models_url}: {e}",
                 })
                 return
+
+        # 5b. Query Argos offline engine status & installed language packs
+        if path in ("/api/argos/status", "/argos/status"):
+            try:
+                from layoutlingua.translation.argos.manager import ArgosModelManager
+
+                mgr = ArgosModelManager()
+                runtime_ok = mgr.is_runtime_available()
+                installed = [
+                    {
+                        "from_code": m.from_code,
+                        "to_code": m.to_code,
+                        "package_name": m.package_name,
+                        "version": m.version,
+                    }
+                    for m in mgr.list_installed_models()
+                ]
+                available = [
+                    {
+                        "from_code": m.from_code,
+                        "to_code": m.to_code,
+                        "package_name": m.package_name,
+                        "is_installed": m.is_installed,
+                    }
+                    for m in mgr.list_available_models()
+                ]
+                self._send_json({
+                    "status": "ok",
+                    "runtime_available": runtime_ok,
+                    "installed_models": installed,
+                    "available_models": available,
+                })
+            except Exception as e:
+                self._send_json({"status": "error", "error": str(e)}, status=500)
+            return
 
         # 6. Discover user system folders (Desktop, Downloads, Documents)
         if path in ("/api/system-folders", "/system-folders"):
@@ -2310,6 +2374,71 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                     "latency_ms": latency_ms,
                     "message": str(err),
                 })
+            return
+
+        # 6. Install Argos offline runtime and/or language packages
+        if path in ("/api/argos/install", "/argos/install"):
+            try:
+                req_json = json.loads(post_body.decode("utf-8")) if post_body else {}
+            except Exception:
+                req_json = {}
+
+            try:
+                import importlib
+                from layoutlingua.translation.argos.manager import ArgosModelManager
+
+                mgr = ArgosModelManager()
+                install_runtime = bool(req_json.get("install_runtime", True))
+                from_code = str(req_json.get("from_code") or "").strip()
+                to_code = str(req_json.get("to_code") or "").strip()
+
+                if not mgr.is_runtime_available() and install_runtime:
+                    pip_res = subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "argostranslate"],
+                        capture_output=True,
+                        text=True,
+                        timeout=300,
+                    )
+                    importlib.invalidate_caches()
+                    if pip_res.returncode != 0 and not mgr.is_runtime_available():
+                        err_out = (pip_res.stderr or pip_res.stdout or "pip install failed").strip()[-400:]
+                        raise RuntimeError(f"Failed to install argostranslate runtime: {err_out}")
+
+                installed_route_desc = ""
+                if from_code and to_code:
+                    route = mgr.plan_route(from_code, to_code)
+                    if route is None:
+                        raise ValueError(
+                            f"No offline translation route available for '{from_code}' -> '{to_code}' in Argos catalog."
+                        )
+                    mgr.ensure_route_installed(route)
+                    installed_route_desc = route.describe()
+
+                installed = [
+                    {
+                        "from_code": m.from_code,
+                        "to_code": m.to_code,
+                        "package_name": m.package_name,
+                        "version": m.version,
+                    }
+                    for m in mgr.list_installed_models()
+                ]
+                self._send_json({
+                    "status": "ok",
+                    "runtime_available": mgr.is_runtime_available(),
+                    "installed_models": installed,
+                    "route": installed_route_desc,
+                    "message": (
+                        f"Offline package installed ({installed_route_desc})."
+                        if installed_route_desc
+                        else "Argos offline translation runtime is ready."
+                    ),
+                })
+            except Exception as err:
+                self._send_json({
+                    "status": "error",
+                    "message": str(err),
+                }, status=400)
             return
 
         self._send_json({"error": f"Unknown POST endpoint: {path}"}, status=404)

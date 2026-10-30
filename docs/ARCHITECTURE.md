@@ -19,7 +19,9 @@
   <img src="https://img.shields.io/badge/⚡_Runtime-Python_+_PyMuPDF-0284C7?style=for-the-badge" alt="Runtime" />
   <img src="https://img.shields.io/badge/🎨_Web_Studio-React_19_+_Vite_8.3-646CFF?style=for-the-badge" alt="Web Studio" />
   <img src="https://img.shields.io/badge/🎨_Frontend-React_19_+_Tailwind_v4-3178C6?style=for-the-badge" alt="Frontend" />
-  <img src="https://img.shields.io/badge/💾_Persistence-Disk_SHA256_+_IndexedDB-8B5CF6?style=for-the-badge" alt="Persistence" />
+  <img src="https://img.shields.io/badge/🧪_Tests-276_Passed-22C55E?style=for-the-badge" alt="Tests" />
+  <img src="https://img.shields.io/badge/📦_Offline_AI-Argos_CTranslate2-8B5CF6?style=for-the-badge" alt="Offline AI" />
+  <img src="https://img.shields.io/badge/💾_Persistence-Disk_SHA256_+_IndexedDB-0D9488?style=for-the-badge" alt="Persistence" />
 </p>
 
 ---
@@ -126,8 +128,12 @@ LayoutLingua/
   1. **🔠 ALL-CAPS Heading Recasing**: Converts ALL-CAPS headings to sentence case before NMT so subword BPE tokenizers never truncate uppercase endings, then restores uppercase after translation.
   2. **🔒 Formula & Glossary Shielding (`shieldFormulas`)**: Replaces user custom glossary terms, standalone academic glossary headings, and inline mathematical expressions with opaque `⟦M0⟧`, `⟦M1⟧` tokens.
   3. **⚡ Target-Language Short-Circuit (`isAlreadyInTargetLanguage`)**: Uses `franc-min` trigram detection to skip blocks already written in the target language.
-  4. **🔀 Multi-Provider Dispatch**: Routes batches through Gemini 2.5 Flash, OpenAI-compatible endpoints, or multi-mirror Google Translate (`client=at` POST + `client=gtx` GET) with SHA-256 in-memory caching.
+  4. **🔀 Multi-Provider Dispatch**: Routes batches through Google Translate RPC, Gemini 2.5 Flash, Local LLMs (Ollama / LM Studio), OpenAI-compatible endpoints, or Argos Translate.
   5. 🩹 **Self-Healing Token Restoration (`restoreFormulas`)**: Repairs any NMT spacing or bracket mutations (`[M0]`, `【M 0】` $\rightarrow$ `⟦M0⟧`) and restores exact formula strings.
+  6. 🛡️ **Gemini 404 Deprecation Auto-Healing**: If a configured model is retired by Google, automatically queries `/v1beta/models` and switches to the newest active Flash model without interrupting translation.
+  7. 🦙 **Zero-Dependency Native REST Mode**: Translates via standard-library `urllib.request` for OpenAI-compatible and Gemini endpoints, requiring zero external SDK dependencies (`pip install openai` is optional).
+  8. 📦 **Air-Gapped Offline AI (Argos Translate)**: CTranslate2 neural translation with UI one-click runtime installation and on-demand language pack downloads.
+  9. 🎯 **Live Connection & Latency Verification**: `/api/test-provider` checks credentials, measures latency, and tests placeholder preservation in real-time.
 
 ### 🖋️ Module C: `translateAndTypesetPage` (`layoutlingua/`)
 - **Responsibility**: Executes Two-Pass Selective Erasure and Adaptive Vector Typesetting onto a `pdf-lib` `PDFPage`.

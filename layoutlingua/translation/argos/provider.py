@@ -15,8 +15,9 @@ from layoutlingua.translation.provider import BaseTranslationProvider
 class ArgosTranslationProvider(BaseTranslationProvider):
     """Zero-key, 100% offline neural translation provider powered by Argos Translate & CTranslate2."""
 
-    def __init__(self, manager: ArgosModelManager | None = None) -> None:
+    def __init__(self, manager: ArgosModelManager | None = None, auto_install: bool = False) -> None:
         self.manager = manager or ArgosModelManager()
+        self.auto_install = auto_install
         self._capabilities = ProviderCapabilities(
             supports_structured_json=False,
             requires_data_use_consent=False,
@@ -58,13 +59,23 @@ class ArgosTranslationProvider(BaseTranslationProvider):
                 "The directional model package does not exist in the Argos catalog."
             )
 
-        # 3. Guard: check if all required route packages are installed locally
+        # 3. Guard: check if all required route packages are installed locally (auto-install if enabled)
         if not route.is_fully_installed:
-            missing_pkgs = [s.package_name for s in route.steps if not s.is_installed]
-            raise ProviderUnavailableError(
-                f"Translation route ({route.describe()}) requires uninstalled offline packages: {missing_pkgs}. "
-                f"Please download and install these models first via ArgosModelManager."
-            )
+            if self.auto_install:
+                try:
+                    self.manager.ensure_route_installed(route)
+                    route = self.manager.plan_route(src_lang, request.target_language) or route
+                except Exception as install_err:
+                    missing_pkgs = [s.package_name for s in route.steps if not s.is_installed]
+                    raise ProviderUnavailableError(
+                        f"Failed to auto-install Argos offline packages {missing_pkgs}: {install_err}"
+                    ) from install_err
+            if not route.is_fully_installed:
+                missing_pkgs = [s.package_name for s in route.steps if not s.is_installed]
+                raise ProviderUnavailableError(
+                    f"Translation route ({route.describe()}) requires uninstalled offline packages: {missing_pkgs}. "
+                    f"Please download and install these models first via ArgosModelManager."
+                )
 
         # 4. Perform sequential execution across hops (e.g. ja -> en -> vi)
         import argostranslate.translate  # type: ignore
