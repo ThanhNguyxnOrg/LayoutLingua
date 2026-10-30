@@ -87,7 +87,7 @@ A transient token pair (`<bN></bN>`) wrapping untranslatable equations and math 
 A baseline grouping algorithm that tolerates vertical fraction offsets ($\Delta y_{\text{fraction}} \le 0.75 \times \text{font\_size}$) to bind numerators, fraction bars, and denominators into their parent baseline sequence.
 
 **Ink Floor & Leading Floor**:
-The vertical metric boundary ($1.10\,\text{em}$ for Vietnamese) below which line leading is strictly forbidden from compressing, preventing stacked diacritics (`ệ`, `ở`) from overlapping adjacent lines.
+The vertical metric boundary ($1.10\,\text{em}$ for complex scripts) below which line leading is strictly forbidden from compressing, preventing stacked diacritics and accents from overlapping adjacent lines.
 
 **Fail-Closed Preservation**:
 The invariant design rule where un-fittable or corrupted segments automatically fall back to the original source text rather than outputting broken layouts.
@@ -124,7 +124,7 @@ A monotonically convergent search over the continuous font size interval $[f_{\m
 **Dynamic Line-Height Floor**:
 A font-metric-driven line-height calculation:
 $$L_{\text{effective}} = \max(L_{\text{configured}},\, \text{ascender} - \text{descender} + p)$$
-where $p$ is empirical safety padding ($0.03\,\text{em}$), ensuring stacked diacritics (`ệ`, `ở`, `ứ`) maintain vertical clearance across adjacent lines.
+where $p$ is empirical safety padding ($0.03\,\text{em}$), ensuring stacked multi-level accents maintain vertical clearance across adjacent lines.
 
 **Overflow Cause Taxonomy**:
 Structured classification of layout failures when text cannot fit even at $f_{\min}$:

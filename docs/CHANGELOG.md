@@ -23,6 +23,19 @@ All notable changes to **LayoutLingua** are documented in this file.
 
 ---
 
+## [2.1.3] — 2026-10-30
+
+### 🩹 Fixed
+- 📦 **PyMuPDF 2.0 & Cross-Platform CI Compatibility**:
+  - Resolved `AssertionError: 0 != 1` in `TableGridValidator` on Linux (`ubuntu-latest`), macOS (`macos-latest`), and Windows (`windows-latest`) runners under Python 3.12.
+  - PyMuPDF 2.0 bundled `pymupdf-layout==2.0` which defaulted `find_tables(use_layout=True)` and discarded candidate tables when layout models did not tag regions as `"table"`.
+  - Updated `TableGridValidator.validate_page_tables` to call `find_tables(use_layout=False)` with safe fallbacks, bypassing layout-model early exits and guaranteeing strict physical vector stroke corroboration ($\ge 90\%$ coverage) across PyMuPDF versions `1.25.0` through `2.0+`.
+- 🧮 **Documentation & Typographic Formulas Clean-up**:
+  - Fixed syntax formatting errors in `docs/ALGORITHM.md` line 49/50 (resolved KaTeX percent escape handling and unbalanced parenthetical code formatting).
+  - Synchronized 100% of all repository markdown documentation (`docs/*.md`, `README.md`) into fluent, professional English with rich visual badges, stickers, and emojis.
+
+---
+
 ## [2.1.2] — 2026-10-30
 
 ### 🚀 Added

@@ -215,7 +215,15 @@ class TableGridValidator:
         page_ir: PageIR,
     ) -> list[TableGrid]:
         """Detect and validate tables on page, attaching TableGrid metadata or tagging rejections."""
-        finder = page.find_tables()
+        try:
+            finder = page.find_tables(use_layout=False)
+        except TypeError:
+            finder = page.find_tables()
+        if not finder or not finder.tables:
+            try:
+                finder = page.find_tables()
+            except Exception:
+                pass
         if not finder or not finder.tables:
             return []
 

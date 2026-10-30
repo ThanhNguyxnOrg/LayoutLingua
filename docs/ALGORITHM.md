@@ -46,8 +46,8 @@ A word token $w$ is classified as a mathematical candidate (`isMath = true`) if 
 
 ### 1.2 Contextual Recovery Pass
 When a line contains natural prose (`proseWordCount >= 1`), a contextual pass recovers 1D tokens that belong to the natural sentence flow:
-- **Paragraph-Relative Italic Check (`lineIsMostlyItalic`)**: If $\ge 60\%$ of the unambiguous prose words on the line are already italic, italic is the paragraph's base style (e.g., an italic theorem or biographical note), so 2-to-3 letter italic words containing vowels are recovered as prose.
-- **Parenthetical 1D Variable Prefix**: If a 1D variable token starts with an opening parenthesis (e.g. `(n` in `P_n = n! (n giai thừa)`) and is immediately followed by prose (`giai thừa)`), it is recovered into the parenthetical prose span (`(n factorial)`).
+- **Paragraph-Relative Italic Check (`lineIsMostlyItalic`)**: If $\ge 60\text{\%}$ of the unambiguous prose words on the line are already italic, italic is the paragraph's base style (e.g., an italic theorem or biographical note), so 2-to-3 letter italic words containing vowels are recovered as prose.
+- **Parenthetical 1D Variable Prefix**: If a 1D variable token starts with an opening parenthesis (e.g., `(n` in `P_n = n! (n factorial)`) and is immediately followed by prose (such as `factorial`), it is recovered into the parenthetical prose span (`(n factorial)`).
 
 ---
 
@@ -87,6 +87,6 @@ For each `ProseSpan` $s$ in a translated `ProseGroup`:
 
 ### Pass 2: Anisotropic `Tz` + Multi-Line Fitting
 - **Single-Line Slot (`spans.length === 1`)**:
-  Computes $r = W_{\text{clearance}} / W_{\text{text}}(\text{size}_0)$. Combines horizontal PDF scaling $\text{Tz} = \max(T_{\text{floor}}, \min(100\%, r \times 100\%))$ with vertical font scaling $s_v = \max(s_{\min}, \min(1.0, r / (\text{Tz}/100)))$, where the condensation floor is $T_{\text{floor}} = \max\!\big(64\%,\; \min(100\%,\, \tfrac{r}{s_{\min}} \times 100\%)\big)$. Because $s_v = r / T_{\text{floor}}$, any span with $r \ge 0.64 \cdot s_{\min}$ lands exactly on the vertical floor instead of falling through it - so a lone word (no wrap points, tolerant of the same 64-78% squeeze the TOC and multi-line paths already use) sandwiched between two `MathObstacle`s (e.g. a 10pt `từ` slot) can never trigger `OVERFLOW_FALLBACK` while staying legible ($s_v \ge s_{\min}$, $\text{Tz} \ge 64\%$).
+  Computes $r = W_{\text{clearance}} / W_{\text{text}}(\text{size}_0)$. Combines horizontal PDF scaling $\text{Tz} = \max(T_{\text{floor}}, \min(100\%, r \times 100\%))$ with vertical font scaling $s_v = \max(s_{\min}, \min(1.0, r / (\text{Tz}/100)))$, where the condensation floor is $T_{\text{floor}} = \max\!\big(64\%,\; \min(100\%,\, \tfrac{r}{s_{\min}} \times 100\%)\big)$. Because $s_v = r / T_{\text{floor}}$, any span with $r \ge 0.64 \cdot s_{\min}$ lands exactly on the vertical floor instead of falling through it - so a lone word (no wrap points, tolerant of the same 64-78% squeeze the TOC and multi-line paths already use) sandwiched between two `MathObstacle`s (e.g. a 10 pt slot such as "from") can never trigger `OVERFLOW_FALLBACK` while staying legible ($s_v \ge s_{\min}$, $\text{Tz} \ge 64\%$).
 - **Multi-Line Slot (`spans.length > 1`)**:
   Searches $s \in [1.0, s_{\min}]$ in steps of $0.02$. If standard wrapping at $s_{\min}$ exceeds `maxBottomY`, applies multi-stage horizontal condensation ($\text{Tz} \in \{92\%, 86\%, 80\%\}$) to increase effective line capacity by $100/\text{Tz}$, guaranteeing 100% of translated lines are rendered without truncation.
