@@ -88,7 +88,7 @@ class OpenAITranslationProvider(BaseTranslationProvider):
         return self._capabilities
 
     def _get_client(self) -> Any:
-        """Lazily initialize OpenAI SDK client if not injected."""
+        """Lazily initialize OpenAI SDK client if installed, else zero-dependency native_rest."""
         if self._client is not None:
             return self._client
 
@@ -102,10 +102,9 @@ class OpenAITranslationProvider(BaseTranslationProvider):
             )
             return self._client
         except ImportError:
-            raise ProviderUnavailableError(
-                "OpenAI SDK is not installed. To use OpenAI-compatible translation, "
-                "install the SDK via: pip install openai"
-            )
+            # Zero-dependency standard library urllib.request fallback
+            self._client = "native_rest"
+            return self._client
 
     def list_remote_models(self) -> list[str]:
         """Optional model discovery via GET /models endpoint if supported."""
@@ -115,20 +114,35 @@ class OpenAITranslationProvider(BaseTranslationProvider):
                 resp = client.models.list()
                 data = getattr(resp, "data", [])
                 return [m.id for m in data if hasattr(m, "id")]
+            if client == "native_rest":
+                import urllib.request
+
+                headers = {"User-Agent": "LayoutLingua/2.0"}
+                if self._api_key and self._api_key != "ollama":
+                    headers["Authorization"] = f"Bearer {self._api_key}"
+                req = urllib.request.Request(f"{self._base_url}/models", headers=headers)
+                with urllib.request.urlopen(req, timeout=min(self._timeout, 10.0)) as resp:
+                    payload = json.loads(resp.read().decode("utf-8"))
+                    items = payload.get("data", []) if isinstance(payload, dict) else []
+                    return [str(m.get("id")) for m in items if isinstance(m, dict) and m.get("id")]
             return []
         except Exception:
             return []
 
     def translate_batch(self, request: BatchTranslationRequest) -> BatchTranslationResult:
         """Dispatch batch translation request to OpenAI-compatible endpoint."""
+        if not request.segments:
+            return BatchTranslationResult(translations={})
+
         client = self._get_client()
+        src_lang = request.source_language if (request.source_language and request.source_language != "auto") else "the source language"
 
         system_instruction = (
             f"You are a professional academic and technical document translator.\n"
-            f"Translate the following segments from {request.source_language} to {request.target_language}.\n"
+            f"Translate the following segments from {src_lang} to {request.target_language}.\n"
             f"Strict invariants:\n"
-            f"1. Never modify, omit, or translate formula placeholder tokens: ⟦LL_FORMULA_XXXX⟧.\n"
-            f"2. Keep the exact token ID and brackets unchanged.\n"
+            f"1. Never modify, omit, or translate formula placeholder tokens: ⟦LL_FORMULA_XXXX⟧, <b0></b0>, <b1></b1>, ⟦CIT_0⟧, ⟦ABBR_0⟧, or ⟦M0⟧.\n"
+            f"2. Keep the exact token ID, XML tags (<b0></b0>), and brackets unchanged in their appropriate grammatical position.\n"
             f"3. Return the exact segment IDs provided.\n"
         )
 
@@ -209,6 +223,50 @@ class OpenAITranslationProvider(BaseTranslationProvider):
                 return resp.choices[0].message.content
             raise InvalidTranslationResponseError("Empty response received from OpenAI endpoint.")
 
+        if client == "native_rest":
+            import urllib.request
+            import urllib.error
+
+            url = f"{self._base_url}/chat/completions"
+            payload: dict[str, Any] = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": 0.0,
+            }
+            if use_json:
+                payload["response_format"] = {"type": "json_object"}
+
+            headers: dict[str, str] = {
+                "Content-Type": "application/json",
+                "User-Agent": "LayoutLingua/2.0",
+            }
+            if self._api_key and self._api_key != "ollama":
+                headers["Authorization"] = f"Bearer {self._api_key}"
+
+            req_bytes = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(url, data=req_bytes, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    choices = data.get("choices", []) if isinstance(data, dict) else []
+                    if choices and isinstance(choices[0], dict):
+                        msg = choices[0].get("message", {})
+                        content = msg.get("content") if isinstance(msg, dict) else None
+                        if content:
+                            return str(content)
+                    raise InvalidTranslationResponseError(
+                        f"Empty or unexpected response received from OpenAI endpoint: {data}"
+                    )
+            except urllib.error.HTTPError as he:
+                body = ""
+                try:
+                    body = he.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+                err = RuntimeError(f"HTTP {he.code}: {body or he.reason}")
+                setattr(err, "status_code", he.code)
+                raise err from he
+
         # Callable mock fallback for testing
         if callable(client):
             return str(client(messages, use_json))
@@ -217,6 +275,8 @@ class OpenAITranslationProvider(BaseTranslationProvider):
 
     def _parse_response(self, text: str, expected_ids: list[str]) -> dict[str, str]:
         """Parse structured JSON or tagged block translations from LLM response."""
+        from layoutlingua.translation.google_rpc import _sanitize_translated_tokens
+
         results: dict[str, str] = {}
 
         # 1. Try JSON parsing
@@ -231,11 +291,31 @@ class OpenAITranslationProvider(BaseTranslationProvider):
 
         try:
             data = json.loads(clean_text)
-            items = data.get("translations", []) if isinstance(data, dict) else data
-            if isinstance(items, list):
-                for item in items:
-                    if isinstance(item, dict) and "id" in item and "text" in item:
-                        results[str(item["id"])] = str(item["text"])
+            if isinstance(data, dict):
+                items = (
+                    data.get("translations")
+                    or data.get("segments")
+                    or data.get("results")
+                    or data.get("data")
+                )
+                if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item, dict):
+                            sid = item.get("id") or item.get("segment_id")
+                            val = item.get("text") if "text" in item else item.get("translated")
+                            if sid is not None and val is not None:
+                                results[str(sid)] = _sanitize_translated_tokens(str(val))
+                else:
+                    for k, v in data.items():
+                        if isinstance(v, str):
+                            results[str(k)] = _sanitize_translated_tokens(v)
+            elif isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        sid = item.get("id") or item.get("segment_id")
+                        val = item.get("text") if "text" in item else item.get("translated")
+                        if sid is not None and val is not None:
+                            results[str(sid)] = _sanitize_translated_tokens(str(val))
         except json.JSONDecodeError:
             pass
 
@@ -244,7 +324,7 @@ class OpenAITranslationProvider(BaseTranslationProvider):
             for match in _TAGGED_SEGMENT_REGEX.finditer(text):
                 seg_id = match.group(1).strip()
                 translated = match.group(2).strip()
-                results[seg_id] = translated
+                results[seg_id] = _sanitize_translated_tokens(translated)
 
         if not results:
             raise InvalidTranslationResponseError(
@@ -252,6 +332,7 @@ class OpenAITranslationProvider(BaseTranslationProvider):
             )
 
         return results
+
 
     def _map_and_raise_error(self, exc: Exception) -> None:
         """Map API/HTTP status codes to standardized LayoutLingua error taxonomy."""

@@ -49,11 +49,12 @@ class ArgosTranslationProvider(BaseTranslationProvider):
                 "pip install argostranslate"
             )
 
-        # 2. Guard: resolve directional route
-        route = self.manager.plan_route(request.source_language, request.target_language)
+        # 2. Guard: resolve directional route (normalize 'auto' to 'en' if not pre-resolved)
+        src_lang = request.source_language if (request.source_language and request.source_language != "auto") else "en"
+        route = self.manager.plan_route(src_lang, request.target_language)
         if route is None:
             raise ProviderUnavailableError(
-                f"No offline translation route available from '{request.source_language}' to '{request.target_language}'. "
+                f"No offline translation route available from '{src_lang}' to '{request.target_language}'. "
                 "The directional model package does not exist in the Argos catalog."
             )
 
@@ -67,6 +68,7 @@ class ArgosTranslationProvider(BaseTranslationProvider):
 
         # 4. Perform sequential execution across hops (e.g. ja -> en -> vi)
         import argostranslate.translate  # type: ignore
+        from layoutlingua.translation.google_rpc import _sanitize_translated_tokens
 
         # Pre-resolve translation handles for each step
         translators = [
@@ -86,6 +88,7 @@ class ArgosTranslationProvider(BaseTranslationProvider):
                     raise ProviderUnavailableError("Underlying Argos CTranslate2 translation handle was None.")
                 current_text = translator.translate(current_text)
 
-            translations[seg.segment_id] = current_text
+            translations[seg.segment_id] = _sanitize_translated_tokens(current_text)
 
         return BatchTranslationResult(translations=translations)
+

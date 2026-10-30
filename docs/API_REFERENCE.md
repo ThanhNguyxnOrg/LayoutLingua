@@ -220,6 +220,12 @@ Discovers models from any OpenAI-compatible endpoint (`/v1/models`).
 - **Query**: `base_url`, optional `api_key`
 - **Response**: `{ "models": ["groq/llama-3.3-70b", …] }`
 
+### 12. `POST /api/test-provider`
+Validates connectivity, measures latency, and verifies formula placeholder invariance (`<b0></b0>`) with a lightweight sample before starting a translation job.
+
+- **Request**: `{ "provider": "gemini|openai|google|argos", "api_key": "...", "model": "...", "base_url": "..." }`
+- **Response**: `{ "status": "ok", "provider": "...", "model": "...", "latency_ms": 142, "formula_preserved": true, "message": "Connected in 142 ms" }`
+
 ---
 
 ## 🧭 Runtime Notes

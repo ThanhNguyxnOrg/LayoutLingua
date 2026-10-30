@@ -25,8 +25,11 @@ _MAX_CHUNK_CHARS = 3000
 
 def _sanitize_translated_tokens(text: str) -> str:
     """Fix any accidental spaces or malformations inserted into formula preservation tokens by MT engines."""
-    # 1. ⟦LL_FORMULA_0⟧
+    # 1. ⟦LL_FORMULA_0⟧, ⟦CIT_0⟧, ⟦ABBR_0⟧, ⟦M0⟧
     res = re.sub(r"⟦\s*LL_FORMULA_(\d+)\s*⟧", r"⟦LL_FORMULA_\1⟧", text)
+    res = re.sub(r"⟦\s*CIT_(\d+)\s*⟧", r"⟦CIT_\1⟧", res, flags=re.IGNORECASE)
+    res = re.sub(r"⟦\s*ABBR_(\d+)\s*⟧", r"⟦ABBR_\1⟧", res, flags=re.IGNORECASE)
+    res = re.sub(r"⟦\s*M(\d+)\s*⟧", r"⟦M\1⟧", res, flags=re.IGNORECASE)
     # 2. Complete standard tag pairs: <b0></b0> (case-insensitive)
     res = re.sub(r"<\s*b\s*(\d+)\s*>\s*<\s*/\s*b\s*\1\s*>", r"<b\1></b\1>", res, flags=re.IGNORECASE)
     # 3. Google Translate mangled tags like <b>0></b> or <b0></b> or <b0/>
@@ -42,6 +45,7 @@ def _sanitize_translated_tokens(text: str) -> str:
     # 4. Collapse consecutive duplicate tokens
     res = re.sub(r"(<b\d+></b\d+>)(?:\s*\1)+", r"\1", res)
     return res
+
 
 
 def _split_into_chunks(text: str, max_chars: int = _MAX_CHUNK_CHARS) -> List[str]:
@@ -229,15 +233,21 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
         raise ProviderUnavailableError(f"Google RPC network error after retries: {last_err}")
 
     def _normalize_lang_code(self, code: str, default: str = "auto") -> str:
-        """Normalize language name or code to standard 2-letter ISO code."""
-        if not code or code in ("auto", ""):
+        """Normalize language name or code to standard ISO code accepted by Google Translate RPC."""
+        if not code or code.strip().lower() in ("auto", ""):
             return default
         c = code.lower().strip()
         lang_map = {
             "vietnamese": "vi",
-            "chinese": "zh",
-            "zh-cn": "zh",
-            "zh-tw": "zh",
+            "chinese": "zh-CN",
+            "chinese (simplified)": "zh-CN",
+            "chinese (traditional)": "zh-TW",
+            "zh-cn": "zh-CN",
+            "zh_cn": "zh-CN",
+            "zh-hans": "zh-CN",
+            "zh-tw": "zh-TW",
+            "zh_tw": "zh-TW",
+            "zh-hant": "zh-TW",
             "japanese": "ja",
             "german": "de",
             "french": "fr",
@@ -245,8 +255,24 @@ class GoogleRpcTranslationProvider(BaseTranslationProvider):
             "english": "en",
             "korean": "ko",
             "russian": "ru",
+            "portuguese": "pt",
+            "italian": "it",
+            "dutch": "nl",
+            "polish": "pl",
+            "turkish": "tr",
+            "arabic": "ar",
+            "hindi": "hi",
+            "thai": "th",
+            "indonesian": "id",
         }
-        return lang_map.get(c, c[:2] if len(c) > 2 else c)
+        if c in lang_map:
+            return lang_map[c]
+        if c.startswith("zh-tw") or c.startswith("zh_tw") or c.startswith("zh-hant"):
+            return "zh-TW"
+        if c.startswith("zh-cn") or c.startswith("zh_cn") or c.startswith("zh-hans"):
+            return "zh-CN"
+        return c[:2] if len(c) > 2 else c
+
 
     def _translate_single(self, text: str, src_lang: str, tgt_lang: str) -> str:
         if not text.strip():

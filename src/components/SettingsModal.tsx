@@ -26,6 +26,13 @@ export default function SettingsModal({
   const [activeTab, setActiveTab] = useState<'config' | 'guide'>(initialTab)
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([])
   const [fetchingModels, setFetchingModels] = useState(false)
+  const [testingProvider, setTestingProvider] = useState(false)
+  const [testResult, setTestResult] = useState<{
+    status: 'ok' | 'error'
+    message: string
+    sample?: string
+    latencyMs?: number
+  } | null>(null)
 
   // Keep modal provider in perfect two-way sync if changed externally
   useEffect(() => {
@@ -33,11 +40,55 @@ export default function SettingsModal({
   }, [globalSettings.provider])
 
   const handleSelectProvider = (newProvider: ProviderType) => {
+    setTestResult(null)
     setSettings((prev) => {
       const next = { ...prev, provider: newProvider }
       updateGlobalSettings(next)
       return next
     })
+  }
+
+  const testProviderConnection = async () => {
+    setTestingProvider(true)
+    setTestResult(null)
+    try {
+      const res = await fetch(apiUrl('/api/test-provider'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: settings.provider,
+          gemini_key: settings.geminiKey,
+          gemini_model: settings.geminiModel,
+          openai_key: settings.openaiKey,
+          openai_endpoint: settings.openaiEndpoint,
+          openai_model: settings.openaiModel,
+          source_lang: 'en',
+          target_lang: 'vi',
+        }),
+      })
+      const data = await res.json()
+      if (data.status === 'ok') {
+        setTestResult({
+          status: 'ok',
+          message: data.message || `Connected to ${data.provider} (${data.model})`,
+          sample: data.sample_output,
+          latencyMs: data.latency_ms,
+        })
+      } else {
+        setTestResult({
+          status: 'error',
+          message: data.message || data.error || 'Provider connection test failed.',
+          latencyMs: data.latency_ms,
+        })
+      }
+    } catch (err) {
+      setTestResult({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Network error testing provider.',
+      })
+    } finally {
+      setTestingProvider(false)
+    }
   }
 
   const fetchModels = async () => {
@@ -376,6 +427,43 @@ export default function SettingsModal({
                 </p>
               </div>
             )}
+
+            {/* Live Provider Connection Test */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] text-muted">
+                  Verify connection and formula placeholder preservation for the active provider:
+                </span>
+                <Button
+                  size="sm"
+                  onClick={testProviderConnection}
+                  disabled={testingProvider}
+                  className="shrink-0"
+                >
+                  {testingProvider ? 'Testing Provider...' : 'Test Connection'}
+                </Button>
+              </div>
+              {testResult && (
+                <div
+                  role="status"
+                  className={`rounded-lg border px-3.5 py-2.5 text-[12px] leading-relaxed ${
+                    testResult.status === 'ok'
+                      ? 'border-teal/40 bg-teal-soft/20 text-teal-ink'
+                      : 'border-red-300 bg-red-50 text-red-800'
+                  }`}
+                >
+                  <div className="font-bold">
+                    {testResult.status === 'ok' ? '✓ Provider Verified: ' : '✕ Provider Error: '}
+                    {testResult.message}
+                  </div>
+                  {testResult.sample && (
+                    <div className="mt-1 font-mono text-[11.5px] text-muted">
+                      Sample output: {testResult.sample}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Layout Invariants */}
             <div>

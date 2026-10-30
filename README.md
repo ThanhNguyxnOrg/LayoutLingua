@@ -276,7 +276,7 @@ npm run dev                         # 🚀 http://localhost:3000 (auto-spawns Py
 
 ### 3️⃣ Verification Suite
 ```bash
-pytest tests/ -q                                # 🧪 270 automated engine tests
+pytest tests/ -q                                # 🧪 274 automated engine tests
 python scripts/test_live_translation.py         # ⚡ live end-to-end translation smoke test
 ```
 

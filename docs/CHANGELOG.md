@@ -25,12 +25,17 @@ All notable changes to **LayoutLingua** are documented in this file.
 
 ## [2.1.1] — 2026-10-30
 
+### 🚀 Added
+- **Live Provider Connection Test**: Added `POST /api/test-provider` endpoint and integrated a live "Test Connection" button in `SettingsModal.tsx`, validating API key validity, endpoint latency in milliseconds, and formula token invariance (`<b0></b0>`).
+- **Zero-Dependency Native REST LLM Client**: Added standard-library `urllib.request` fallback in `OpenAITranslationProvider` and `GeminiTranslationProvider`, allowing direct cloud translation without requiring `pip install openai` or external SDKs.
+- **Extended Language Code Normalization**: Supported full Chinese Traditional (`zh-TW`), Chinese Simplified (`zh-CN`), Portuguese (`pt`), Italian (`it`), Dutch (`nl`), Polish (`pl`), Turkish (`tr`), Arabic (`ar`), and Thai (`th`) in `GoogleRpcTranslationProvider`.
+
 ### 🩹 Fixed
 - **Intra-Word Font Fallback Coalescing**: Natural prose words split mid-word across fallback font spans (e.g., `T` + `ổ` + `ng h` + `ợ` + `p` -> `Tổng hợp`) now cleanly coalesce into single prose tokens without creating false-positive math obstacles.
 - **VNI Spaced Composite Normalization**: Re-ordered VNI decoding replacements so circumflex and breve rules execute before acute/grave, preventing `Hoaùn` / `Ho a ù n` from wrongly mutating to `Hốn`. Added idempotence guard to protect pre-composed Unicode text.
 - **TOC Dot Leaders & Academic Glossary Alignment**: Fixed capitalization preservation for all-caps headings (`matched_str.isupper()`), prevented dot-leader stripping during post-restore glossary normalization, and refined target-language skipping heuristics to avoid falsely bypassing Vietnamese TOC headers like `7. Logarith ... 30`.
 - **Inline Code Pill Vector Art Protection**: Added detection and parent-background clearance for borderless inline code/highlight pill rectangles (height 8–24pt), eliminating false `VECTOR_ART` collision fallbacks.
-- **Test Suite Expansion**: Added 5 new regression tests in `test_math_book_fixes.py` and `test_slice4c_protection.py`, bringing the automated test count to **270 passed (100%)**.
+- **Test Suite Expansion**: Added 9 new regression tests in `test_math_book_fixes.py`, `test_slice4c_protection.py`, `test_google_rpc.py`, and `test_slice3c_cloud_providers.py`, bringing the automated test count to **274 passed (100%)**.
 
 ---
 

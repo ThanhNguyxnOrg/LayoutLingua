@@ -43,13 +43,16 @@ class GeminiTranslationProvider(BaseTranslationProvider):
         if isinstance(profile_or_model, ModelProfile):
             self.profile = profile_or_model
         else:
+            raw_model_str = str(profile_or_model or "gemini.fast").strip()
+            if raw_model_str.startswith("models/"):
+                raw_model_str = raw_model_str[len("models/") :]
             try:
-                self.profile = ModelProfileCatalog.get_profile(profile_or_model)
+                self.profile = ModelProfileCatalog.get_profile(raw_model_str)
             except KeyError:
                 # Custom user-specified model ID
                 self.profile = ModelProfileCatalog.create_custom(
                     provider_id="gemini",
-                    model_id=profile_or_model,
+                    model_id=raw_model_str,
                     supports_structured_json=True,
                 )
 
@@ -114,15 +117,19 @@ class GeminiTranslationProvider(BaseTranslationProvider):
 
     def translate_batch(self, request: BatchTranslationRequest) -> BatchTranslationResult:
         """Dispatch batch translation request to Gemini."""
+        if not request.segments:
+            return BatchTranslationResult(translations={})
+
         client = self._get_client()
+        src_lang = request.source_language if (request.source_language and request.source_language != "auto") else "the source language"
 
         # Build prompt
         system_instruction = (
             f"You are a professional academic and technical document translator.\n"
-            f"Translate the following segments from {request.source_language} to {request.target_language}.\n"
+            f"Translate the following segments from {src_lang} to {request.target_language}.\n"
             f"Strict invariants:\n"
-            f"1. Never modify, omit, or translate formula placeholder tokens: ⟦LL_FORMULA_XXXX⟧.\n"
-            f"2. Keep the exact token ID and brackets unchanged.\n"
+            f"1. Never modify, omit, or translate formula placeholder tokens: ⟦LL_FORMULA_XXXX⟧, <b0></b0>, <b1></b1>, ⟦CIT_0⟧, ⟦ABBR_0⟧, or ⟦M0⟧.\n"
+            f"2. Keep the exact token ID, XML tags (<b0></b0>), and brackets unchanged in their appropriate grammatical position.\n"
             f"3. Return the exact segment IDs provided.\n"
         )
 
@@ -161,6 +168,8 @@ class GeminiTranslationProvider(BaseTranslationProvider):
 
     def _execute_call(self, client: Any, prompt: str, use_json: bool) -> str:
         """Invoke client with structured configuration if supported."""
+        clean_model = self.model[7:] if self.model.startswith("models/") else self.model
+
         # 1. Google GenAI SDK (has client.models.generate_content)
         if hasattr(client, "models") and hasattr(client.models, "generate_content"):
             config: dict[str, Any] = {}
@@ -168,7 +177,7 @@ class GeminiTranslationProvider(BaseTranslationProvider):
                 config["response_mime_type"] = "application/json"
 
             resp = client.models.generate_content(
-                model=self.model,
+                model=clean_model,
                 contents=prompt,
                 config=config if config else None,
             )
@@ -179,7 +188,7 @@ class GeminiTranslationProvider(BaseTranslationProvider):
         # 2. OpenAI SDK client (has client.chat.completions.create)
         if hasattr(client, "chat") and hasattr(client.chat, "completions"):
             kwargs: dict[str, Any] = {
-                "model": self.model,
+                "model": clean_model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.1,
             }
@@ -196,7 +205,7 @@ class GeminiTranslationProvider(BaseTranslationProvider):
             import urllib.request
             import urllib.error
 
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self._api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={self._api_key}"
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {"temperature": 0.1},
@@ -208,16 +217,26 @@ class GeminiTranslationProvider(BaseTranslationProvider):
             req = urllib.request.Request(
                 url,
                 data=req_bytes,
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json", "User-Agent": "LayoutLingua/2.0"},
             )
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts and "text" in parts[0]:
-                        return str(parts[0]["text"])
-                raise InvalidTranslationResponseError(f"Unexpected REST response structure from Gemini: {data}")
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts and "text" in parts[0]:
+                            return str(parts[0]["text"])
+                    raise InvalidTranslationResponseError(f"Unexpected REST response structure from Gemini: {data}")
+            except urllib.error.HTTPError as he:
+                body = ""
+                try:
+                    body = he.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+                err = RuntimeError(f"HTTP {he.code}: {body or he.reason}")
+                setattr(err, "status_code", he.code)
+                raise err from he
 
         # Fallback for custom or mock callables
         if callable(client):
@@ -227,6 +246,8 @@ class GeminiTranslationProvider(BaseTranslationProvider):
 
     def _parse_response(self, text: str, expected_ids: list[str], was_json: bool) -> dict[str, str]:
         """Parse structured JSON or tagged block translations from LLM response."""
+        from layoutlingua.translation.google_rpc import _sanitize_translated_tokens
+
         results: dict[str, str] = {}
 
         # 1. Try parsing JSON
@@ -241,11 +262,32 @@ class GeminiTranslationProvider(BaseTranslationProvider):
 
         try:
             data = json.loads(clean_text)
-            items = data.get("translations", []) if isinstance(data, dict) else data
-            if isinstance(items, list):
-                for item in items:
-                    if isinstance(item, dict) and "id" in item and "text" in item:
-                        results[str(item["id"])] = str(item["text"])
+            if isinstance(data, dict):
+                items = (
+                    data.get("translations")
+                    or data.get("segments")
+                    or data.get("results")
+                    or data.get("data")
+                )
+                if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item, dict):
+                            sid = item.get("id") or item.get("segment_id")
+                            val = item.get("text") if "text" in item else item.get("translated")
+                            if sid is not None and val is not None:
+                                results[str(sid)] = _sanitize_translated_tokens(str(val))
+                else:
+                    # Flat dictionary mapping segment_id -> translated text
+                    for k, v in data.items():
+                        if isinstance(v, str):
+                            results[str(k)] = _sanitize_translated_tokens(v)
+            elif isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        sid = item.get("id") or item.get("segment_id")
+                        val = item.get("text") if "text" in item else item.get("translated")
+                        if sid is not None and val is not None:
+                            results[str(sid)] = _sanitize_translated_tokens(str(val))
         except json.JSONDecodeError:
             pass
 
@@ -254,7 +296,7 @@ class GeminiTranslationProvider(BaseTranslationProvider):
             for match in _TAGGED_SEGMENT_REGEX.finditer(text):
                 seg_id = match.group(1).strip()
                 translated = match.group(2).strip()
-                results[seg_id] = translated
+                results[seg_id] = _sanitize_translated_tokens(translated)
 
         if not results:
             raise InvalidTranslationResponseError(
@@ -262,6 +304,7 @@ class GeminiTranslationProvider(BaseTranslationProvider):
             )
 
         return results
+
 
     def _map_and_raise_error(self, exc: Exception) -> None:
         """Map SDK and HTTP status codes to standardized LayoutLingua error taxonomy."""

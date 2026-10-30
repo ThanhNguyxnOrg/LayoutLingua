@@ -46,6 +46,17 @@ class TestGoogleRpcTranslationProvider(unittest.TestCase):
         res = provider.translate_batch(req)
         self.assertEqual(res.translations.get("s1"), "")
 
+    def test_normalize_lang_code(self):
+        provider = GoogleRpcTranslationProvider()
+        self.assertEqual(provider._normalize_lang_code("zh-TW"), "zh-TW")
+        self.assertEqual(provider._normalize_lang_code("Chinese (Traditional)"), "zh-TW")
+        self.assertEqual(provider._normalize_lang_code("zh-CN"), "zh-CN")
+        self.assertEqual(provider._normalize_lang_code("Chinese"), "zh-CN")
+        self.assertEqual(provider._normalize_lang_code("Russian"), "ru")
+        self.assertEqual(provider._normalize_lang_code("Vietnamese"), "vi")
+        self.assertEqual(provider._normalize_lang_code("auto"), "auto")
+
 
 if __name__ == "__main__":
     unittest.main()
+

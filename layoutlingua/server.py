@@ -576,6 +576,141 @@ def _find_persisted_session(doc_id: str, filename_hint: Optional[str] = None) ->
     return None
 
 
+def _resolve_provider_config(req_json: dict[str, Any]) -> tuple[str, str, str, str, float]:
+    """Normalize provider configuration from either frontend UI payload keys or direct API keys."""
+    provider_type = str(req_json.get("provider", "")).lower().strip()
+    if provider_type in ("openai-compatible", "openai_compat", "custom"):
+        provider_type = "openai"
+    if not provider_type:
+        provider_type = "openai" if req_json.get("base_url") else "google"
+
+    if provider_type == "gemini":
+        api_key = str(
+            req_json.get("gemini_key")
+            or req_json.get("api_key")
+            or os.environ.get("GEMINI_API_KEY")
+            or ""
+        ).strip()
+        model_name = str(
+            req_json.get("gemini_model")
+            or req_json.get("model")
+            or "gemini-2.5-flash"
+        ).strip()
+        base_url = ""
+    elif provider_type in ("openai", "ollama"):
+        api_key = str(
+            req_json.get("openai_key")
+            or req_json.get("api_key")
+            or os.environ.get("OPENAI_API_KEY")
+            or ""
+        ).strip()
+        base_url = str(
+            req_json.get("openai_endpoint")
+            or req_json.get("base_url")
+            or ("http://localhost:11434/v1" if provider_type == "ollama" else "https://api.openai.com/v1")
+        ).strip()
+        model_name = str(
+            req_json.get("openai_model")
+            or req_json.get("model")
+            or ""
+        ).strip()
+    else:
+        api_key = ""
+        base_url = ""
+        model_name = ""
+
+    raw_scale = req_json.get("min_font_scale")
+    if raw_scale is None:
+        raw_scale = req_json.get("min_font_shrink")
+    try:
+        scale_val = float(raw_scale) if raw_scale is not None else 0.70
+        if scale_val > 1.5:
+            scale_val = scale_val / 100.0
+        min_font_scale = max(0.40, min(1.0, scale_val))
+    except (ValueError, TypeError):
+        min_font_scale = 0.70
+
+    return provider_type, api_key, base_url, model_name, min_font_scale
+
+
+def _instantiate_provider(req_json: dict[str, Any]):
+    """Instantiate the requested translation provider from normalized request payload."""
+    provider_type, api_key, base_url, model_name, _ = _resolve_provider_config(req_json)
+
+    if provider_type in ("google", "google_rpc"):
+        from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider
+
+        return GoogleRpcTranslationProvider()
+    elif provider_type == "gemini":
+        if not api_key:
+            raise ValueError("Gemini API key is required. Please enter your Gemini API key in Settings.")
+        from layoutlingua.translation.gemini import GeminiTranslationProvider
+
+        m_id = model_name if model_name else "gemini-2.5-flash"
+        return GeminiTranslationProvider(
+            api_key=api_key,
+            profile_or_model=m_id,
+        )
+    elif provider_type == "argos":
+        from layoutlingua.translation.argos.provider import ArgosTranslationProvider
+
+        argos = ArgosTranslationProvider()
+        if argos.manager.is_runtime_available():
+            return argos
+        raise ValueError(
+            "Argos Translate offline runtime is not installed in this Python environment. "
+            "Install it with: pip install argostranslate"
+        )
+    elif provider_type in ("openai", "ollama") or base_url:
+        from layoutlingua.translation.openai_compat import OpenAITranslationProvider
+
+        raw_b_url = base_url if base_url else ("http://localhost:11434/v1" if provider_type == "ollama" else "https://api.openai.com/v1")
+        b_url = _validate_provider_base_url(raw_b_url)
+        m_id = (model_name or "").strip()
+        if not m_id:
+            try:
+                headers = {"User-Agent": "LayoutLingua/2.0"}
+                if api_key and api_key != "ollama":
+                    headers["Authorization"] = f"Bearer {api_key}"
+                req_m = urllib.request.Request(f"{b_url.rstrip('/')}/models", headers=headers)
+                with urllib.request.urlopen(req_m, timeout=2.5) as r_m:
+                    data_m = json.loads(r_m.read().decode("utf-8"))
+                    fetched = [m.get("id") for m in data_m.get("data", []) if m.get("id")]
+                    if fetched:
+                        m_id = fetched[0]
+            except Exception:
+                pass
+
+        if not m_id:
+            b_low = b_url.lower()
+            if "api.openai.com" in b_low:
+                m_id = "gpt-4o-mini"
+            elif "deepseek" in b_low:
+                m_id = "deepseek-chat"
+            elif "groq" in b_low:
+                m_id = "llama-3.3-70b-versatile"
+            elif "openrouter" in b_low:
+                m_id = "openai/gpt-4o-mini"
+            elif "ollama" in b_low or ":11434" in b_low:
+                m_id = "llama3.2"
+            else:
+                raise ValueError(
+                    f"No model specified and could not auto-discover models from {b_url}. "
+                    f"Please specify a Model ID in Settings."
+                )
+
+        return OpenAITranslationProvider(
+            api_key=api_key or "ollama",
+            model_id=m_id,
+            base_url=b_url,
+        )
+
+    from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider
+
+    return GoogleRpcTranslationProvider()
+
+
+
 def _run_translation_worker(doc_id: str, req_json: dict, job_id: str = "") -> None:
     """Background worker thread that translates and typesets a document."""
     session = _get_or_recover_session(doc_id, require_ir=True)
@@ -606,71 +741,13 @@ def _run_translation_worker(doc_id: str, req_json: dict, job_id: str = "") -> No
             target_lang=target_lang,
         )
 
-        # Read provider options
-        provider_type = str(req_json.get("provider", "google")).lower().strip()
-        api_key = str(req_json.get("api_key", "") or os.environ.get("GEMINI_API_KEY", "") if provider_type == "gemini" else req_json.get("api_key", "")).strip()
-        base_url = str(req_json.get("base_url", "")).strip()
-        model_name = str(req_json.get("model", "")).strip()
+        # Read provider options (supports both UI payload keys and direct API keys)
+        provider_type, api_key, base_url, model_name, min_font_scale = _resolve_provider_config(req_json)
         custom_glossary = req_json.get("custom_glossary", None)
 
         provider_inst = None
         try:
-            if provider_type in ("openai", "ollama") or base_url:
-                from layoutlingua.translation.openai_compat import OpenAITranslationProvider
-
-                raw_b_url = base_url if base_url else ("http://localhost:11434/v1" if provider_type == "ollama" else "https://api.openai.com/v1")
-                b_url = _validate_provider_base_url(raw_b_url)
-                m_id = (model_name or "").strip()
-                if not m_id:
-                    try:
-                        headers = {"User-Agent": "LayoutLingua/2.0"}
-                        if api_key and api_key != "ollama":
-                            headers["Authorization"] = f"Bearer {api_key}"
-                        req_m = urllib.request.Request(f"{b_url.rstrip('/')}/models", headers=headers)
-                        with urllib.request.urlopen(req_m, timeout=2.5) as r_m:
-                            data_m = json.loads(r_m.read().decode("utf-8"))
-                            fetched = [m.get("id") for m in data_m.get("data", []) if m.get("id")]
-                            if fetched:
-                                m_id = fetched[0]
-                    except Exception:
-                        pass
-
-                if not m_id:
-                    if "api.openai.com" in b_url:
-                        m_id = "gpt-4o-mini"
-                    else:
-                        raise ValueError(
-                            f"No model specified and could not auto-discover models from {b_url}. "
-                            f"Please specify a Model ID in Settings."
-                        )
-
-                provider_inst = OpenAITranslationProvider(
-                    api_key=api_key or "ollama",
-                    model_id=m_id,
-                    base_url=b_url,
-                )
-            elif provider_type == "gemini":
-                if not api_key:
-                    raise ValueError("Gemini API key is required. Please enter your Gemini API key in Settings.")
-                from layoutlingua.translation.gemini import GeminiTranslationProvider
-
-                m_id = model_name if model_name else "gemini-2.5-flash"
-                provider_inst = GeminiTranslationProvider(
-                    api_key=api_key,
-                    profile_or_model=m_id,
-                )
-            elif provider_type in ("google", "google_rpc"):
-                from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider
-
-                provider_inst = GoogleRpcTranslationProvider()
-            elif provider_type == "argos":
-                from layoutlingua.translation.argos.provider import ArgosTranslationProvider
-
-                argos = ArgosTranslationProvider()
-                if argos.manager.is_runtime_available():
-                    provider_inst = argos
-                else:
-                    raise ValueError("Argos Translate offline package is not installed.")
+            provider_inst = _instantiate_provider(req_json)
         except Exception as p_err:
             print(f"[LayoutLingua] Provider init notice: {p_err}")
             with _LOCK:
@@ -685,10 +762,6 @@ def _run_translation_worker(doc_id: str, req_json: dict, job_id: str = "") -> No
                 session["is_translating"] = False
             return
 
-        if provider_inst is None:
-            from layoutlingua.translation.google_rpc import GoogleRpcTranslationProvider
-
-            provider_inst = GoogleRpcTranslationProvider()
 
         from layoutlingua.translation.cache import CachedTranslationProvider
 
@@ -754,11 +827,17 @@ def _run_translation_worker(doc_id: str, req_json: dict, job_id: str = "") -> No
                     snap["message"] = f"Translating selected text ({done_segs}/{total_segs} segments across {selected_count} pp)..."
                 session["progress"] = snap
 
+        effective_batch_src_lang = (
+            source_lang
+            if (source_lang and source_lang != "auto")
+            else (session.get("detected_lang") or "en" if provider_type in ("argos", "gemini", "openai", "ollama") else "auto")
+        )
+
         try:
             raw_batch_res = concurrent_batch_translate(
                 provider=provider_inst,
                 chunks=shielded_chunks,
-                source_lang=source_lang,
+                source_lang=effective_batch_src_lang,
                 target_lang=target_lang,
                 max_workers=concurrency,
                 on_chunk_done=_on_chunk_progress,
@@ -867,7 +946,6 @@ def _run_translation_worker(doc_id: str, req_json: dict, job_id: str = "") -> No
         accum = DocumentAccumulator(src_doc)
         total_p = len(src_doc)
 
-        min_font_scale = float(req_json.get("min_font_scale") or 0.70)
         engine = TypesetEngine(options=TypesetOptions(min_font_scale=min_font_scale))
         report = FittingReport()
 
@@ -2175,7 +2253,67 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": f"Failed to open folder: {e}"}, status=500)
             return
 
+        # 5. Test translation provider connectivity & placeholder preservation
+        if path in ("/api/test-provider", "/test-provider"):
+            try:
+                req_json = json.loads(post_body.decode("utf-8")) if post_body else {}
+            except Exception:
+                req_json = {}
+
+            t0 = time.time()
+            try:
+                provider_inst = _instantiate_provider(req_json)
+                src_lang = str(req_json.get("source_lang") or "en").strip() or "en"
+                if src_lang == "auto":
+                    src_lang = "en"
+                tgt_lang = str(req_json.get("target_lang") or "vi").strip() or "vi"
+                if tgt_lang == src_lang:
+                    tgt_lang = "vi" if src_lang != "vi" else "en"
+
+                from layoutlingua.processing.formula.models import TextSegment
+                from layoutlingua.translation.models import BatchTranslationRequest
+
+                sample_seg = TextSegment(
+                    segment_id="test_1",
+                    raw_text="Theorem 1: Let x = 0.",
+                    masked_text="Theorem 1: Let <b0></b0>.",
+                    tokens=[],
+                    span_ids=[],
+                )
+                batch_req = BatchTranslationRequest(
+                    batch_id="test_batch",
+                    segments=(sample_seg,),
+                    source_language=src_lang,
+                    target_language=tgt_lang,
+                )
+                batch_res = provider_inst.translate_batch(batch_req)
+                translated = batch_res.translations.get("test_1", "")
+                latency_ms = int(round((time.time() - t0) * 1000))
+                if not translated:
+                    raise ValueError("Provider returned an empty translation response.")
+
+                self._send_json({
+                    "status": "ok",
+                    "provider": provider_inst.name,
+                    "model": provider_inst.model,
+                    "sample_input": sample_seg.masked_text,
+                    "sample_output": translated,
+                    "formula_preserved": "<b0></b0>" in translated,
+                    "latency_ms": latency_ms,
+                    "message": f"Connected to {provider_inst.name} ({provider_inst.model}) in {latency_ms} ms",
+                })
+            except Exception as err:
+                latency_ms = int(round((time.time() - t0) * 1000))
+                self._send_json({
+                    "status": "error",
+                    "error_type": type(err).__name__,
+                    "latency_ms": latency_ms,
+                    "message": str(err),
+                })
+            return
+
         self._send_json({"error": f"Unknown POST endpoint: {path}"}, status=404)
+
 
 
 def start_server(host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServer:

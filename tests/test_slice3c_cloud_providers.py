@@ -534,3 +534,149 @@ class TestSlice3CCloudProviders(unittest.TestCase):
         translated_text = res.translated_segments["math_seg"]
         self.assertIn(r"\nabla \cdot \mathbf{B} = 0", translated_text)
         self.assertIn("Định lý: Đẳng thức", translated_text)
+
+    # -------------------------------------------------------------------------
+    # 10. Zero-Dependency native_rest Mode & UI Payload Key Resolution
+    # -------------------------------------------------------------------------
+
+    def test_openai_native_rest_mode_and_fallback(self) -> None:
+        """Verify OpenAITranslationProvider works in zero-dependency native_rest mode and sanitizes <b0></b0>."""
+        import io
+        import urllib.error
+        import urllib.request
+        from unittest.mock import patch
+
+        provider = OpenAITranslationProvider(
+            api_key="sk-test-rest",
+            model_id="deepseek-chat",
+            base_url="https://api.deepseek.com/v1",
+            supports_structured_json=True,
+            client="native_rest",
+        )
+        self.assertEqual(provider._get_client(), "native_rest")
+
+        # First call raises HTTP 400 with response_format error in body; second call returns XML tagged response
+        err_body = io.BytesIO(b'{"error": {"message": "response_format json_object is unsupported parameter"}}')
+        http_400 = urllib.error.HTTPError(
+            url="https://api.deepseek.com/v1/chat/completions",
+            code=400,
+            msg="Bad Request",
+            hdrs=None,  # type: ignore[arg-type]
+            fp=err_body,
+        )
+
+        success_payload = json.dumps({
+            "choices": [
+                {
+                    "message": {
+                        "content": '<segment id="s1">Định lý < b0 > < / b0 > và ⟦ CIT_0 ⟧</segment>'
+                    }
+                }
+            ]
+        }).encode("utf-8")
+
+        class _FakeResp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            def read(self):
+                return success_payload
+
+        with patch.object(urllib.request, "urlopen", side_effect=[http_400, _FakeResp()]):
+            req = BatchTranslationRequest(
+                batch_id="b_rest",
+                segments=(TextSegment("s1", "Theorem <b0></b0> and ⟦CIT_0⟧", "Theorem <b0></b0> and ⟦CIT_0⟧"),),
+                source_language="en",
+                target_language="vi",
+            )
+            res = provider.translate_batch(req)
+            self.assertEqual(res.translations["s1"], "Định lý <b0></b0> và ⟦CIT_0⟧")
+            self.assertFalse(provider._supports_structured_json)
+
+    def test_gemini_native_rest_http_error_body_mapping_and_model_prefix(self) -> None:
+        """Verify GeminiTranslationProvider strips models/ prefix and maps HTTPError JSON bodies in native_rest mode."""
+        import io
+        import urllib.error
+        import urllib.request
+        from unittest.mock import patch
+
+        provider = GeminiTranslationProvider(
+            api_key="bad-gemini-key",
+            profile_or_model="models/gemini-2.5-flash",
+            client="native_rest",
+        )
+        self.assertEqual(provider.model, "gemini-2.5-flash")
+
+        err_body = io.BytesIO(b'{"error": {"status": "INVALID_ARGUMENT", "message": "API_KEY_INVALID"}}')
+        http_400 = urllib.error.HTTPError(
+            url="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+            code=400,
+            msg="Bad Request",
+            hdrs=None,  # type: ignore[arg-type]
+            fp=err_body,
+        )
+
+        with patch.object(urllib.request, "urlopen", side_effect=http_400):
+            req = BatchTranslationRequest(
+                batch_id="b_gem_err",
+                segments=(TextSegment("s1", "Hello", "Hello"),),
+                source_language="en",
+                target_language="vi",
+            )
+            with self.assertRaises(AuthenticationError):
+                provider.translate_batch(req)
+
+    def test_server_resolve_and_instantiate_providers_from_ui_payload(self) -> None:
+        """Verify server._resolve_provider_config and _instantiate_provider accept frontend Settings keys."""
+        from layoutlingua.server import _instantiate_provider, _resolve_provider_config
+
+        # 1. Gemini UI payload keys
+        gem_payload = {
+            "provider": "gemini",
+            "gemini_key": "AIzaSyTestKey123",
+            "gemini_model": "models/gemini-2.5-pro",
+            "min_font_shrink": 65,
+        }
+        p_type, key, b_url, model, scale = _resolve_provider_config(gem_payload)
+        self.assertEqual(p_type, "gemini")
+        self.assertEqual(key, "AIzaSyTestKey123")
+        self.assertEqual(model, "models/gemini-2.5-pro")
+        self.assertAlmostEqual(scale, 0.65)
+        gem_inst = _instantiate_provider(gem_payload)
+        self.assertEqual(gem_inst.name, "gemini")
+        self.assertEqual(gem_inst.model, "gemini-2.5-pro")
+
+        # 2. OpenAI-Compatible UI payload keys
+        oai_payload = {
+            "provider": "openai",
+            "openai_key": "sk-openrouter-test",
+            "openai_endpoint": "https://openrouter.ai/api/v1",
+            "openai_model": "anthropic/claude-3.5-sonnet",
+            "min_font_shrink": 0.72,
+        }
+        p_type2, key2, b_url2, model2, scale2 = _resolve_provider_config(oai_payload)
+        self.assertEqual(p_type2, "openai")
+        self.assertEqual(key2, "sk-openrouter-test")
+        self.assertEqual(b_url2, "https://openrouter.ai/api/v1")
+        self.assertEqual(model2, "anthropic/claude-3.5-sonnet")
+        self.assertAlmostEqual(scale2, 0.72)
+        oai_inst = _instantiate_provider(oai_payload)
+        self.assertEqual(oai_inst.name, "openai-compatible")
+        self.assertEqual(oai_inst.model, "anthropic/claude-3.5-sonnet")
+
+        # 3. Google RPC default even when default openai_endpoint is included in UI payload
+        goog_inst = _instantiate_provider({
+            "provider": "google",
+            "openai_endpoint": "https://api.openai.com/v1",
+            "gemini_model": "gemini-2.5-flash",
+        })
+        self.assertEqual(goog_inst.name, "google_rpc")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
