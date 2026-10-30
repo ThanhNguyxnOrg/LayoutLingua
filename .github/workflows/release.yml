@@ -161,20 +161,15 @@ jobs:
             npm ci --legacy-peer-deps
             npm run build
           }
-          python -m layoutlingua.desktop --build-exe
+          python -m layoutlingua.desktop --build-exe --onefile --output-name LayoutLingua-windows-x86_64
           New-Item -ItemType Directory -Force -Path "dist-release" | Out-Null
-          New-Item -ItemType Directory -Force -Path "pack-stage/LayoutLingua" | Out-Null
-          if (Test-Path "release/LayoutLingua") {
-            Copy-Item -Recurse -Force release/LayoutLingua/* pack-stage/LayoutLingua/
-          }
-          Copy-Item -Force LayoutLingua.bat, README.md, LICENSE pack-stage/LayoutLingua/ -ErrorAction SilentlyContinue
-          Compress-Archive -Path pack-stage/LayoutLingua -DestinationPath "dist-release/LayoutLingua-windows-x86_64.zip" -Force
+          Copy-Item -Force "release/LayoutLingua-windows-x86_64.exe" "dist-release/LayoutLingua-windows-x86_64.exe"
 
       - uses: actions/upload-artifact@v7
         with:
           name: LayoutLingua-windows-x86_64
-          path: dist-release/LayoutLingua-windows-*.zip
-          if-no-files-found: warn
+          path: dist-release/LayoutLingua-windows-x86_64.exe
+          if-no-files-found: error
 
   macos:
     name: macOS (${{ matrix.arch }})
@@ -218,13 +213,7 @@ jobs:
 
           if [ -d "release/LayoutLingua.app" ]; then
             cp -r release/LayoutLingua.app dmg_stage/
-          elif [ -d "release/LayoutLingua" ]; then
-            cp -r release/LayoutLingua dmg_stage/LayoutLingua.app
           fi
-
-          cp LayoutLingua.command dmg_stage/ 2>/dev/null || true
-          cp README.md LICENSE dmg_stage/ 2>/dev/null || true
-          chmod +x dmg_stage/LayoutLingua.command 2>/dev/null || true
           ln -s /Applications dmg_stage/Applications
 
           hdiutil create -volname "LayoutLingua" -srcfolder dmg_stage -ov -format UDZO "dist-release/LayoutLingua-macos-${{ matrix.arch }}.dmg"
@@ -233,7 +222,7 @@ jobs:
         with:
           name: LayoutLingua-macos-${{ matrix.arch }}
           path: dist-release/LayoutLingua-macos-*.dmg
-          if-no-files-found: warn
+          if-no-files-found: error
 
   linux:
     name: Linux (x86_64)
@@ -268,24 +257,16 @@ jobs:
             npm ci --legacy-peer-deps
             npm run build
           fi
-          python -m layoutlingua.desktop --build-exe
+          python -m layoutlingua.desktop --build-exe --onefile --output-name LayoutLingua-linux-x86_64
           mkdir -p dist-release
-          mkdir -p pack_stage/LayoutLingua
-
-          if [ -d "release/LayoutLingua" ]; then
-            cp -r release/LayoutLingua/* pack_stage/LayoutLingua/
-          fi
-          cp LayoutLingua.sh LayoutLingua.desktop README.md LICENSE pack_stage/LayoutLingua/ 2>/dev/null || cp LayoutLingua.sh README.md LICENSE pack_stage/LayoutLingua/ 2>/dev/null || true
-          chmod +x pack_stage/LayoutLingua/LayoutLingua 2>/dev/null || true
-          chmod +x pack_stage/LayoutLingua/LayoutLingua.sh 2>/dev/null || true
-
-          tar -czf dist-release/LayoutLingua-linux-x86_64.tar.gz -C pack_stage LayoutLingua
+          cp release/LayoutLingua-linux-x86_64 dist-release/LayoutLingua-linux-x86_64
+          chmod +x dist-release/LayoutLingua-linux-x86_64
 
       - uses: actions/upload-artifact@v7
         with:
           name: LayoutLingua-linux-x86_64
-          path: dist-release/LayoutLingua-linux-*.tar.gz
-          if-no-files-found: warn
+          path: dist-release/LayoutLingua-linux-x86_64
+          if-no-files-found: error
 
   publish:
     name: Publish Release (All Desktop OS)

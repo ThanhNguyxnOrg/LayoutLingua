@@ -43,7 +43,8 @@ LayoutLingua follows John Ousterhout's **Deep Module** design principle: each co
 LayoutLingua runs an integrated full-stack architecture:
 - **Web Studio (`server.ts` + `src/`)**: A Node.js Express server running Vite middleware on `http://localhost:3000`. It serves the React 19 UI, handles hot module replacement, and transparently proxies all `/api/*` endpoints to the core Python engine.
 - **Python Core Engine (`layoutlingua/server.py`)**: A standalone high-performance vector typesetting engine on `http://127.0.0.1:8765`, auto-spawned by `server.ts` on launch and managed with graceful shutdown hooks.
-- **Single Command Operation**: Running `npm run dev` (or double-clicking `start_app.bat`) boots both the Web Studio and the Python engine concurrently.
+- **Dev Server (Developer Testing Only)**: Running `npm run dev` boots the Web Studio dev environment and the Python engine concurrently for local testing.
+- **Native Desktop App (End-User Distribution)**: Powered by `layoutlingua.desktop` with PyWebView / native OS host, packaged as standalone binaries (`.exe`, `.dmg`, Linux binary).
 
 | | 🖥️ LayoutLingua Web Studio |
 |:---|:---|
@@ -51,7 +52,7 @@ LayoutLingua runs an integrated full-stack architecture:
 | **Web Server** | Express + Vite reverse proxy (`server.ts`, `http://localhost:3000`) |
 | **Engine** | `layoutlingua/server.py` — PyMuPDF vector core on `http://127.0.0.1:8765` |
 | **Session store** | OS cache dir via `platformdirs` (`…/layoutlingua/Cache/sessions/`) |
-| **Lifecycle** | `server.ts` auto-spawns Python subprocess, kills it on exit; `start_app.bat` launches browser & dev server |
+| **Lifecycle** | `server.ts` auto-spawns Python subprocess during dev; standalone desktop app embeds engine directly |
 
 > ✅ **Provider honesty**: every provider must be genuinely available at translate time — Gemini requires its API key, OpenAI-compatible requires a key or a local endpoint, and Argos requires the `argostranslate` runtime. A missing dependency stops the job with an explicit error instead of silently falling back to another provider.
 

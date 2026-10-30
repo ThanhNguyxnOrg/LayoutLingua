@@ -265,11 +265,26 @@ Tested on a 96-page Vietnamese mathematical handbook (921 prose groups, legacy V
 
 ---
 
-## 🛠 Installation & Quickstart
+## 📥 Download Standalone Desktop App (End Users)
 
-### Prerequisites
-- **Python** `>= 3.10` (core engine)
-- **Node.js** `>= 20.0.0` (Web Studio interface)
+Download the official standalone application from [GitHub Releases](https://github.com/ThanhNguyxnOrg/LayoutLingua/releases/latest) with **zero dependencies, direct download (no ZIP), and zero command line**:
+
+| Platform | Architecture | File Format | Installation / Launch |
+| :--- | :--- | :--- | :--- |
+| **🪟 Windows** | `x86_64` | `LayoutLingua-windows-x86_64.exe` | **Direct executable**: double-click to launch immediately |
+| **🍎 macOS** | Apple Silicon (`arm64` M1/M2/M3/M4) | `LayoutLingua-macos-apple-silicon.dmg` | Open DMG, drag `LayoutLingua.app` to Applications |
+| **🍎 macOS** | Intel (`x86_64`) | `LayoutLingua-macos-intel.dmg` | Open DMG, drag `LayoutLingua.app` to Applications |
+| **🐧 Linux** | `x86_64` | `LayoutLingua-linux-x86_64` | **Native executable**: run `./LayoutLingua-linux-x86_64` |
+
+---
+
+## 🛠️ Developer Setup & Testing (Web Dev Mode Only)
+
+> 💡 *Note*: Web dev mode (`npm run dev`) is strictly intended for developers contributing to or testing the codebase locally. End users should download the standalone desktop application above.
+
+### Prerequisites (Developers Only)
+- **Python** `>= 3.10`
+- **Node.js** `>= 20.0.0`
 
 ### 1️⃣ Setup Environment & Dependencies
 ```bash
@@ -282,17 +297,15 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1        # 🐧 Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Web Studio dependencies
+# Web UI dependencies
 npm install --legacy-peer-deps
 ```
 
-### 2️⃣ Run Application (port 3000)
+### 2️⃣ Run Dev Server (Developer Testing Only)
 ```bash
-# Single command boots both Express/Vite Web Studio and Python Engine:
+# Boot Express/Vite UI dev server and Python Engine:
 npm run dev                         # 🚀 http://localhost:3000 (auto-spawns Python on :8765)
 ```
-
-> 💡 **One-click launcher (Windows)**: double-click `start_app.bat` — it boots the engine and opens the Web Studio in your default browser.
 
 ### 3️⃣ Verification Suite
 ```bash

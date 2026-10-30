@@ -5,6 +5,10 @@ cd /d "%~dp0"
 
 :: 1. If standalone compiled .exe already exists and --build-exe was not requested, launch it directly
 if /I not "%~1"=="--build-exe" (
+    if exist "release\LayoutLingua-windows-x86_64.exe" (
+        start "" "release\LayoutLingua-windows-x86_64.exe"
+        exit /b 0
+    )
     if exist "release\LayoutLingua\LayoutLingua.exe" (
         start "" "release\LayoutLingua\LayoutLingua.exe"
         exit /b 0

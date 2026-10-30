@@ -25,19 +25,15 @@ All notable changes to **LayoutLingua** are documented in this file.
 
 ## [2.0.0] — 2026-10-30
 
-🎉 **Major Milestone Release** — LayoutLingua 2.0 introduces the complete **AI Translation Studio Web Stack**, full cross-platform desktop distribution packages for **3 Operating Systems** (Windows `.zip`, macOS `.dmg`, Linux `.tar.gz`), the **Argos Offline AI Engine**, resilient **Gemini 404 Deprecation Auto-Healing**, and zero-loss layout geometry and formula preservation verified across 276 automated tests. 🚀✨
+🎉 **Major Milestone Release** — LayoutLingua 2.0 introduces native standalone desktop executables for **3 Operating Systems** (Windows direct `.exe`, macOS dual-architecture `.dmg`, Linux native binary), the **Argos Offline AI Engine**, resilient **Gemini 404 Deprecation Auto-Healing**, and zero-loss layout geometry and formula preservation verified across 276 automated tests. 🚀✨
 
-### 🎨 Modern AI Translation Studio Web Stack
-- **Unified Full-Stack Architecture**: Powered by React 19, TypeScript, Tailwind CSS, Vite, and an Express middleware proxy (`server.ts` on port 3000) orchestrating the high-precision Python Document AI engine (`layoutlingua/server.py` on port 8765).
-- **Dual-View Synchronized Workspace**: Side-by-side interactive document viewers with smooth alpha-blend overlay slider (0–100%), interactive bounding-box inspector, clickable hyperlink overlays, and flicker-free incremental page streaming.
-- **Preflight & Session Discovery**: Drag-and-drop PDF upload, scanned-PDF detection with OCR triage notices, and disk session recovery (`/api/recent-sessions`) allowing instant restoration of translation sessions across application restarts.
-- **Flexible Export Matrix**: Monolingual translated PDF, bilingual interleaved PDF (source page alternating with translated page and synchronized TOC page numbering), and structured Markdown export.
+> 💡 *Note*: Web dev server mode (`npm run dev`) is strictly reserved for local developer testing. End-user distributions are exclusively standalone native desktop applications.
 
-### 📦 Cross-Platform Desktop Distributions (3 OS & Dual Mac Architectures)
-- **🪟 Windows (`LayoutLingua-windows-x86_64.zip`)**: Standalone desktop application bundling the compiled native executable (`LayoutLingua.exe`), production web studio bundle, bundled Python Document AI runtime, and `LayoutLingua.bat` launcher for seamless 1-click startup without manual dependencies.
-- **🍎 macOS Apple Silicon (`LayoutLingua-macos-apple-silicon.dmg`)**: Native Apple Silicon disk image (`.dmg`) bundling `LayoutLingua.app` compiled specifically for ARM64 (M1/M2/M3/M4 chips) with `/Applications` drag-and-drop installer symlink and `LayoutLingua.command`.
-- **🍎 macOS Intel (`LayoutLingua-macos-intel.dmg`)**: Native Intel Mac disk image (`.dmg`) bundling `LayoutLingua.app` compiled for x86_64 Intel Macs with `/Applications` drag-and-drop installer symlink and `LayoutLingua.command`.
-- **🐧 Linux (`LayoutLingua-linux-x86_64.tar.gz`)**: Standalone Linux bundle containing the compiled native ELF binary (`LayoutLingua`), FreeDesktop desktop shortcut (`LayoutLingua.desktop`), and `LayoutLingua.sh` launcher.
+### 🖥️ Native Standalone Desktop Applications (Direct Download — Zero ZIP)
+- **🪟 Windows (`LayoutLingua-windows-x86_64.exe`)**: Direct standalone executable file. Double-click to launch the native desktop application immediately with zero extraction, zero terminal commands, and zero Python/Node setup requirements.
+- **🍎 macOS Apple Silicon (`LayoutLingua-macos-apple-silicon.dmg`)**: Native Apple Silicon disk image bundling `LayoutLingua.app` compiled for ARM64 (M1/M2/M3/M4 chips) with standard `/Applications` drag-and-drop installer.
+- **🍎 macOS Intel (`LayoutLingua-macos-intel.dmg`)**: Native Intel Mac disk image bundling `LayoutLingua.app` compiled for x86_64 Intel Macs with standard `/Applications` drag-and-drop installer.
+- **🐧 Linux (`LayoutLingua-linux-x86_64`)**: Standalone native ELF binary executable pre-configured for direct execution on any modern Linux distribution.
 
 ### 📦 Argos Offline AI Engine & Privacy
 - **100% Offline Translation**: Integrated CTranslate2 and Argos Translate runtime support for complete data confidentiality without sending a single byte to external clouds.

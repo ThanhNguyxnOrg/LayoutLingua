@@ -146,8 +146,8 @@ def launch_desktop_app(port: int | None = None) -> int:
             pass
 
 
-def build_desktop_executable() -> int:
-    """Package LayoutLingua into a standalone native desktop executable (.exe on Windows)."""
+def build_desktop_executable(onefile: bool = False, output_name: str | None = None) -> int:
+    """Package LayoutLingua into a standalone native desktop executable."""
     root_dir = Path(__file__).resolve().parent.parent
     _ensure_frontend_built(root_dir)
 
@@ -163,6 +163,9 @@ def build_desktop_executable() -> int:
     fonts_src = root_dir / "layoutlingua" / "typesetting" / "assets" / "fonts"
     release_dir = root_dir / "release"
     build_work_dir = root_dir / "build_desktop_tmp"
+    app_name = output_name or "LayoutLingua"
+
+    bundle_mode = "--onefile" if onefile else "--onedir"
 
     cmd = [
         sys.executable,
@@ -170,10 +173,10 @@ def build_desktop_executable() -> int:
         "PyInstaller",
         "--noconfirm",
         "--clean",
-        "--onedir",
+        bundle_mode,
         "--windowed",
         "--name",
-        "LayoutLingua",
+        app_name,
         "--distpath",
         str(release_dir),
         "--workpath",
@@ -197,16 +200,19 @@ def build_desktop_executable() -> int:
         cmd.extend(["--add-data", f"{fonts_src}{sep}layoutlingua/typesetting/assets/fonts"])
     cmd.append(str(root_dir / "layoutlingua" / "desktop.py"))
 
-    print("[LayoutLingua Desktop] Building standalone native application...")
+    print(f"[LayoutLingua Desktop] Building standalone native application ({bundle_mode} -> {app_name})...")
     res = subprocess.run(cmd, cwd=str(root_dir))
     shutil.rmtree(build_work_dir, ignore_errors=True)
-    spec_file = root_dir / "LayoutLingua.spec"
+    spec_file = root_dir / f"{app_name}.spec"
     if spec_file.is_file():
         spec_file.unlink()
 
     if res.returncode == 0:
         exe_ext = ".exe" if sys.platform == "win32" else ""
-        exe_path = release_dir / "LayoutLingua" / f"LayoutLingua{exe_ext}"
+        if onefile:
+            exe_path = release_dir / f"{app_name}{exe_ext}"
+        else:
+            exe_path = release_dir / app_name / f"{app_name}{exe_ext}"
         print(f"\n[OK] Standalone Desktop App built successfully: {exe_path}")
     return res.returncode
 
@@ -216,7 +222,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--build-exe",
         action="store_true",
-        help="Compile a standalone native Desktop executable (release/LayoutLingua/LayoutLingua.exe).",
+        help="Compile a standalone native Desktop executable.",
+    )
+    parser.add_argument(
+        "--onefile",
+        action="store_true",
+        help="Compile into a single standalone executable file instead of a directory.",
+    )
+    parser.add_argument(
+        "--output-name",
+        type=str,
+        default=None,
+        help="Custom executable name.",
     )
     parser.add_argument(
         "--port",
@@ -226,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     if args.build_exe:
-        return build_desktop_executable()
+        return build_desktop_executable(onefile=args.onefile, output_name=args.output_name)
     return launch_desktop_app(port=args.port)
 
 

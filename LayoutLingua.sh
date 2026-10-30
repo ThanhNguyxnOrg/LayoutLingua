@@ -8,8 +8,12 @@ echo "========================================================"
 echo "          LayoutLingua Desktop Application"
 echo "========================================================"
 
-# 1. If standalone binary exists in release/LayoutLingua and not building, launch it
+# 1. If standalone binary exists in release/ and not building, launch it
 if [[ "${1:-}" != "--build-exe" && "${1:-}" != "--build-bin" ]]; then
+  if [[ -x "release/LayoutLingua-linux-x86_64" ]]; then
+    echo "[*] Launching precompiled LayoutLingua standalone app..."
+    exec "release/LayoutLingua-linux-x86_64" "$@"
+  fi
   if [[ -x "release/LayoutLingua/LayoutLingua" ]]; then
     echo "[*] Launching precompiled LayoutLingua standalone app..."
     exec "release/LayoutLingua/LayoutLingua" "$@"
