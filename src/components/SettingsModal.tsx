@@ -20,7 +20,9 @@ export default function SettingsModal({
   initialTab?: 'config' | 'guide'
 }) {
   const [globalSettings, updateGlobalSettings] = useSettings()
-  const isDesktopRuntime = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+  const isDesktopRuntime =
+    typeof window !== 'undefined' &&
+    ('__TAURI_INTERNALS__' in window || '__LAYOUTLINGUA_DESKTOP__' in window || 'pywebview' in window)
   const [settings, setSettings] = useState<AppSettings>(globalSettings)
   const [saved, setSaved] = useState(false)
   const [activeTab, setActiveTab] = useState<'config' | 'guide'>(initialTab)

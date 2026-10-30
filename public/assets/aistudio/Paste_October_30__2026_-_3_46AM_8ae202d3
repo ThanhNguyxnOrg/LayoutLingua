@@ -1,0 +1,879 @@
+=== LayoutLingua Quality Checks Report ===
+Total items: 175 (0 failures, 175 warnings, 0 notices)
+Generated at: 10/30/2026, 3:46:23 AM
+------------------------------------------
+
+#1 [Page 1] WARNING - COLLISION_FALLBACK
+Title: Page 1: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_43).. Source retained.
+Region / ID: p1_block_13_0 (x=59.3%, y=68.2%, w=23%, h=1.8%)
+
+#2 [Page 1] WARNING - COLLISION_FALLBACK
+Title: Page 1: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_45).. Source retained.
+Region / ID: p1_block_13_1 (x=82.8%, y=68.2%, w=3.9%, h=1.8%)
+
+#3 [Page 1] WARNING - COLLISION_FALLBACK
+Title: Page 1: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_47).. Source retained.
+Region / ID: p1_block_13_6 (x=69.9%, y=72.4%, w=8.9%, h=1.8%)
+
+#4 [Page 1] WARNING - COLLISION_FALLBACK
+Title: Page 1: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_51).. Source retained.
+Region / ID: p1_block_14 (x=58.8%, y=74.4%, w=30.3%, h=3.9%)
+
+#5 [Page 3] WARNING - COLLISION_FALLBACK
+Title: Page 3: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_4).. Source retained.
+Region / ID: p3_block_2_0 (x=11.6%, y=20.5%, w=79.4%, h=1.9%)
+
+#6 [Page 6] WARNING - COLLISION_FALLBACK
+Title: Page 6: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_6).. Source retained.
+Region / ID: p6_block_9_1 (x=48.3%, y=48.8%, w=41.5%, h=1.9%)
+
+#7 [Page 6] WARNING - COLLISION_FALLBACK
+Title: Page 6: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_7).. Source retained.
+Region / ID: p6_block_10_1 (x=43.7%, y=51.1%, w=45.2%, h=1.9%)
+
+#8 [Page 12] WARNING - COLLISION_FALLBACK
+Title: Page 12: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_11).. Source retained.
+Region / ID: p12_block_10_2 (x=28.1%, y=42.8%, w=24.4%, h=1.9%)
+
+#9 [Page 12] WARNING - COLLISION_FALLBACK
+Title: Page 12: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_13).. Source retained.
+Region / ID: p12_block_10_4 (x=56.7%, y=42.8%, w=28.9%, h=1.9%)
+
+#10 [Page 13] WARNING - COLLISION_FALLBACK
+Title: Page 13: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_6).. Source retained.
+Region / ID: p13_block_7 (x=11.6%, y=31.8%, w=78.9%, h=6.5%)
+
+#11 [Page 15] WARNING - COLLISION_FALLBACK
+Title: Page 15: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_2).. Source retained.
+Region / ID: p15_block_0 (x=8.8%, y=39.8%, w=34.5%, h=1.9%)
+
+#12 [Page 16] WARNING - COLLISION_FALLBACK
+Title: Page 16: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_9).. Source retained.
+Region / ID: p16_block_8 (x=11.6%, y=51.4%, w=79.5%, h=6.4%)
+
+#13 [Page 16] WARNING - COLLISION_FALLBACK
+Title: Page 16: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_13).. Source retained.
+Region / ID: p16_block_11 (x=11.6%, y=66.3%, w=78%, h=4.2%)
+
+#14 [Page 16] WARNING - COLLISION_FALLBACK
+Title: Page 16: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_15).. Source retained.
+Region / ID: p16_block_12_0 (x=11.6%, y=71.2%, w=61.2%, h=1.9%)
+
+#15 [Page 16] WARNING - COLLISION_FALLBACK
+Title: Page 16: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_20).. Source retained.
+Region / ID: p16_block_14 (x=11.6%, y=76.3%, w=78.2%, h=6.4%)
+
+#16 [Page 16] WARNING - COLLISION_FALLBACK
+Title: Page 16: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_24).. Source retained.
+Region / ID: p16_block_15 (x=11.6%, y=83.5%, w=73.5%, h=1.9%)
+
+#17 [Page 17] WARNING - COLLISION_FALLBACK
+Title: Page 17: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_5).. Source retained.
+Region / ID: p17_block_3 (x=11.6%, y=25.4%, w=79.1%, h=4.2%)
+
+#18 [Page 17] WARNING - COLLISION_FALLBACK
+Title: Page 17: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_11).. Source retained.
+Region / ID: p17_block_5 (x=11.6%, y=32.8%, w=34.2%, h=1.9%)
+
+#19 [Page 17] WARNING - COLLISION_FALLBACK
+Title: Page 17: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_15).. Source retained.
+Region / ID: p17_block_6_3 (x=75.3%, y=35.5%, w=4.6%, h=1.9%)
+
+#20 [Page 17] WARNING - COLLISION_FALLBACK
+Title: Page 17: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_21).. Source retained.
+Region / ID: p17_block_8 (x=11.6%, y=45.4%, w=78.9%, h=1.9%)
+
+#21 [Page 17] WARNING - COLLISION_FALLBACK
+Title: Page 17: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_23).. Source retained.
+Region / ID: p17_block_9 (x=8.8%, y=48.7%, w=79.8%, h=1.9%)
+
+#22 [Page 17] WARNING - COLLISION_FALLBACK
+Title: Page 17: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_30).. Source retained.
+Region / ID: p17_block_11_0 (x=8.8%, y=53.3%, w=78.1%, h=1.9%)
+
+#23 [Page 17] WARNING - COLLISION_FALLBACK
+Title: Page 17: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_34).. Source retained.
+Region / ID: p17_block_12 (x=8.8%, y=55.6%, w=47.5%, h=1.9%)
+
+#24 [Page 17] WARNING - COLLISION_FALLBACK
+Title: Page 17: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_137).. Source retained.
+Region / ID: p17_block_22 (x=29.9%, y=88.8%, w=35.8%, h=1.8%)
+
+#25 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_3).. Source retained.
+Region / ID: p18_block_1 (x=11.6%, y=47.2%, w=74.1%, h=4.2%)
+
+#26 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_8).. Source retained.
+Region / ID: p18_block_2 (x=12.1%, y=52.2%, w=75.6%, h=1.9%)
+
+#27 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_12).. Source retained.
+Region / ID: p18_block_4 (x=12.1%, y=57.2%, w=56.8%, h=1.9%)
+
+#28 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_16).. Source retained.
+Region / ID: p18_block_5 (x=12.1%, y=60%, w=61.5%, h=1.9%)
+
+#29 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_20).. Source retained.
+Region / ID: p18_block_6 (x=12.1%, y=62.6%, w=63.7%, h=1.9%)
+
+#30 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_24).. Source retained.
+Region / ID: p18_block_7 (x=12.1%, y=65.3%, w=63.8%, h=1.9%)
+
+#31 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_30).. Source retained.
+Region / ID: p18_block_9_1 (x=15.9%, y=71.7%, w=42%, h=1.9%)
+
+#32 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_36).. Source retained.
+Region / ID: p18_block_12_1 (x=14.9%, y=79.4%, w=52%, h=1.9%)
+
+#33 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_38).. Source retained.
+Region / ID: p18_block_13_1 (x=28.2%, y=82.1%, w=5.6%, h=1.9%)
+
+#34 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_39).. Source retained.
+Region / ID: p18_block_13_2 (x=34.3%, y=82.1%, w=5.6%, h=1.9%)
+
+#35 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_43).. Source retained.
+Region / ID: p18_block_13_7 (x=65.6%, y=82.1%, w=5.6%, h=1.9%)
+
+#36 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_44).. Source retained.
+Region / ID: p18_block_13_8 (x=71.8%, y=82.1%, w=4.6%, h=1.9%)
+
+#37 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_104).. Source retained.
+Region / ID: p18_block_17_2_3 (x=46.4%, y=12.5%, w=5.3%, h=1.8%)
+
+#38 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_106).. Source retained.
+Region / ID: p18_block_17_2_5 (x=56%, y=12.5%, w=12.2%, h=1.8%)
+
+#39 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_107).. Source retained.
+Region / ID: p18_block_17_2_8 (x=60%, y=14.6%, w=9.3%, h=1.8%)
+
+#40 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_108).. Source retained.
+Region / ID: p18_block_17_2_10 (x=49.4%, y=16.7%, w=8.5%, h=1.8%)
+
+#41 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_112).. Source retained.
+Region / ID: p18_block_19_2_5 (x=57.7%, y=23.3%, w=13.1%, h=1.8%)
+
+#42 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_116).. Source retained.
+Region / ID: p18_block_21_2_5 (x=48.3%, y=36.1%, w=8.5%, h=1.8%)
+
+#43 [Page 18] WARNING - COLLISION_FALLBACK
+Title: Page 18: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_118).. Source retained.
+Region / ID: p18_block_22_2_2 (x=44%, y=39.3%, w=5.6%, h=1.8%)
+
+#44 [Page 19] WARNING - COLLISION_FALLBACK
+Title: Page 19: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_5).. Source retained.
+Region / ID: p19_block_2 (x=11.6%, y=55.7%, w=41.6%, h=1.9%)
+
+#45 [Page 19] WARNING - COLLISION_FALLBACK
+Title: Page 19: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_11).. Source retained.
+Region / ID: p19_block_5_0 (x=9.4%, y=64.4%, w=79.3%, h=1.9%)
+
+#46 [Page 19] WARNING - COLLISION_FALLBACK
+Title: Page 19: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_13).. Source retained.
+Region / ID: p19_block_5_1 (x=8.8%, y=66.7%, w=43.7%, h=1.9%)
+
+#47 [Page 19] WARNING - COLLISION_FALLBACK
+Title: Page 19: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_17).. Source retained.
+Region / ID: p19_block_6 (x=9.4%, y=70%, w=63.4%, h=1.9%)
+
+#48 [Page 19] WARNING - COLLISION_FALLBACK
+Title: Page 19: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_20).. Source retained.
+Region / ID: p19_block_7 (x=11.6%, y=73.2%, w=25.3%, h=1.9%)
+
+#49 [Page 19] WARNING - COLLISION_FALLBACK
+Title: Page 19: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_23).. Source retained.
+Region / ID: p19_block_8_1 (x=26.4%, y=75.9%, w=63.6%, h=1.9%)
+
+#50 [Page 19] WARNING - COLLISION_FALLBACK
+Title: Page 19: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_25).. Source retained.
+Region / ID: p19_block_9 (x=11.6%, y=78.2%, w=15.1%, h=1.9%)
+
+#51 [Page 19] WARNING - COLLISION_FALLBACK
+Title: Page 19: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_27).. Source retained.
+Region / ID: p19_block_10 (x=11.6%, y=80.9%, w=76%, h=1.9%)
+
+#52 [Page 19] WARNING - COLLISION_FALLBACK
+Title: Page 19: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_29).. Source retained.
+Region / ID: p19_block_11 (x=12.1%, y=83.3%, w=17.3%, h=1.9%)
+
+#53 [Page 19] WARNING - COLLISION_FALLBACK
+Title: Page 19: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_31).. Source retained.
+Region / ID: p19_block_12 (x=11.6%, y=85.9%, w=64.1%, h=1.9%)
+
+#54 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_4).. Source retained.
+Region / ID: p20_block_0 (x=11.6%, y=6.6%, w=77%, h=1.9%)
+
+#55 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_7).. Source retained.
+Region / ID: p20_block_2 (x=9.4%, y=12.2%, w=78.3%, h=1.9%)
+
+#56 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_11).. Source retained.
+Region / ID: p20_block_5 (x=9.4%, y=26.8%, w=81.2%, h=1.9%)
+
+#57 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_16).. Source retained.
+Region / ID: p20_block_6_0 (x=8.8%, y=29.1%, w=26.5%, h=1.9%)
+
+#58 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_18).. Source retained.
+Region / ID: p20_block_6_1 (x=35.9%, y=29.1%, w=16.1%, h=1.9%)
+
+#59 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_20).. Source retained.
+Region / ID: p20_block_8 (x=8.8%, y=38.5%, w=78.6%, h=1.9%)
+
+#60 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_24).. Source retained.
+Region / ID: p20_block_10 (x=11.6%, y=74.3%, w=78.4%, h=1.9%)
+
+#61 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_28).. Source retained.
+Region / ID: p20_block_12_0 (x=12.1%, y=79.4%, w=74.1%, h=1.9%)
+
+#62 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_31).. Source retained.
+Region / ID: p20_block_13 (x=11.6%, y=81.7%, w=28.8%, h=1.9%)
+
+#63 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_33).. Source retained.
+Region / ID: p20_block_14_1 (x=18.3%, y=84.4%, w=5.6%, h=1.9%)
+
+#64 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_34).. Source retained.
+Region / ID: p20_block_14_2 (x=24.5%, y=84.4%, w=4.6%, h=1.9%)
+
+#65 [Page 20] WARNING - COLLISION_FALLBACK
+Title: Page 20: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_36).. Source retained.
+Region / ID: p20_block_14_5 (x=77.4%, y=84.4%, w=5.6%, h=1.9%)
+
+#66 [Page 21] WARNING - COLLISION_FALLBACK
+Title: Page 21: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_4).. Source retained.
+Region / ID: p21_block_0_0 (x=9.4%, y=6.6%, w=24.6%, h=1.9%)
+
+#67 [Page 21] WARNING - COLLISION_FALLBACK
+Title: Page 21: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_6).. Source retained.
+Region / ID: p21_block_1 (x=8.8%, y=9%, w=82.1%, h=4.2%)
+
+#68 [Page 21] WARNING - COLLISION_FALLBACK
+Title: Page 21: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_9).. Source retained.
+Region / ID: p21_block_2 (x=8.8%, y=14.5%, w=78.5%, h=4.2%)
+
+#69 [Page 21] WARNING - COLLISION_FALLBACK
+Title: Page 21: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_10).. Source retained.
+Region / ID: p21_block_3 (x=9.4%, y=20%, w=79.2%, h=1.9%)
+
+#70 [Page 21] WARNING - COLLISION_FALLBACK
+Title: Page 21: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_11).. Source retained.
+Region / ID: p21_block_4_0 (x=8.8%, y=22.4%, w=21.2%, h=1.9%)
+
+#71 [Page 21] WARNING - COLLISION_FALLBACK
+Title: Page 21: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_13).. Source retained.
+Region / ID: p21_block_4_2 (x=34.3%, y=22.3%, w=21%, h=1.9%)
+
+#72 [Page 21] WARNING - COLLISION_FALLBACK
+Title: Page 21: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_16).. Source retained.
+Region / ID: p21_block_9 (x=9.4%, y=49.1%, w=80.5%, h=1.9%)
+
+#73 [Page 21] WARNING - COLLISION_FALLBACK
+Title: Page 21: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_19).. Source retained.
+Region / ID: p21_block_11_0 (x=9.4%, y=54.7%, w=49.7%, h=1.9%)
+
+#74 [Page 21] WARNING - COLLISION_FALLBACK
+Title: Page 21: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_22).. Source retained.
+Region / ID: p21_block_11_3 (x=73.2%, y=54.7%, w=17.3%, h=1.9%)
+
+#75 [Page 21] WARNING - COLLISION_FALLBACK
+Title: Page 21: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_30).. Source retained.
+Region / ID: p21_block_14_0 (x=8.8%, y=65.7%, w=27.8%, h=1.9%)
+
+#76 [Page 21] WARNING - COLLISION_FALLBACK
+Title: Page 21: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_32).. Source retained.
+Region / ID: p21_block_14_2 (x=39.2%, y=65.7%, w=25.8%, h=1.9%)
+
+#77 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_5).. Source retained.
+Region / ID: p22_block_1_3 (x=29.1%, y=24.9%, w=37.5%, h=1.9%)
+
+#78 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_6).. Source retained.
+Region / ID: p22_block_1_4 (x=67.2%, y=24.9%, w=22.9%, h=1.9%)
+
+#79 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_9).. Source retained.
+Region / ID: p22_block_4 (x=11.6%, y=37.1%, w=78.7%, h=4.2%)
+
+#80 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_10).. Source retained.
+Region / ID: p22_block_5 (x=11.6%, y=41.8%, w=76.3%, h=4.2%)
+
+#81 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_13).. Source retained.
+Region / ID: p22_block_6 (x=11.6%, y=46.8%, w=76.4%, h=1.9%)
+
+#82 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_16).. Source retained.
+Region / ID: p22_block_7 (x=11.6%, y=49.1%, w=57.8%, h=1.9%)
+
+#83 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_18).. Source retained.
+Region / ID: p22_block_9_0 (x=9.4%, y=58.5%, w=78.7%, h=1.9%)
+
+#84 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_22).. Source retained.
+Region / ID: p22_block_9_3 (x=24.5%, y=60.8%, w=52.4%, h=1.9%)
+
+#85 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_23).. Source retained.
+Region / ID: p22_block_10 (x=9.4%, y=64.1%, w=36.6%, h=1.9%)
+
+#86 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_25).. Source retained.
+Region / ID: p22_block_11 (x=9.4%, y=67.3%, w=78.4%, h=1.9%)
+
+#87 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_29).. Source retained.
+Region / ID: p22_block_12_0 (x=8.8%, y=69.7%, w=40%, h=1.9%)
+
+#88 [Page 22] WARNING - COLLISION_FALLBACK
+Title: Page 22: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_32).. Source retained.
+Region / ID: p22_block_12_4 (x=62.1%, y=69.7%, w=4.2%, h=1.9%)
+
+#89 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_2).. Source retained.
+Region / ID: p23_block_0_0 (x=9.4%, y=28.6%, w=37.8%, h=1.9%)
+
+#90 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_5).. Source retained.
+Region / ID: p23_block_0_1 (x=47.7%, y=28.6%, w=5.7%, h=1.9%)
+
+#91 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_7).. Source retained.
+Region / ID: p23_block_1 (x=8.8%, y=31%, w=79.1%, h=1.9%)
+
+#92 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_8).. Source retained.
+Region / ID: p23_block_3 (x=9.4%, y=36.5%, w=81.7%, h=1.9%)
+
+#93 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_11).. Source retained.
+Region / ID: p23_block_4 (x=9.4%, y=38.8%, w=77.3%, h=1.9%)
+
+#94 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_14).. Source retained.
+Region / ID: p23_block_5 (x=8.8%, y=41.2%, w=78.6%, h=4.2%)
+
+#95 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_16).. Source retained.
+Region / ID: p23_block_7 (x=9.4%, y=76.4%, w=61.8%, h=1.9%)
+
+#96 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_46).. Source retained.
+Region / ID: p23_block_10_0_0 (x=10.2%, y=12%, w=13.9%, h=1.8%)
+
+#97 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_47).. Source retained.
+Region / ID: p23_block_10_1_1 (x=28.6%, y=12%, w=29.9%, h=1.8%)
+
+#98 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_49).. Source retained.
+Region / ID: p23_block_11_0_0 (x=10.2%, y=15.3%, w=14.9%, h=1.8%)
+
+#99 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_50).. Source retained.
+Region / ID: p23_block_11_1_1 (x=28.6%, y=15.3%, w=29.9%, h=1.8%)
+
+#100 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_52).. Source retained.
+Region / ID: p23_block_12_0_0 (x=10.2%, y=18.6%, w=13.9%, h=1.8%)
+
+#101 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_53).. Source retained.
+Region / ID: p23_block_12_1_1 (x=28.1%, y=18.6%, w=42.6%, h=3.9%)
+
+#102 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_55).. Source retained.
+Region / ID: p23_block_13_0_0 (x=10.2%, y=24%, w=14.9%, h=1.8%)
+
+#103 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_56).. Source retained.
+Region / ID: p23_block_13_1_1 (x=28.6%, y=24%, w=29.9%, h=1.8%)
+
+#104 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_117).. Source retained.
+Region / ID: p23_block_16_2_3 (x=46.6%, y=58.5%, w=8.9%, h=1.8%)
+
+#105 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_121).. Source retained.
+Region / ID: p23_block_17_2_2 (x=40.3%, y=61.8%, w=31.9%, h=1.8%)
+
+#106 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_124).. Source retained.
+Region / ID: p23_block_18_2_2 (x=40.3%, y=65.2%, w=31.9%, h=1.8%)
+
+#107 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_127).. Source retained.
+Region / ID: p23_block_19_2_2 (x=40.3%, y=68.4%, w=31.9%, h=1.8%)
+
+#108 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_130).. Source retained.
+Region / ID: p23_block_20_2_2 (x=40.3%, y=71.7%, w=31.9%, h=1.8%)
+
+#109 [Page 23] WARNING - COLLISION_FALLBACK
+Title: Page 23: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_160).. Source retained.
+Region / ID: p23_block_22_2_4 (x=34.5%, y=88.2%, w=8.9%, h=3.9%)
+
+#110 [Page 24] WARNING - COLLISION_FALLBACK
+Title: Page 24: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_190).. Source retained.
+Region / ID: p24_block_2_3_5 (x=65.9%, y=15.8%, w=23.4%, h=1.8%)
+
+#111 [Page 24] WARNING - COLLISION_FALLBACK
+Title: Page 24: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_206).. Source retained.
+Region / ID: p24_block_10_2_2 (x=65.9%, y=36.5%, w=22.3%, h=1.8%)
+
+#112 [Page 24] WARNING - COLLISION_FALLBACK
+Title: Page 24: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_233).. Source retained.
+Region / ID: p24_block_22_2_2 (x=34.5%, y=79.7%, w=26%, h=3.9%)
+
+#113 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_6).. Source retained.
+Region / ID: p25_block_1 (x=8.8%, y=10.4%, w=68.6%, h=1.9%)
+
+#114 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_9).. Source retained.
+Region / ID: p25_block_3 (x=8.8%, y=22.4%, w=48.1%, h=1.9%)
+
+#115 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_10).. Source retained.
+Region / ID: p25_block_5_1 (x=8.8%, y=40.5%, w=62.3%, h=1.9%)
+
+#116 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_11).. Source retained.
+Region / ID: p25_block_5_2 (x=71.6%, y=40.5%, w=5%, h=1.9%)
+
+#117 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_12).. Source retained.
+Region / ID: p25_block_6_0 (x=8.8%, y=43.8%, w=41.6%, h=1.9%)
+
+#118 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_16).. Source retained.
+Region / ID: p25_block_6_4 (x=62.2%, y=43.8%, w=25.8%, h=1.9%)
+
+#119 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_19).. Source retained.
+Region / ID: p25_block_9_0 (x=8.8%, y=69.8%, w=13%, h=1.9%)
+
+#120 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_20).. Source retained.
+Region / ID: p25_block_9_1 (x=22.3%, y=69.8%, w=4.6%, h=1.9%)
+
+#121 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_21).. Source retained.
+Region / ID: p25_block_9_2 (x=27.5%, y=69.8%, w=4.6%, h=1.9%)
+
+#122 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_22).. Source retained.
+Region / ID: p25_block_9_3 (x=32.6%, y=69.8%, w=3.5%, h=1.9%)
+
+#123 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_27).. Source retained.
+Region / ID: p25_block_10_0 (x=8.8%, y=72.2%, w=35.7%, h=1.9%)
+
+#124 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_28).. Source retained.
+Region / ID: p25_block_10_1 (x=45%, y=72.2%, w=43.3%, h=1.9%)
+
+#125 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_29).. Source retained.
+Region / ID: p25_block_12 (x=9.4%, y=77.7%, w=81.6%, h=1.9%)
+
+#126 [Page 25] WARNING - COLLISION_FALLBACK
+Title: Page 25: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_34).. Source retained.
+Region / ID: p25_block_13 (x=8.8%, y=80%, w=16.7%, h=1.9%)
+
+#127 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_4).. Source retained.
+Region / ID: p26_block_0_0 (x=8.8%, y=6.6%, w=13.2%, h=1.9%)
+
+#128 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_7).. Source retained.
+Region / ID: p26_block_0_3 (x=30.7%, y=6.6%, w=4.6%, h=1.9%)
+
+#129 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_8).. Source retained.
+Region / ID: p26_block_0_4 (x=35.8%, y=6.6%, w=4.6%, h=1.9%)
+
+#130 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_9).. Source retained.
+Region / ID: p26_block_0_5 (x=40.9%, y=6.6%, w=5.6%, h=1.9%)
+
+#131 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_10).. Source retained.
+Region / ID: p26_block_0_6 (x=47.1%, y=6.6%, w=4.6%, h=1.9%)
+
+#132 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_13).. Source retained.
+Region / ID: p26_block_1_0 (x=8.8%, y=9%, w=49.6%, h=1.9%)
+
+#133 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_14).. Source retained.
+Region / ID: p26_block_1_1 (x=58.9%, y=9%, w=27.4%, h=1.9%)
+
+#134 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_15).. Source retained.
+Region / ID: p26_block_1_2 (x=8.8%, y=11.3%, w=64.2%, h=1.9%)
+
+#135 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_23).. Source retained.
+Region / ID: p26_block_3 (x=8.8%, y=16.9%, w=39.1%, h=1.9%)
+
+#136 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_24).. Source retained.
+Region / ID: p26_block_5 (x=9.4%, y=26.8%, w=80.9%, h=1.9%)
+
+#137 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_31).. Source retained.
+Region / ID: p26_block_8_1 (x=14.3%, y=39.1%, w=76.7%, h=1.9%)
+
+#138 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_34).. Source retained.
+Region / ID: p26_block_9_3 (x=44.1%, y=41.4%, w=18.2%, h=1.9%)
+
+#139 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_37).. Source retained.
+Region / ID: p26_block_10_0 (x=8.8%, y=43.8%, w=37%, h=1.9%)
+
+#140 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_39).. Source retained.
+Region / ID: p26_block_10_1 (x=46.4%, y=43.8%, w=33.6%, h=1.9%)
+
+#141 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_42).. Source retained.
+Region / ID: p26_block_12_0 (x=8.8%, y=49.3%, w=10.6%, h=1.9%)
+
+#142 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_43).. Source retained.
+Region / ID: p26_block_12_1 (x=20%, y=49.3%, w=69.6%, h=1.9%)
+
+#143 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_82).. Source retained.
+Region / ID: p26_block_16_1_1 (x=45.9%, y=76.3%, w=4.3%, h=1.8%)
+
+#144 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_84).. Source retained.
+Region / ID: p26_block_17_0_0 (x=10.7%, y=79.6%, w=31.6%, h=1.8%)
+
+#145 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_88).. Source retained.
+Region / ID: p26_block_18_0_0 (x=10.7%, y=83%, w=17.8%, h=1.8%)
+
+#146 [Page 26] WARNING - COLLISION_FALLBACK
+Title: Page 26: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_90).. Source retained.
+Region / ID: p26_block_19_0_0 (x=10.7%, y=86.3%, w=18.2%, h=1.8%)
+
+#147 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_3).. Source retained.
+Region / ID: p27_block_1_1 (x=41.5%, y=51%, w=17.9%, h=1.9%)
+
+#148 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_6).. Source retained.
+Region / ID: p27_block_2 (x=11.6%, y=53.7%, w=62.4%, h=1.9%)
+
+#149 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_8).. Source retained.
+Region / ID: p27_block_3_1 (x=23.5%, y=56.5%, w=62.4%, h=1.9%)
+
+#150 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_16).. Source retained.
+Region / ID: p27_block_6_0 (x=11.6%, y=64.6%, w=45.9%, h=1.9%)
+
+#151 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_18).. Source retained.
+Region / ID: p27_block_6_2 (x=61.7%, y=64.5%, w=26.9%, h=1.9%)
+
+#152 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_19).. Source retained.
+Region / ID: p27_block_6_3 (x=11.6%, y=66.9%, w=28.2%, h=1.9%)
+
+#153 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_108).. Source retained.
+Region / ID: p27_block_17_1_2 (x=50.7%, y=27%, w=4.3%, h=1.8%)
+
+#154 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_110).. Source retained.
+Region / ID: p27_block_18_0_0 (x=10.7%, y=30.2%, w=23.7%, h=1.8%)
+
+#155 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_114).. Source retained.
+Region / ID: p27_block_19_0_0 (x=10.7%, y=33.6%, w=27.7%, h=1.8%)
+
+#156 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_116).. Source retained.
+Region / ID: p27_block_19_1_1 (x=52.9%, y=33.6%, w=7.6%, h=1.8%)
+
+#157 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_118).. Source retained.
+Region / ID: p27_block_20_0_1 (x=18.3%, y=36.8%, w=4.3%, h=1.8%)
+
+#158 [Page 27] WARNING - COLLISION_FALLBACK
+Title: Page 27: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_121).. Source retained.
+Region / ID: p27_block_21_1_1 (x=45.9%, y=40.2%, w=10.8%, h=1.8%)
+
+#159 [Page 30] WARNING - COLLISION_FALLBACK
+Title: Page 30: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_3).. Source retained.
+Region / ID: p30_block_0_3 (x=43.5%, y=6.6%, w=6.7%, h=1.9%)
+
+#160 [Page 30] WARNING - COLLISION_FALLBACK
+Title: Page 30: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_4).. Source retained.
+Region / ID: p30_block_0_4 (x=50.7%, y=6.6%, w=6.7%, h=1.9%)
+
+#161 [Page 30] WARNING - COLLISION_FALLBACK
+Title: Page 30: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_7).. Source retained.
+Region / ID: p30_block_1 (x=8.8%, y=9%, w=54.8%, h=1.9%)
+
+#162 [Page 30] WARNING - COLLISION_FALLBACK
+Title: Page 30: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_85).. Source retained.
+Region / ID: p30_block_14_2_2 (x=38.5%, y=20.8%, w=12.9%, h=1.8%)
+
+#163 [Page 30] WARNING - COLLISION_FALLBACK
+Title: Page 30: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_86).. Source retained.
+Region / ID: p30_block_15_2_2 (x=38.5%, y=24.2%, w=31.4%, h=1.8%)
+
+#164 [Page 30] WARNING - COLLISION_FALLBACK
+Title: Page 30: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_87).. Source retained.
+Region / ID: p30_block_16_2_2 (x=38%, y=27.4%, w=11.9%, h=1.8%)
+
+#165 [Page 30] WARNING - COLLISION_FALLBACK
+Title: Page 30: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_88).. Source retained.
+Region / ID: p30_block_17_2_2 (x=38.5%, y=30.7%, w=37.1%, h=1.8%)
+
+#166 [Page 30] WARNING - COLLISION_FALLBACK
+Title: Page 30: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_90).. Source retained.
+Region / ID: p30_block_18_2_2 (x=38.5%, y=34%, w=23.6%, h=1.8%)
+
+#167 [Page 30] WARNING - COLLISION_FALLBACK
+Title: Page 30: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_92).. Source retained.
+Region / ID: p30_block_20_2_2 (x=38.5%, y=40.6%, w=9.9%, h=1.8%)
+
+#168 [Page 30] WARNING - COLLISION_FALLBACK
+Title: Page 30: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_93).. Source retained.
+Region / ID: p30_block_21_2_2 (x=38%, y=43.9%, w=9.8%, h=1.8%)
+
+#169 [Page 31] WARNING - COLLISION_FALLBACK
+Title: Page 31: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_13).. Source retained.
+Region / ID: p31_block_20_0 (x=8.8%, y=79.7%, w=35%, h=1.9%)
+
+#170 [Page 31] WARNING - COLLISION_FALLBACK
+Title: Page 31: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_17).. Source retained.
+Region / ID: p31_block_20_4 (x=55.6%, y=79.7%, w=22.6%, h=1.9%)
+
+#171 [Page 32] WARNING - COLLISION_FALLBACK
+Title: Page 32: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_3).. Source retained.
+Region / ID: p32_block_0 (x=8.8%, y=6.6%, w=35%, h=1.9%)
+
+#172 [Page 32] WARNING - COLLISION_FALLBACK
+Title: Page 32: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_5).. Source retained.
+Region / ID: p32_block_1 (x=11.6%, y=9.9%, w=79.2%, h=1.9%)
+
+#173 [Page 32] WARNING - COLLISION_FALLBACK
+Title: Page 32: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_9).. Source retained.
+Region / ID: p32_block_3 (x=8.8%, y=18%, w=36%, h=1.9%)
+
+#174 [Page 32] WARNING - COLLISION_FALLBACK
+Title: Page 32: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_11).. Source retained.
+Region / ID: p32_block_4 (x=11.6%, y=21.3%, w=75.1%, h=1.9%)
+
+#175 [Page 32] WARNING - COLLISION_FALLBACK
+Title: Page 32: Layout fallback (collision_fallback)
+Detail: Collision detected (VECTOR_ART): Tight clearance region intersects forbidden vector drawing (drawing_14).. Source retained.
+Region / ID: p32_block_6 (x=8.8%, y=29.4%, w=66.9%, h=1.9%)

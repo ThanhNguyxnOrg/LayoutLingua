@@ -1,0 +1,221 @@
+"""Native Desktop Application launcher and standalone executable builder for LayoutLingua.
+
+Runs the Python PDF translation & typesetting engine together with the compiled UI
+inside a native OS desktop window (via pywebview WebView2/WebKit or native OS App host)
+without opening a web browser tab or requiring a running Vite dev server.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+from layoutlingua.server import start_server
+
+
+def _get_bundle_root() -> Path:
+    """Resolve root directory whether running from source or a PyInstaller bundle."""
+    if hasattr(sys, "_MEIPASS"):
+        return Path(getattr(sys, "_MEIPASS"))
+    return Path(__file__).resolve().parent.parent
+
+
+def _find_free_port(preferred: int = 8765) -> int:
+    """Return preferred port if available on 127.0.0.1, else pick an ephemeral free port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", preferred))
+            return preferred
+        except OSError:
+            s.bind(("127.0.0.1", 0))
+            return int(s.getsockname()[1])
+
+
+def _ensure_frontend_built(root_dir: Path) -> None:
+    """Ensure dist/index.html exists before opening the native desktop window."""
+    dist_index = root_dir / "dist" / "index.html"
+    if dist_index.is_file() or hasattr(sys, "_MEIPASS"):
+        return
+
+    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
+    if shutil.which(npm_cmd) is None:
+        return
+
+    if not (root_dir / "node_modules").is_dir():
+        print("[LayoutLingua Desktop] Installing UI dependencies...")
+        subprocess.run([npm_cmd, "install", "--legacy-peer-deps"], cwd=str(root_dir), check=False)
+
+    print("[LayoutLingua Desktop] Building production desktop UI bundle...")
+    subprocess.run([npm_cmd, "run", "build"], cwd=str(root_dir), check=True)
+
+
+def _find_native_app_host_binary() -> str | None:
+    """Locate native Edge WebView / Chromium binary for frameless --app window fallback."""
+    if sys.platform == "win32":
+        candidates = [
+            os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%LocalAppData%\Microsoft\Edge\Application\msedge.exe"),
+            os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+        ]
+        for c in candidates:
+            if os.path.isfile(c):
+                return c
+    elif sys.platform == "darwin":
+        mac_candidates = [
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        ]
+        for c in mac_candidates:
+            if os.path.isfile(c):
+                return c
+    else:
+        for name in ("microsoft-edge", "google-chrome", "chromium", "chromium-browser"):
+            found = shutil.which(name)
+            if found:
+                return found
+    return None
+
+
+def launch_desktop_app(port: int | None = None) -> int:
+    """Start the local engine and open the native LayoutLingua desktop window."""
+    root_dir = _get_bundle_root()
+    _ensure_frontend_built(root_dir)
+
+    actual_port = port or _find_free_port(8765)
+    os.environ["PYTHON_ENGINE_PORT"] = str(actual_port)
+    server = start_server(host="127.0.0.1", port=actual_port)
+    app_url = f"http://127.0.0.1:{actual_port}/"
+    window_title = "LayoutLingua — AI Document Translation Studio"
+
+    try:
+        # 1. Primary: Native OS WebView window via pywebview (WebView2 on Windows, WebKit on macOS)
+        try:
+            import webview  # type: ignore
+
+            webview.create_window(
+                title=window_title,
+                url=app_url,
+                width=1440,
+                height=920,
+                min_size=(1080, 720),
+                text_select=True,
+            )
+            webview.start()
+            return 0
+        except ImportError:
+            pass
+
+        # 2. Fallback: Standalone Native App Window (--app mode with isolated profile, no browser tabs/bar)
+        host_bin = _find_native_app_host_binary()
+        if host_bin:
+            profile_dir = Path(tempfile.gettempdir()) / "LayoutLinguaDesktopWindowProfile"
+            profile_dir.mkdir(parents=True, exist_ok=True)
+            proc = subprocess.Popen(
+                [
+                    host_bin,
+                    f"--app={app_url}",
+                    f"--user-data-dir={profile_dir}",
+                    "--window-size=1440,920",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-extensions",
+                ]
+            )
+            proc.wait()
+            return 0
+
+        print(f"[LayoutLingua Desktop] Native engine running at {app_url} (Press Ctrl+C to quit)")
+        while True:
+            time.sleep(1.0)
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        try:
+            server.shutdown()
+        except Exception:
+            pass
+
+
+def build_desktop_executable() -> int:
+    """Package LayoutLingua into a standalone native desktop executable (.exe on Windows)."""
+    root_dir = Path(__file__).resolve().parent.parent
+    _ensure_frontend_built(root_dir)
+
+    print("[LayoutLingua Desktop] Installing desktop packaging tools (pywebview, pyinstaller)...")
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "pywebview", "pyinstaller"],
+        check=True,
+    )
+
+    sep = ";" if sys.platform == "win32" else ":"
+    dist_src = root_dir / "dist"
+    res_src = root_dir / "layoutlingua" / "resources"
+    release_dir = root_dir / "release"
+    build_work_dir = root_dir / "build_desktop_tmp"
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--onedir",
+        "--windowed",
+        "--name",
+        "LayoutLingua",
+        "--distpath",
+        str(release_dir),
+        "--workpath",
+        str(build_work_dir),
+        "--add-data",
+        f"{dist_src}{sep}dist",
+        "--add-data",
+        f"{res_src}{sep}layoutlingua/resources",
+        str(root_dir / "layoutlingua" / "desktop.py"),
+    ]
+
+    print("[LayoutLingua Desktop] Building standalone native application...")
+    res = subprocess.run(cmd, cwd=str(root_dir))
+    shutil.rmtree(build_work_dir, ignore_errors=True)
+    spec_file = root_dir / "LayoutLingua.spec"
+    if spec_file.is_file():
+        spec_file.unlink()
+
+    if res.returncode == 0:
+        exe_ext = ".exe" if sys.platform == "win32" else ""
+        exe_path = release_dir / "LayoutLingua" / f"LayoutLingua{exe_ext}"
+        print(f"\n[✓] Standalone Desktop App built successfully: {exe_path}")
+    return res.returncode
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="LayoutLingua Native Desktop Application")
+    parser.add_argument(
+        "--build-exe",
+        action="store_true",
+        help="Compile a standalone native Desktop executable (release/LayoutLingua/LayoutLingua.exe).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="Optional local port for the embedded engine.",
+    )
+    args = parser.parse_args(argv)
+    if args.build_exe:
+        return build_desktop_executable()
+    return launch_desktop_app(port=args.port)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

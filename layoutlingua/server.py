@@ -1338,7 +1338,7 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
             buf = io.BytesIO()
             root_dir = Path(__file__).resolve().parent.parent
             with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                for rel_target in ("layoutlingua", "tests", "pyproject.toml", "requirements.txt", "README.md"):
+                for rel_target in ("layoutlingua", "tests", "pyproject.toml", "requirements.txt", "LayoutLingua.bat", "README.md"):
                     target_path = root_dir / rel_target
                     if target_path.is_file():
                         zf.write(target_path, arcname=rel_target)
@@ -1876,6 +1876,51 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 print(f"[LayoutLingua] Folder dialog error: {e}")
             self._send_json({"path": selected_dir or ""})
             return
+
+        # 8. Serve built Desktop UI assets from dist/ when running standalone
+        if not path.startswith("/api/"):
+            import mimetypes
+
+            base_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+            dist_dir = base_root / "dist"
+            if dist_dir.is_dir():
+                rel_req = path.lstrip("/") or "index.html"
+                candidate_file = (dist_dir / rel_req).resolve()
+                # Security guard: ensure resolved path stays inside dist_dir
+                if str(candidate_file).startswith(str(dist_dir.resolve())) and candidate_file.is_file():
+                    target_file = candidate_file
+                else:
+                    target_file = dist_dir / "index.html"
+
+                if target_file.is_file():
+                    mime_type, _ = mimetypes.guess_type(str(target_file))
+                    if target_file.suffix.lower() == ".js":
+                        mime_type = "application/javascript; charset=utf-8"
+                    elif target_file.suffix.lower() == ".css":
+                        mime_type = "text/css; charset=utf-8"
+                    elif target_file.suffix.lower() == ".html":
+                        mime_type = "text/html; charset=utf-8"
+                    elif target_file.suffix.lower() == ".svg":
+                        mime_type = "image/svg+xml"
+
+                    raw_bytes = target_file.read_bytes()
+                    if target_file.name == "index.html":
+                        html_str = raw_bytes.decode("utf-8", errors="replace")
+                        desktop_flag = "<script>window.__LAYOUTLINGUA_DESKTOP__=true;</script>"
+                        if "</head>" in html_str and "__LAYOUTLINGUA_DESKTOP__" not in html_str:
+                            html_str = html_str.replace("</head>", f"{desktop_flag}</head>", 1)
+                            raw_bytes = html_str.encode("utf-8")
+
+                    try:
+                        self.send_response(200)
+                        self._send_cors_headers()
+                        self.send_header("Content-Type", mime_type or "application/octet-stream")
+                        self.send_header("Content-Length", str(len(raw_bytes)))
+                        self.end_headers()
+                        self.wfile.write(raw_bytes)
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+                    return
 
         self._send_json({"error": f"Path not found: {path}"}, status=404)
 

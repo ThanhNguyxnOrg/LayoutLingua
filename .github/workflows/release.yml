@@ -159,7 +159,7 @@ jobs:
           }
           New-Item -ItemType Directory -Force -Path "dist-release" | Out-Null
           New-Item -ItemType Directory -Force -Path "pack-stage/LayoutLingua" | Out-Null
-          Copy-Item -Recurse -Force layoutlingua, requirements.txt, README.md, LICENSE, dist, package.json, package-lock.json, server.ts, start_app.bat, start_app.sh, src, public, index.html, vite.config.ts, tsconfig.json pack-stage/LayoutLingua/
+          Copy-Item -Recurse -Force layoutlingua, requirements.txt, README.md, LICENSE, dist, package.json, package-lock.json, server.ts, LayoutLingua.bat, start_app.bat, start_app.sh, src, public, index.html, vite.config.ts, tsconfig.json pack-stage/LayoutLingua/
           Compress-Archive -Path pack-stage/LayoutLingua -DestinationPath "dist-release/LayoutLingua-windows-x86_64.zip" -Force
 
       - uses: actions/upload-artifact@v7
@@ -198,7 +198,7 @@ jobs:
           fi
           mkdir -p dist-release
           mkdir -p dmg_stage/LayoutLingua
-          cp -r layoutlingua requirements.txt README.md LICENSE dist package.json package-lock.json server.ts start_app.bat start_app.sh src public index.html vite.config.ts tsconfig.json dmg_stage/LayoutLingua/
+          cp -r layoutlingua requirements.txt README.md LICENSE dist package.json package-lock.json server.ts LayoutLingua.bat start_app.bat start_app.sh src public index.html vite.config.ts tsconfig.json dmg_stage/LayoutLingua/
           chmod +x dmg_stage/LayoutLingua/start_app.sh
           ln -s /Applications dmg_stage/Applications
           hdiutil create -volname "LayoutLingua" -srcfolder dmg_stage -ov -format UDZO dist-release/LayoutLingua-macos-apple-silicon.dmg
@@ -239,7 +239,7 @@ jobs:
           fi
           mkdir -p dist-release
           mkdir -p pack_stage/LayoutLingua
-          cp -r layoutlingua requirements.txt README.md LICENSE dist package.json package-lock.json server.ts start_app.bat start_app.sh src public index.html vite.config.ts tsconfig.json pack_stage/LayoutLingua/
+          cp -r layoutlingua requirements.txt README.md LICENSE dist package.json package-lock.json server.ts LayoutLingua.bat start_app.bat start_app.sh src public index.html vite.config.ts tsconfig.json pack_stage/LayoutLingua/
           chmod +x pack_stage/LayoutLingua/start_app.sh
           tar -czf dist-release/LayoutLingua-linux-x86_64.tar.gz -C pack_stage LayoutLingua
 
