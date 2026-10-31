@@ -258,22 +258,47 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pywebview pyinstaller
 
-      - name: Build Standalone Linux Application
+      - name: Build Standalone Linux Desktop Application (.AppImage)
         shell: bash
         run: |
           if [ -f "package.json" ]; then
             npm ci --legacy-peer-deps
             npm run build
           fi
-          python -m layoutlingua.desktop --build-exe --onefile --output-name LayoutLingua-linux-x86_64
+
+          # 1. Build PyInstaller bundle in onedir mode for fast AppImage execution
+          python -m layoutlingua.desktop --build-exe --output-name LayoutLingua
+
+          # 2. Assemble AppDir structure
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
+
+          cp -r release/LayoutLingua/* AppDir/usr/bin/
+          cp LayoutLingua.desktop AppDir/usr/share/applications/
+          cp LayoutLingua.desktop AppDir/
+          cp public/logo.png AppDir/usr/share/icons/hicolor/512x512/apps/layoutlingua.png
+          cp public/logo.png AppDir/layoutlingua.png
+          cp public/logo.png AppDir/.DirIcon
+
+          cat << 'EOF' > AppDir/AppRun
+#!/bin/bash
+HERE="$(dirname "$(readlink -f "${0}")")"
+exec "$HERE/usr/bin/LayoutLingua" "$@"
+EOF
+          chmod +x AppDir/AppRun
+
+          # 3. Download official appimagetool and build standalone .AppImage
           mkdir -p dist-release
-          cp release/LayoutLingua-linux-x86_64 dist-release/LayoutLingua-linux-x86_64
-          chmod +x dist-release/LayoutLingua-linux-x86_64
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir dist-release/LayoutLingua-linux-x86_64.AppImage
+          chmod +x dist-release/LayoutLingua-linux-x86_64.AppImage
 
       - uses: actions/upload-artifact@v7
         with:
-          name: LayoutLingua-linux-x86_64
-          path: dist-release/LayoutLingua-linux-x86_64
+          name: LayoutLingua-linux-x86_64.AppImage
+          path: dist-release/LayoutLingua-linux-x86_64.AppImage
           if-no-files-found: error
 
   publish:

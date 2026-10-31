@@ -274,7 +274,7 @@ Download the official standalone application from [GitHub Releases](https://gith
 | **🪟 Windows** | `x86_64` | `LayoutLingua-windows-x86_64.exe` | **Direct executable**: double-click to launch immediately |
 | **🍎 macOS** | Apple Silicon (`arm64` M1/M2/M3/M4) | `LayoutLingua-macos-apple-silicon.dmg` | Open DMG, drag `LayoutLingua.app` to Applications |
 | **🍎 macOS** | Intel (`x86_64`) | `LayoutLingua-macos-intel.dmg` | Open DMG, drag `LayoutLingua.app` to Applications |
-| **🐧 Linux** | `x86_64` | `LayoutLingua-linux-x86_64` | **Native executable**: run `./LayoutLingua-linux-x86_64` |
+| **🐧 Linux** | `x86_64` | `LayoutLingua-linux-x86_64.AppImage` | **Standalone AppImage**: `chmod +x` and double-click to launch |
 
 ---
 

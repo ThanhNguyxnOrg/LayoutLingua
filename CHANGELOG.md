@@ -33,7 +33,7 @@ All notable changes to **LayoutLingua** are documented in this file.
 - **🪟 Windows (`LayoutLingua-windows-x86_64.exe`)**: Direct standalone executable file with embedded high-resolution brand icon (`icon.ico`). Double-click to launch the native desktop application immediately with zero extraction, zero terminal commands, and zero Python/Node setup requirements.
 - **🍎 macOS Apple Silicon (`LayoutLingua-macos-apple-silicon.dmg`)**: Native Apple Silicon disk image bundling `LayoutLingua.app` compiled for ARM64 (M1/M2/M3/M4 chips) with official `.icns` brand icons and standard `/Applications` drag-and-drop installer.
 - **🍎 macOS Intel (`LayoutLingua-macos-intel.dmg`)**: Native Intel Mac disk image bundling `LayoutLingua.app` compiled for x86_64 Intel Macs with official `.icns` brand icons and standard `/Applications` drag-and-drop installer.
-- **🐧 Linux (`LayoutLingua-linux-x86_64`)**: Standalone native ELF binary executable pre-configured for direct execution on any modern Linux distribution.
+- **🐧 Linux (`LayoutLingua-linux-x86_64.AppImage`)**: Standalone, portable AppImage package bundled with official desktop launcher integration and icon branding for any modern Linux distribution. Double-click to run on Ubuntu, Debian, Fedora, and Arch.
 - **🎨 Brand Identity & Iconography**: Embedded official multi-resolution icon assets (16x16 to 256x256) into binaries, application window title bars, taskbars, and browser favicons.
 
 ### 📦 Argos Offline AI Engine & Privacy

@@ -94,32 +94,44 @@ def _schedule_window_icon_setup(window_title: str) -> None:
     def _worker():
         import ctypes
         from ctypes import wintypes
+        import os
         import time
 
-        for _ in range(20):
-            time.sleep(0.3)
-            root_dir = _get_bundle_root()
-            icon_path = root_dir / "public" / "icon.ico"
-            if not icon_path.is_file():
-                icon_path = root_dir / "layoutlingua" / "resources" / "icon.ico"
-            if not icon_path.is_file():
+        root_dir = _get_bundle_root()
+        icon_path = root_dir / "public" / "icon.ico"
+        if not icon_path.is_file():
+            icon_path = root_dir / "layoutlingua" / "resources" / "icon.ico"
+        if not icon_path.is_file():
+            return
+
+        try:
+            user32 = ctypes.windll.user32
+            IMAGE_ICON = 1
+            LR_LOADFROMFILE = 0x00000010
+            WM_SETICON = 0x0080
+            ICON_SMALL = 0
+            ICON_BIG = 1
+
+            hicon_big = user32.LoadImageW(None, str(icon_path), IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
+            hicon_small = user32.LoadImageW(None, str(icon_path), IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+
+            if not hicon_big and not hicon_small:
                 return
 
-            try:
-                user32 = ctypes.windll.user32
-                IMAGE_ICON = 1
-                LR_LOADFROMFILE = 0x00000010
-                WM_SETICON = 0x0080
-                ICON_SMALL = 0
-                ICON_BIG = 1
+            current_pid = os.getpid()
+            applied = False
 
-                hicon_big = user32.LoadImageW(None, str(icon_path), IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
-                hicon_small = user32.LoadImageW(None, str(icon_path), IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
-
-                applied = False
-
-                def enum_cb(hwnd, _):
-                    nonlocal applied
+            def enum_cb(hwnd, _):
+                nonlocal applied
+                lpdw_pid = wintypes.DWORD()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(lpdw_pid))
+                if lpdw_pid.value == current_pid:
+                    if hicon_big:
+                        user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon_big)
+                    if hicon_small:
+                        user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon_small)
+                    applied = True
+                else:
                     length = user32.GetWindowTextLengthW(hwnd)
                     if length > 0:
                         buf = ctypes.create_unicode_buffer(length + 1)
@@ -130,14 +142,18 @@ def _schedule_window_icon_setup(window_title: str) -> None:
                             if hicon_small:
                                 user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon_small)
                             applied = True
-                    return True
+                return True
 
-                WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-                user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+            WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+            cb = WNDENUMPROC(enum_cb)
+
+            for _ in range(30):
+                time.sleep(0.2)
+                user32.EnumWindows(cb, 0)
                 if applied:
                     break
-            except Exception:
-                pass
+        except Exception:
+            pass
 
     import threading
     t = threading.Thread(target=_worker, daemon=True)
