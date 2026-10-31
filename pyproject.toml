@@ -43,7 +43,7 @@ all = [
     "rapidocr-onnxruntime>=1.4.0",
 ]
 desktop = [
-    "pywebview>=5.3.0",
+    "pywebview>=6.2.1",
     "pyinstaller>=6.11.0",
 ]
 dev = [
