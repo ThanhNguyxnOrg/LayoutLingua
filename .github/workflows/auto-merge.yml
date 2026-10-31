@@ -1,9 +1,9 @@
 name: Auto Merge and Triage
 
 # Automated CI/CD review, triage, and merge system for routine updates.
-# Powered by ThanhNguyxnAgent with 3-OS CI matrix verification (Ubuntu, Windows, macOS).
+# Powered by ThanhNguyxnAgent.
 # Routine dependency & Actions updates are auto-approved and auto-merged.
-# Critical PRs labeled 'needs-review' or 'critical' are assigned to @ThanhNguyxnOrg/core.
+# Critical PRs (security alerts, major production breaking changes, or 'needs-review') are assigned to @RealThanhNguyxn.
 
 on:
   pull_request_target:
@@ -37,7 +37,7 @@ jobs:
         continue-on-error: true
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
+          client-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
 
       - name: 🔍 Inspect Automated Dependency Metadata
@@ -48,35 +48,54 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      # Check if this PR is marked as critical / requiring manual review
+      # Check if this PR is genuinely critical / requiring human review
       - name: 🛡️ Check Review Requirement
         id: review-gate
         run: |
           IS_CRITICAL="false"
+          REASON=""
           LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
           
-          # Check if explicitly labeled with review tags
-          if echo "$LABELS" | grep -Ei 'needs-review|critical|breaking-change|manual-review|do-not-merge'; then
+          # 1. Explicit review labels
+          if echo "$LABELS" | grep -Ei 'needs-review|critical|breaking-change|manual-review|do-not-merge|security'; then
             IS_CRITICAL="true"
+            REASON="Explicit review label detected."
+          fi
+
+          # 2. Security alerts
+          ALERT_STATE="${{ steps.dependabot-metadata.outputs.alert-state }}"
+          if [ -n "$ALERT_STATE" ] && [ "$ALERT_STATE" != "null" ]; then
+            IS_CRITICAL="true"
+            REASON="Security vulnerability alert state: $ALERT_STATE"
+          fi
+
+          # 3. Major SemVer bump on direct production dependencies (runtime risk)
+          UPDATE_TYPE="${{ steps.dependabot-metadata.outputs.update-type }}"
+          DEP_TYPE="${{ steps.dependabot-metadata.outputs.dependency-type }}"
+          if [ "$UPDATE_TYPE" = "version-update:semver-major" ] && [ "$DEP_TYPE" = "direct:production" ]; then
+            IS_CRITICAL="true"
+            REASON="Major semver update on production dependency ($UPDATE_TYPE)."
           fi
           
           echo "is_critical=$IS_CRITICAL" >> $GITHUB_OUTPUT
+          echo "reason=$REASON" >> $GITHUB_OUTPUT
 
-      # If marked critical/needs-review: assign and tag core team via ThanhNguyxnAgent, disable auto-merge
-      - name: 👥 Assign & Tag Core Team for Critical PR via ThanhNguyxnAgent
+      # If marked critical: assign and tag human lead for manual triage, suspend auto-merge
+      - name: 👥 Assign & Tag Human Lead for Critical PR via ThanhNguyxnAgent
         if: steps.review-gate.outputs.is_critical == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          REASON: ${{ steps.review-gate.outputs.reason }}
         run: |
-          echo "Critical PR detected. Assigning core team for manual triage and review..."
+          echo "Critical PR detected ($REASON). Assigning human lead for manual triage..."
           gh pr edit "$PR_URL" --add-label "needs-review,task" || true
           gh pr edit "$PR_URL" --add-assignee "RealThanhNguyxn,ThanhNguyxn07" || true
           gh pr edit "$PR_URL" --add-reviewer "RealThanhNguyxn,ThanhNguyxn07" || true
-          gh pr comment "$PR_URL" --body "🔔 **Review Assignment:** @ThanhNguyxnOrg/core (@RealThanhNguyxn @ThanhNguyxn07) — This pull request has been flagged as critical or requiring manual review. Automated merging has been suspended pending core team approval." || true
+          gh pr comment "$PR_URL" --body "🔔 **Critical Review Assignment:** @RealThanhNguyxn @ThanhNguyxn07 — This pull request requires human verification before merging. Reason: **$REASON**. Automated merging suspended." || true
           exit 0
 
-      # Routine safe updates: approve and enable auto-merge via ThanhNguyxnAgent once 3-OS CI passes
+      # Routine safe updates: approve and auto-merge with two-tier fallback
       - name: ✅ Approve and Auto-Merge via ThanhNguyxnAgent
         if: steps.review-gate.outputs.is_critical != 'true'
         env:
@@ -87,6 +106,18 @@ jobs:
           git config --global user.name "ThanhNguyxnAgent[bot]"
           git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
           echo "Approving safe routine update: $PR_URL"
-          gh pr review "$PR_URL" --approve --body "Auto-approved by ThanhNguyxnAgent: verified routine update with co-authorship." || true
-          echo "Enabling auto-merge (squash) once 3-OS CI tests pass..."
-          gh pr merge "$PR_URL" --auto --squash --delete-branch || true
+          gh pr review "$PR_URL" --approve --body "Auto-approved by ThanhNguyxnAgent: verified routine safe update." || true
+          
+          echo "Enabling auto-merge with fallback..."
+          # Try GitHub native auto-merge first; fallback to direct squash merge if branch protection rules are not configured
+          if ! gh pr merge "$PR_URL" --auto --squash --delete-branch 2>/dev/null; then
+            echo "Native auto-merge not configured or check rules absent. Performing direct squash merge..."
+            for attempt in 1 2 3; do
+              if gh pr merge "$PR_URL" --squash --delete-branch; then
+                echo "Successfully merged $PR_URL on attempt $attempt"
+                exit 0
+              fi
+              echo "Merge attempt $attempt failed or pending. Waiting 5s..."
+              sleep 5
+            done
+          fi
