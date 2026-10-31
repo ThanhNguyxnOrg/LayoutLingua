@@ -281,11 +281,7 @@ jobs:
           cp public/logo.png AppDir/layoutlingua.png
           cp public/logo.png AppDir/.DirIcon
 
-          cat << 'EOF' > AppDir/AppRun
-#!/bin/bash
-HERE="$(dirname "$(readlink -f "${0}")")"
-exec "$HERE/usr/bin/LayoutLingua" "$@"
-EOF
+          cp AppRun AppDir/AppRun
           chmod +x AppDir/AppRun
 
           # 3. Download official appimagetool and build standalone .AppImage
