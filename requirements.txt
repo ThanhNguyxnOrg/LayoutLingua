@@ -10,4 +10,4 @@ opencv-python-headless>=5.0.0.93
 shapely>=2.0.0
 
 # Optional Scanned PDF OCR Pre-flight
-rapidocr-onnxruntime>=1.4.0
+rapidocr-onnxruntime>=1.4.4
