@@ -2,29 +2,18 @@ name: Release 3 Desktop Platforms
 
 # CI Cost & Resource Protection:
 # Heavy cross-platform runners (Windows, macOS, Linux) will ONLY run when:
-# 1. A commit message on 'main' contains a release keyword, e.g.:
+# 1. The central control plane creates a vX.Y.Z tag, e.g.:
 #      git commit -m "release: 2.0.0"
 #      git commit -m "release(core): 2.0.0"
 #      git commit -m "[release] 2.0.0"
 #      git commit -m "chore(release): 2.0.0"
 #      git commit -m "bump: 2.0.0"
-# 2. A git tag is pushed (e.g. v2.0.0)
-# 3. Manually triggered via workflow_dispatch
+# 2. This workflow builds the desktop artifacts and uploads them to the central draft release.
 #
-# Normal push commits (features, UI development, fixes, docs) skip immediately in 0 seconds.
+# Normal pushes never start platform release builds.
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - "v*"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version to release (e.g. 2.0.0). Leave empty to use __version__ in layoutlingua/_version.py"
-        required: false
-        default: ""
+  create:
 
 permissions:
   contents: write
@@ -34,20 +23,7 @@ jobs:
     name: Detect Release, Resolve Version & Tag
     runs-on: ubuntu-latest
     # Resource Guard: Skip in 0 seconds if normal commit without release keyword
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      startsWith(github.ref, 'refs/tags/v') ||
-      (
-        github.event_name == 'push' &&
-        github.actor != 'dependabot[bot]' &&
-        (
-          startsWith(github.event.head_commit.message, 'release:') ||
-          startsWith(github.event.head_commit.message, 'release(') ||
-          startsWith(github.event.head_commit.message, '[release]') ||
-          startsWith(github.event.head_commit.message, 'chore(release):') ||
-          startsWith(github.event.head_commit.message, 'bump:')
-        )
-      )
+    if: github.event.ref_type == 'tag' && startsWith(github.event.ref, 'v')
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       version: ${{ steps.check.outputs.version }}
@@ -121,21 +97,6 @@ jobs:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           INPUT_VERSION: ${{ github.event.inputs.version }}
 
-      - name: 🏷️ Auto-create and Push Tag via ThanhNguyxnAgent
-        if: steps.check.outputs.should_release == 'true' && !startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          TAG_NAME: ${{ steps.check.outputs.tag }}
-        run: |
-          git config --global user.name "ThanhNguyxnAgent[bot]"
-          git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
-          if ! git ls-remote --tags origin "refs/tags/$TAG_NAME" | grep -q "$TAG_NAME"; then
-            echo "Creating tag $TAG_NAME..."
-            git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
-            git push origin "$TAG_NAME"
-          else
-            echo "Tag $TAG_NAME already exists on remote. Proceeding to release update..."
-          fi
 
   windows:
     name: Windows (x86_64)
@@ -298,7 +259,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publish Release (All Desktop OS)
+    name: Upload Release Assets (All Desktop OS)
     needs: [check-and-tag, windows, macos, linux]
     if: needs.check-and-tag.outputs.should_release == 'true'
     runs-on: ubuntu-latest
@@ -320,63 +281,15 @@ jobs:
           path: release-artifacts
           merge-multiple: true
 
-      - name: Extract changelog for release description
-        shell: python
-        run: |
-          import re
-          from pathlib import Path
-
-          version = "${{ needs.check-and-tag.outputs.version }}"
-          body = ""
-          for p in [Path("docs/CHANGELOG.md"), Path("CHANGELOG.md")]:
-              if p.is_file():
-                  content = p.read_text(encoding="utf-8")
-                  match = re.search(rf'##\s*\[?v?{re.escape(version)}\]?.*?\n(.*?)(?=\n##\s*\[|\Z)', content, re.DOTALL)
-                  if match:
-                      body = match.group(1).strip()
-                      break
-
-          Path("release-notes.md").write_text(body, encoding="utf-8")
-          print(f"Extracted {len(body)} chars for version {version}")
-
-      - name: Publish to GitHub Releases via ThanhNguyxnAgent
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ needs.check-and-tag.outputs.tag }}
-          name: LayoutLingua ${{ needs.check-and-tag.outputs.tag }}
-          body_path: release-notes.md
-          files: release-artifacts/*
-          generate_release_notes: false
-          draft: false
-          prerelease: ${{ contains(needs.check-and-tag.outputs.tag, 'alpha') || contains(needs.check-and-tag.outputs.tag, 'beta') || contains(needs.check-and-tag.outputs.tag, 'rc') }}
-          token: ${{ steps.app-token.outputs.token }}
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-
-      - name: Sync version back to layoutlingua/_version.py and package.json if needed
-        if: github.ref == 'refs/heads/main'
-        continue-on-error: true
+      - name: Upload desktop artifacts to central draft release
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ needs.check-and-tag.outputs.tag }}
         run: |
-          python3 -c "
-          import re
-          ver = '${{ needs.check-and-tag.outputs.version }}'
-          with open('layoutlingua/_version.py', 'r') as f:
-              content = f.read()
-          content = re.sub(r'__version__\s*=\s*[\"\\\'][^\"\\\']+[\"\\\']', f'__version__ = \"{ver}\"', content)
-          with open('layoutlingua/_version.py', 'w') as f:
-              f.write(content)
-          with open('package.json', 'r') as f:
-              p = f.read()
-          p = re.sub(r'\"version\":\s*\"[^\"]+\"', f'\"version\": \"{ver}\"', p)
-          with open('package.json', 'w') as f:
-              f.write(p)
-          "
-          if ! git diff --quiet; then
-            git config --global user.name "ThanhNguyxnAgent[bot]"
-            git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
-            git add layoutlingua/_version.py package.json
-            git commit -m "chore(release): bump version to ${{ needs.check-and-tag.outputs.version }} [skip ci]"
-            git push origin main
+          shopt -s nullglob
+          assets=(release-artifacts/*)
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "::error::No desktop release artifacts were collected."
+            exit 1
           fi
+          gh release upload "$TAG" "${assets[@]}" --clobber
