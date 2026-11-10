@@ -16,7 +16,8 @@ on:
   create:
 
 permissions:
-  contents: write
+  actions: read
+  contents: read
 
 jobs:
   check-and-tag:
@@ -262,6 +263,9 @@ jobs:
     name: Publish release assets through the organization library
     needs: [check-and-tag, windows, macos, linux]
     if: needs.check-and-tag.outputs.should_release == 'true'
+    permissions:
+      actions: read
+      contents: read
     uses: ThanhNguyxnOrg/.github/.github/workflows/release-publish.yml@5c7ae3eaec9f2cc4f555561630a4c157128754d1
     with:
       tag: ${{ needs.check-and-tag.outputs.tag }}
