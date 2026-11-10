@@ -1,7 +1,7 @@
 name: Test Suite
 
-# Multi-platform CI test runner across all 3 supported desktop OS (Ubuntu, Windows, macOS).
-# Runs unit and integration regression suites to protect engine invariants.
+# Multi-platform Python CI using the organization workflow contract.
+# Keep the three supported desktop OS in the matrix for platform-specific regressions.
 
 on:
   push:
@@ -29,29 +29,19 @@ permissions:
 
 jobs:
   test:
-    name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: "pip"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pip install pytest pytest-mock
-
-      - name: Run test suite
-        run: |
-          pytest tests/ -v
+    uses: ThanhNguyxnOrg/.github/.github/workflows/ci-python.yml@efceff92eb1969fe344886c1d063497847e47026
+    with:
+      job_name: Test (${{ matrix.os }})
+      runner: ${{ matrix.os }}
+      python_version: "3.12"
+      cache: pip
+      cache_dependency_path: requirements.txt
+      install_command: >-
+        python -m pip install --upgrade pip &&
+        python -m pip install -r requirements.txt &&
+        python -m pip install pytest pytest-mock
+      test_command: pytest tests/ -v
