@@ -39,11 +39,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🤖 Generate GitHub App Token (ThanhNguyxnAgent)
+      - name: Mint repository-scoped ThanhNguyxnAgent token
         id: app-token
-        uses: actions/create-github-app-token@v3
+        uses: ThanhNguyxnOrg/.github/.github/actions/agent-token@da9d02544f60aeec92f8c851846ee3a587044beb
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
+          profile: content
+          client-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
 
       - name: 📥 Checkout Repository
@@ -51,6 +52,7 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
+          persist-credentials: true
 
       - name: 🐍 Set up Python 3.12
         uses: actions/setup-python@v7
@@ -74,15 +76,14 @@ jobs:
         run: |
           pytest -v tests/test_glossary.py
 
+      - name: Set ThanhNguyxnAgent commit identity
+        uses: ThanhNguyxnOrg/.github/.github/actions/agent-git-identity@da9d02544f60aeec92f8c851846ee3a587044beb
+
       - name: 🚀 Commit and Push Updates via ThanhNguyxnAgent
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           # Check for changes in glossary resources
           if git status --porcelain layoutlingua/resources/glossary/ | grep -q .; then
             echo "New terminology detected! Preparing commit..."
-            git config --global user.name "ThanhNguyxnAgent[bot]"
-            git config --global user.email "296222857+thanhnguyxnagent[bot]@users.noreply.github.com"
             git add layoutlingua/resources/glossary/
             
             DATE_STR=$(date -u +"%Y-%m-%d")
