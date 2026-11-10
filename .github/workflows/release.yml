@@ -14,6 +14,12 @@ name: Release 3 Desktop Platforms
 
 on:
   create:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing vX.Y.Z tag to rebuild after a failed release (no tag is created).
+        required: true
+        type: string
 
 permissions:
   actions: read
@@ -24,7 +30,7 @@ jobs:
     name: Detect Release, Resolve Version & Tag
     runs-on: ubuntu-latest
     # Resource Guard: Skip in 0 seconds if normal commit without release keyword
-    if: github.event.ref_type == 'tag' && startsWith(github.event.ref, 'v')
+    if: (github.event_name == 'create' && github.event.ref_type == 'tag' && startsWith(github.event.ref, 'v')) || github.event_name == 'workflow_dispatch'
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       version: ${{ steps.check.outputs.version }}
@@ -38,9 +44,10 @@ jobs:
           client-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
 
-      - name: Checkout repository
+      - name: Checkout the selected release tag
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           token: ${{ steps.agent-token.outputs.token }}
           fetch-depth: 0
 
@@ -50,54 +57,45 @@ jobs:
         run: |
           import os
           import re
+          import subprocess
 
-          ref = os.environ.get("GITHUB_REF", "")
-          ref_name = os.environ.get("GITHUB_REF_NAME", "")
-          event_name = os.environ.get("GITHUB_EVENT_NAME", "")
-          commit_msg = os.environ.get("COMMIT_MESSAGE", "")
-          manual_version = os.environ.get("INPUT_VERSION", "").strip()
+          event_name = os.environ.get("EVENT_NAME", "")
+          ref_name = os.environ.get("REF_NAME", "")
+          input_tag = os.environ.get("INPUT_TAG", "").strip()
 
-          version = None
-          should_release = False
-
-          # 1. Manual trigger (workflow_dispatch)
+          tag = ""
           if event_name == "workflow_dispatch":
+              tag = input_tag
+          elif event_name == "create" and ref_name.startswith("v"):
+              tag = ref_name
+
+          should_release = False
+          version = ""
+          if tag:
+              if not re.fullmatch(r"v\\d+\\.\\d+\\.\\d+(?:-[A-Za-z0-9.]+)?", tag):
+                  raise SystemExit(f"Invalid release tag: {tag}")
+              exact = subprocess.run(
+                  ["git", "describe", "--tags", "--exact-match", "HEAD"],
+                  text=True,
+                  capture_output=True,
+                  check=False,
+              )
+              if exact.returncode != 0 or exact.stdout.strip() != tag:
+                  raise SystemExit(f"Checkout is not the exact requested tag: {tag}")
+              version = tag[1:]
               should_release = True
-              if manual_version:
-                  version = manual_version.lstrip("vV")
-              else:
-                  with open("layoutlingua/_version.py", "r", encoding="utf-8") as f:
-                      m = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', f.read())
-                      if m:
-                          version = m.group(1)
+          else:
+              print("No vX.Y.Z create event or explicit recovery tag; skipping release build.")
 
-          # 2. Direct Tag push (e.g. refs/tags/v2.0.0)
-          elif ref.startswith("refs/tags/v"):
-              should_release = True
-              version = ref_name.lstrip("vV")
-
-          # 3. Push to main: check commit message keywords
-          elif event_name == "push":
-              rx = re.compile(r'(?i)^\s*(?:\[release\]\s*|release(?:\([^)]*\))?:\s*|chore\(release\):\s*|bump:\s*)(?:v)?(\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?)\b')
-              m = rx.search(commit_msg.strip())
-              if m:
-                  should_release = True
-                  version = m.group(1)
-              else:
-                  print("No release command keyword detected. Skipping release build.")
-
-          tag = f"v{version}" if version else ""
           print(f"Result: should_release={should_release}, version={version}, tag={tag}")
-
-          output_file = os.environ.get("GITHUB_OUTPUT")
-          if output_file:
-              with open(output_file, "a", encoding="utf-8") as out:
-                  out.write(f"should_release={str(should_release).lower()}\n")
-                  out.write(f"version={version or ''}\n")
-                  out.write(f"tag={tag}\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"should_release={str(should_release).lower()}\\n")
+              out.write(f"version={version}\\n")
+              out.write(f"tag={tag}\\n")
         env:
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-          INPUT_VERSION: ${{ github.event.inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
 
 
   windows:
@@ -107,6 +105,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.check-and-tag.outputs.tag }}
+          persist-credentials: false
 
       - uses: actions/setup-node@v7
         with:
@@ -129,13 +130,13 @@ jobs:
             npm run build
           }
           python -m layoutlingua.desktop --build-exe --onefile --output-name LayoutLingua-windows-x86_64
-          New-Item -ItemType Directory -Force -Path "dist-release" | Out-Null
-          Copy-Item -Force "release/LayoutLingua-windows-x86_64.exe" "dist-release/LayoutLingua-windows-x86_64.exe"
+          New-Item -ItemType Directory -Force -Path "dist/release" | Out-Null
+          Copy-Item -Force "release/LayoutLingua-windows-x86_64.exe" "dist/release/LayoutLingua-windows-x86_64.exe"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: LayoutLingua-windows-x86_64
-          path: dist-release/LayoutLingua-windows-x86_64.exe
+          name: release-assets-layoutlingua-windows-x86_64
+          path: dist/release/LayoutLingua-windows-x86_64.exe
           if-no-files-found: error
 
   macos:
@@ -176,7 +177,7 @@ jobs:
             npm run build
           fi
           python -m layoutlingua.desktop --build-exe
-          mkdir -p dist-release
+          mkdir -p dist/release
           mkdir -p dmg_stage
 
           if [ -d "release/LayoutLingua.app" ]; then
@@ -187,12 +188,12 @@ jobs:
           SetFile -a C dmg_stage 2>/dev/null || true
           ln -s /Applications dmg_stage/Applications
 
-          hdiutil create -volname "LayoutLingua" -srcfolder dmg_stage -ov -format UDZO "dist-release/LayoutLingua-macos-${{ matrix.arch }}.dmg"
+          hdiutil create -volname "LayoutLingua" -srcfolder dmg_stage -ov -format UDZO "dist/release/LayoutLingua-macos-${{ matrix.arch }}.dmg"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: LayoutLingua-macos-${{ matrix.arch }}
-          path: dist-release/LayoutLingua-macos-*.dmg
+          name: release-assets-layoutlingua-macos-${{ matrix.arch }}
+          path: dist/release/LayoutLingua-macos-*.dmg
           if-no-files-found: error
 
   linux:
@@ -202,6 +203,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.check-and-tag.outputs.tag }}
+          persist-credentials: false
 
       - uses: actions/setup-node@v7
         with:
@@ -248,16 +252,16 @@ jobs:
           chmod +x AppDir/AppRun
 
           # 3. Download official appimagetool and build standalone .AppImage
-          mkdir -p dist-release
+          mkdir -p dist/release
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
-          ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir dist-release/LayoutLingua-linux-x86_64.AppImage
-          chmod +x dist-release/LayoutLingua-linux-x86_64.AppImage
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir dist/release/LayoutLingua-linux-x86_64.AppImage
+          chmod +x dist/release/LayoutLingua-linux-x86_64.AppImage
 
       - uses: actions/upload-artifact@v7
         with:
-          name: LayoutLingua-linux-x86_64.AppImage
-          path: dist-release/LayoutLingua-linux-x86_64.AppImage
+          name: release-assets-layoutlingua-linux-x86_64
+          path: dist/release/LayoutLingua-linux-x86_64.AppImage
           if-no-files-found: error
 
   publish:
@@ -270,7 +274,7 @@ jobs:
     uses: ThanhNguyxnOrg/.github/.github/workflows/release-publish.yml@0cbda3691e1ec9695d3ede536e0b34ff1713f5f0
     with:
       tag: ${{ needs.check-and-tag.outputs.tag }}
-      artifact_pattern: LayoutLingua-*
+      artifact_pattern: release-assets-layoutlingua-*
       artifact_directory: dist/release
     secrets:
       BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
