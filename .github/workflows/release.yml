@@ -259,37 +259,14 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Upload Release Assets (All Desktop OS)
+    name: Publish release assets through the organization library
     needs: [check-and-tag, windows, macos, linux]
     if: needs.check-and-tag.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: 🤖 Generate GitHub App Token via ThanhNguyxnAgent
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.BOT_APP_ID }}
-          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
-
-      - uses: actions/checkout@v7
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Download all desktop artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: release-artifacts
-          merge-multiple: true
-
-      - name: Upload desktop artifacts to central draft release
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          TAG: ${{ needs.check-and-tag.outputs.tag }}
-        run: |
-          shopt -s nullglob
-          assets=(release-artifacts/*)
-          if [ ${#assets[@]} -eq 0 ]; then
-            echo "::error::No desktop release artifacts were collected."
-            exit 1
-          fi
-          gh release upload "$TAG" "${assets[@]}" --clobber
+    uses: ThanhNguyxnOrg/.github/.github/workflows/release-publish.yml@5c7ae3eaec9f2cc4f555561630a4c157128754d1
+    with:
+      tag: ${{ needs.check-and-tag.outputs.tag }}
+      artifact_pattern: LayoutLingua-*
+      artifact_directory: dist/release
+    secrets:
+      BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
+      BOT_PRIVATE_KEY: ${{ secrets.BOT_PRIVATE_KEY }}
