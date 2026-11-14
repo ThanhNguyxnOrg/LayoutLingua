@@ -1,0 +1,43 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "src/**"
+      - "server.ts"
+      - "vite.config.ts"
+      - "tsconfig.json"
+      - "index.html"
+      - ".github/workflows/node.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "src/**"
+      - "server.ts"
+      - "vite.config.ts"
+      - "tsconfig.json"
+      - "index.html"
+      - ".github/workflows/node.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ThanhNguyxnOrg/.github/.github/workflows/ci-node.yml@5e076fa9d590a5a7871d8c2102d51081e8d4efd2
+    with:
+      job_name: Node (Ubuntu)
+      runner: ubuntu-latest
+      node_version: "22"
+      package_manager: npm
+      cache: npm
+      cache_dependency_path: package-lock.json
+      install_dependencies: true
+      lint_command: npm run lint
+      build_command: npm run build
