@@ -133,7 +133,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "dist/release" | Out-Null
           Copy-Item -Force "release/LayoutLingua-windows-x86_64.exe" "dist/release/LayoutLingua-windows-x86_64.exe"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: release-assets-layoutlingua-windows-x86_64
           path: dist/release/LayoutLingua-windows-x86_64.exe
@@ -193,7 +193,7 @@ jobs:
 
           hdiutil create -volname "LayoutLingua" -srcfolder dmg_stage -ov -format UDZO "dist/release/LayoutLingua-macos-${{ matrix.arch }}.dmg"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: release-assets-layoutlingua-macos-${{ matrix.arch }}
           path: dist/release/LayoutLingua-macos-*.dmg
@@ -261,7 +261,7 @@ jobs:
           ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir dist/release/LayoutLingua-linux-x86_64.AppImage
           chmod +x dist/release/LayoutLingua-linux-x86_64.AppImage
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: release-assets-layoutlingua-linux-x86_64
           path: dist/release/LayoutLingua-linux-x86_64.AppImage
