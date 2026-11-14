@@ -23,7 +23,7 @@ classifiers = [
 dependencies = [
     "pymupdf>=1.25.0",
     "platformdirs>=4.12.4",
-    "ftfy>=6.2.0",
+    "ftfy>=6.3.1",
     "numpy>=2.2.6",
 ]
 
