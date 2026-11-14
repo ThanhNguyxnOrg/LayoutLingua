@@ -7,7 +7,6 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
-      - "safe-update"
     open-pull-requests-limit: 10
     versioning-strategy: increase
 
@@ -18,7 +17,6 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
-      - "safe-update"
     open-pull-requests-limit: 10
 
   # Node / Electron UI dependencies (once package.json is initialized)
@@ -28,6 +26,5 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
-      - "safe-update"
     open-pull-requests-limit: 10
     versioning-strategy: increase
