@@ -284,7 +284,7 @@ Download the official standalone application from [GitHub Releases](https://gith
 
 ### Prerequisites (Developers Only)
 - **Python** `>= 3.10`
-- **Node.js** `>= 20.0.0`
+- **Node.js** `>= 22.0.0`
 
 ### 1️⃣ Setup Environment & Dependencies
 ```bash
