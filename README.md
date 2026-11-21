@@ -157,7 +157,7 @@ LayoutLingua supports 4 distinct translation tracks designed for maximum privacy
 | 🌐 **Google Translate RPC** | Web NMT | Free • Zero Setup | Instant batching with multi-mirror fallback, 17 languages, zero API keys required. |
 | 🧠 **Google AI Studio (Gemini)** | Cloud LLM | Free/Paid Tier | **Auto-Healing 404 Deprecation**: automatically discovers newest Flash models if an older model ID is retired; supports `auto`, `gemini-2.5-flash`, `gemini-flash-latest`. |
 | 🦙 **Local LLMs & OpenAI-Compatible** | Local / Cloud | 100% Private (Local) | Zero-dependency `native_rest` fallback. Direct support for **Local Ollama** (`localhost:11434`), **LM Studio** (`localhost:1234`), DeepSeek, Groq, and OpenRouter. |
-| 📦 **Argos Translate (Offline AI)** | Local Neural | 100% Air-Gapped Offline | CTranslate2 local neural inference with zero internet connection or API keys. One-click runtime and language package download directly from Settings UI. |
+| 📦 **Argos Translate (Offline AI)** | Local Neural | 100% Air-Gapped Offline | The desktop app includes the translation runtime. Download a language pack once in Settings, then translate without internet or API keys. |
 
 > ⚡ **Live Provider Connection Test**: Click **Test Connection** in Settings to measure round-trip latency (ms) and verify formula token invariance (`<b0></b0>`) in real-time before starting translations! 🎯
 

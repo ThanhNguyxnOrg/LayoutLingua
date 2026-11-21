@@ -234,7 +234,7 @@ Queries the status of the 100% local offline neural translation engine, listing 
 - **Response**: `{ "status": "ok", "runtime_available": true, "installed_models": [...], "available_models": [...] }`
 
 ### 14. `POST /api/argos/install`
-Installs the Argos Translate offline runtime via pip into the engine virtualenv, and/or downloads and installs directional language pairs (e.g. `en -> vi`, `ja -> en`).
+Downloads and installs directional language pairs (e.g. `en -> vi`, `ja -> en`). The standalone desktop app bundles the Argos Translate runtime; only a source install can install a missing runtime via pip into the engine environment.
 
 - **Request**: `{ "install_runtime": true, "from_code": "en", "to_code": "vi" }`
 - **Response**: `{ "status": "ok", "runtime_available": true, "installed_models": [...], "route": "en -> vi", "message": "Offline package installed." }`

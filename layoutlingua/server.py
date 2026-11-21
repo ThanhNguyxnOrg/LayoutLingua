@@ -2437,7 +2437,13 @@ class LayoutLinguaHandler(BaseHTTPRequestHandler):
                 from_code = str(req_json.get("from_code") or "").strip()
                 to_code = str(req_json.get("to_code") or "").strip()
 
-                if not mgr.is_runtime_available() and install_runtime:
+                runtime_available = mgr.is_runtime_available()
+                if not runtime_available and getattr(sys, "frozen", False):
+                    raise RuntimeError(
+                        "The Argos runtime is missing from this desktop build. "
+                        "Reinstall LayoutLingua to restore offline translation."
+                    )
+                if not runtime_available and install_runtime:
                     pip_res = subprocess.run(
                         [sys.executable, "-m", "pip", "install", "argostranslate"],
                         capture_output=True,
