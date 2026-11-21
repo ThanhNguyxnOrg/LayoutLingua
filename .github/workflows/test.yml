@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-    uses: ThanhNguyxnOrg/.github/.github/workflows/ci-python.yml@dde345c28f4fc33bb49ac46e46b8adc174c24f7e
+    uses: ThanhNguyxnOrg/.github/.github/workflows/ci-python.yml@ci-v1
     with:
       job_name: Test (${{ matrix.os }})
       runner: ${{ matrix.os }}
