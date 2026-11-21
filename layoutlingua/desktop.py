@@ -250,7 +250,7 @@ def build_desktop_executable(onefile: bool = False, output_name: str | None = No
     if sys.platform.startswith("linux") or sys.platform == "win32":
         # Argos uses CPU inference; don't ship PyTorch's CUDA libraries with the app.
         subprocess.run(
-            [*pip_install, "--index-url", "https://download.pytorch.org/whl/cpu", "torch"],
+            [*pip_install, "--index-url", "https://download.pytorch.org/whl/cpu", "torch==2.14.1+cpu"],
             check=True,
         )
     subprocess.run(
