@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   verify:
-    uses: ThanhNguyxnOrg/.github/.github/workflows/ci-node.yml@5e076fa9d590a5a7871d8c2102d51081e8d4efd2
+    uses: ThanhNguyxnOrg/.github/.github/workflows/ci-node.yml@ci-v1
     with:
       job_name: Node (Ubuntu)
       runner: ubuntu-latest
