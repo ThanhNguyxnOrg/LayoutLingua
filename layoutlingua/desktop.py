@@ -245,9 +245,16 @@ def build_desktop_executable(onefile: bool = False, output_name: str | None = No
     root_dir = Path(__file__).resolve().parent.parent
     _ensure_frontend_built(root_dir)
 
-    print("[LayoutLingua Desktop] Installing desktop packaging tools (pywebview, pyinstaller)...")
+    print("[LayoutLingua Desktop] Installing desktop packaging tools and Argos Translate...")
+    pip_install = [sys.executable, "-m", "pip", "install"]
+    if sys.platform.startswith("linux") or sys.platform == "win32":
+        # Argos uses CPU inference; don't ship PyTorch's CUDA libraries with the app.
+        subprocess.run(
+            [*pip_install, "--index-url", "https://download.pytorch.org/whl/cpu", "torch==2.14.1+cpu"],
+            check=True,
+        )
     subprocess.run(
-        [sys.executable, "-m", "pip", "install", "pywebview", "pyinstaller"],
+        [*pip_install, "pywebview", "pyinstaller", "argostranslate==1.11.0"],
         check=True,
     )
 
@@ -279,6 +286,11 @@ def build_desktop_executable(onefile: bool = False, output_name: str | None = No
         "pymupdf",
         "--collect-all",
         "webview",
+        "--collect-binaries",
+        "ctranslate2",
+        # Argos uses packaged Stanza or MiniSBD sentence splitters by default.
+        "--exclude-module",
+        "spacy",
         "--hidden-import",
         "fitz",
         "--hidden-import",
@@ -332,12 +344,14 @@ def build_desktop_executable(onefile: bool = False, output_name: str | None = No
             exe_path = release_dir / f"{app_name}{exe_ext}"
         else:
             exe_path = release_dir / app_name / f"{app_name}{exe_ext}"
+        subprocess.run([str(exe_path), "--check-argos"], check=True)
         print(f"\n[OK] Standalone Desktop App built successfully: {exe_path}")
     return res.returncode
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="LayoutLingua Native Desktop Application")
+    parser.add_argument("--check-argos", action="store_true", help="Check offline runtime imports without opening a window.")
     parser.add_argument(
         "--build-exe",
         action="store_true",
@@ -361,6 +375,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional local port for the embedded engine.",
     )
     args = parser.parse_args(argv)
+    if args.check_argos:
+        from argostranslate import translate
+
+        translate.get_installed_languages()
+        return 0
     if args.build_exe:
         return build_desktop_executable(onefile=args.onefile, output_name=args.output_name)
     return launch_desktop_app(port=args.port)
