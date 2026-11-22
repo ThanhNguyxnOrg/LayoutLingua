@@ -330,3 +330,6 @@ We welcome contributions to layout algorithms, font bundles, and academic glossa
 ## 📄 License
 
 Distributed under the **[MIT License](LICENSE)**. Copyright © 2026 LayoutLingua Contributors.
+
+Source code remains MIT. Desktop builds are distributed under **AGPL-3.0** because they include PyMuPDF/MuPDF;
+see the [desktop license notice](packaging/desktop-license/NOTICE.md) (also available via `--license`).
