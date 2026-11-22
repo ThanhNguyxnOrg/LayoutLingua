@@ -303,6 +303,10 @@ def build_desktop_executable(onefile: bool = False, output_name: str | None = No
         f"{res_src}{sep}layoutlingua/resources",
     ]
 
+    for filename in ("NOTICE.md", "AGPL-3.0.txt"):
+        license_src = root_dir / "packaging" / "desktop-license" / filename
+        cmd.extend(["--add-data", f"{license_src}{sep}licenses"])
+
     public_src = root_dir / "public"
     if public_src.is_dir():
         cmd.extend(["--add-data", f"{public_src}{sep}public"])
@@ -351,6 +355,7 @@ def build_desktop_executable(onefile: bool = False, output_name: str | None = No
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="LayoutLingua Native Desktop Application")
+    parser.add_argument("--license", action="store_true", help="Print the desktop license notice and exit.")
     parser.add_argument("--check-argos", action="store_true", help="Check offline runtime imports without opening a window.")
     parser.add_argument(
         "--build-exe",
@@ -375,6 +380,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional local port for the embedded engine.",
     )
     args = parser.parse_args(argv)
+    if args.license:
+        license_dir = "licenses" if hasattr(sys, "_MEIPASS") else "packaging/desktop-license"
+        print((_get_bundle_root() / license_dir / "NOTICE.md").read_text(encoding="utf-8"), end="")
+        return 0
     if args.check_argos:
         from argostranslate import translate
 
