@@ -382,7 +382,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.license:
         license_dir = "licenses" if hasattr(sys, "_MEIPASS") else "packaging/desktop-license"
-        print((_get_bundle_root() / license_dir / "NOTICE.md").read_text(encoding="utf-8"), end="")
+        try:
+            notice = (_get_bundle_root() / license_dir / "NOTICE.md").read_text(encoding="utf-8")
+        except FileNotFoundError:
+            notice = "Desktop license notice: https://github.com/ThanhNguyxnOrg/LayoutLingua/blob/main/packaging/desktop-license/NOTICE.md\n"
+        print(notice, end="")
         return 0
     if args.check_argos:
         from argostranslate import translate

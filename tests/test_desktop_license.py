@@ -57,9 +57,9 @@ def test_license_empty_or_missing_notice(monkeypatch, capsys, tmp_path, contents
     licenses = tmp_path / "licenses"
     licenses.mkdir()
     if contents is None:
-        with pytest.raises(FileNotFoundError):
-            desktop.main(["--license"])
+        expected = "Desktop license notice: https://github.com/ThanhNguyxnOrg/LayoutLingua/blob/main/packaging/desktop-license/NOTICE.md\n"
     else:
         (licenses / "NOTICE.md").write_text(contents, encoding="utf-8")
-        assert desktop.main(["--license"]) == 0
-    assert capsys.readouterr().out == ""
+        expected = ""
+    assert desktop.main(["--license"]) == 0
+    assert capsys.readouterr().out == expected
