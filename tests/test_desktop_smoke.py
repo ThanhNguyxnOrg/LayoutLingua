@@ -11,6 +11,26 @@ import pytest
 from layoutlingua import desktop
 
 
+@pytest.mark.parametrize("dlls", [[], [("site-packages/sentencepiece.libs/runtime.dll", "sentencepiece.libs")]])
+def test_sentencepiece_hook_collects_package_and_sibling_dlls(monkeypatch, dlls):
+    datas = [("sentencepiece/package_data/nmt_nfkc.bin", "sentencepiece/package_data")]
+    binaries = [("sentencepiece/_sentencepiece.pyd", "sentencepiece")]
+    hiddenimports = ["sentencepiece._sentencepiece"]
+    collect_all = Mock(return_value=(datas, binaries, hiddenimports))
+    collect_delvewheel = Mock(return_value=(datas, binaries + dlls))
+    monkeypatch.setitem(sys.modules, "PyInstaller.utils.hooks", SimpleNamespace(
+        collect_all=collect_all,
+        collect_delvewheel_libs_directory=collect_delvewheel,
+    ))
+    hook = Path(desktop.__file__).resolve().parent.parent / "packaging" / "pyinstaller" / "hook-sentencepiece.py"
+    result = runpy.run_path(str(hook))
+    collect_all.assert_called_once_with("sentencepiece")
+    collect_delvewheel.assert_called_once_with("sentencepiece", datas=datas, binaries=binaries)
+    assert result["datas"] == datas
+    assert result["binaries"] == binaries + dlls
+    assert result["hiddenimports"] == hiddenimports
+
+
 def test_desktop_entrypoint_does_not_import_server(monkeypatch):
     original_import = builtins.__import__
 

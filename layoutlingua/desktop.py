@@ -342,6 +342,8 @@ def build_desktop_executable(onefile: bool = False, output_name: str | None = No
         str(release_dir),
         "--workpath",
         str(build_work_dir),
+        "--additional-hooks-dir",
+        str(root_dir / "packaging" / "pyinstaller"),
         "--collect-all",
         "pymupdf",
         "--collect-all",

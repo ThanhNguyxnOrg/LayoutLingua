@@ -10,7 +10,8 @@ LICENSE_DIR = Path(desktop.__file__).resolve().parent.parent / "packaging" / "de
 
 
 @pytest.mark.parametrize("platform", ["linux", "win32", "darwin"])
-def test_build_bundles_desktop_licenses(monkeypatch, platform):
+@pytest.mark.parametrize("onefile", [False, True])
+def test_build_bundles_desktop_licenses(monkeypatch, platform, onefile):
     calls = []
     monkeypatch.setattr(desktop.sys, "platform", platform)
     monkeypatch.setattr(desktop, "_ensure_frontend_built", lambda root: None)
@@ -22,8 +23,12 @@ def test_build_bundles_desktop_licenses(monkeypatch, platform):
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(desktop.subprocess, "run", run)
-    assert desktop.build_desktop_executable() == 0
+    assert desktop.build_desktop_executable(onefile=onefile) == 0
     command = next(cmd for cmd in calls if "PyInstaller" in cmd)
+    assert ("--onefile" if onefile else "--onedir") in command
+    hooks_dir = Path(command[command.index("--additional-hooks-dir") + 1])
+    assert hooks_dir == LICENSE_DIR.parent / "pyinstaller"
+    assert (hooks_dir / "hook-sentencepiece.py").is_file()
     entries = [command[i + 1] for i, arg in enumerate(command) if arg == "--add-data"]
     separator = ";" if platform == "win32" else ":"
     for filename in ("NOTICE.md", "AGPL-3.0.txt"):
