@@ -44,7 +44,7 @@ _ISO_MATH_FUNCTIONS = frozenset({
 FORMULA_FONT_PATTERN = re.compile(
     r"(?:^(?:[A-Z]{6}\+)?(?:CM[^R]|AMS|MS[AB]M|XY|MT2|MT\s*Extra|BL|RM|EU[FMX]|LA|RSFS|LINE|LCIRCLE|TeX-)"
     r"|rsfs|txsy|wasy|stmary|mathtype|cmmi|cmsy|cmex|msam|msbm|eufm|euex"
-    r"|.*Mono|.*Code|.*Ital|.*Oblique|.*Sym|.*Math)",
+    r"|.*Mono|FiraCode|CascadiaCode|SourceCodePro|.*Ital|.*Oblique|.*Sym|.*Math)",
     re.IGNORECASE,
 )
 
@@ -138,7 +138,11 @@ def _extract_prose_tokens(text: str) -> list[str]:
     # Strip standard ISO math functions and hexadecimal/radix literals with base suffix (e.g. 7fffhex, fffchex)
     t_clean = MATH_FUNC_PATTERN.sub(" ", t_clean)
     t_clean = re.sub(r"\b[0-9a-fA-F]+(?:hex|bin|oct|dec)\b", " ", t_clean)
-    raw_tokens = re.findall(r"\b[^\W\d_]{2,}\b", t_clean, re.UNICODE)
+    raw_tokens = re.findall(
+        r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\U00020000-\U000323af]+|\b[^\W\d_]{2,}\b",
+        t_clean,
+        re.UNICODE,
+    )
     valid_prose = []
     _SEQUENTIAL_VAR_RUNS = {
         "abc", "bcd", "cde", "def", "ijk", "lmn", "mno", "opq", "pqr", "rst", "stu", "uvw", "vwx", "wxy", "xyz",

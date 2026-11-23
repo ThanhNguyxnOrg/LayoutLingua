@@ -129,10 +129,14 @@ def unshield_academic_abbreviations(text: str, mapping: dict[str, str]) -> str:
 
 
 def detect_language_from_text(sample_text: str) -> str:
-    """Detect source language code across 17 languages using Unicode script ranges and stopword frequency."""
+    """Detect source language code using Unicode script ranges and stopword frequency."""
     s = (sample_text or "")[:4000]
     if not s.strip():
         return "en"
+    if re.search(r"[\u0620-\u064a\u066e-\u06d3\u06fa-\u06fc\u0750-\u077f\u08a0-\u08c9\ufb50-\ufdff\ufe70-\ufefc]", s):
+        return "ar"
+    if re.search(r"[\u05d0-\u05ea\u05ef-\u05f2\ufb1d-\ufb4f]", s):
+        return "he"
     if re.search(
         r"[ăđơưĂĐƠƯảạằắẳẵặầấẩẫậẻẽẹềếểễệỉĩịỏọồốổỗộờớởỡợủũụừứửữựỷỹỵ"
         r"ẢẠẰẮẲẴẶẦẤẨẪẬẺẼẸỀẾỂỄỆỈĨỊỎỌỒỐỔỖỘỜỚỞỠỢỦŨỤỪỨỬỮỰỶỸỴ]",
@@ -178,4 +182,3 @@ def detect_language_from_text(sample_text: str) -> str:
     if any(w in s_low for w in (" yang ", " dan ", " untuk ", " dengan ", " pada ", " dari ")):
         return "id"
     return "en"
-

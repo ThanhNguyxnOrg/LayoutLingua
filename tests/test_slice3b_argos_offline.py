@@ -52,6 +52,9 @@ class TestSlice3BArgosOffline(unittest.TestCase):
     """Test suite verifying Argos offline provider, model manager, and multilingual routing."""
 
     def setUp(self) -> None:
+        runtime_patch = patch.object(ArgosModelManager, "is_runtime_available", return_value=False)
+        runtime_patch.start()
+        self.addCleanup(runtime_patch.stop)
         self.temp_dir = tempfile.TemporaryDirectory()
         self.packages_dir = Path(self.temp_dir.name) / "packages"
         self.packages_dir.mkdir(parents=True, exist_ok=True)
@@ -278,6 +281,7 @@ class TestSlice3BArgosOffline(unittest.TestCase):
         """Verify provider raises ProviderUnavailableError when route is impossible in catalog."""
         manager = ArgosModelManager(packages_dir=self.packages_dir)
         manager.is_runtime_available = lambda: True
+        manager.list_installed_models = lambda: []
 
         provider = ArgosTranslationProvider(manager=manager)
         request = BatchTranslationRequest(

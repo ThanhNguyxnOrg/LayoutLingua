@@ -50,25 +50,26 @@ def _sanitize_translated_tokens(text: str) -> str:
 
 def _split_into_chunks(text: str, max_chars: int = _MAX_CHUNK_CHARS) -> List[str]:
     """Split long text into sentences or smaller chunks to comply with query length limits."""
+    if max_chars <= 0:
+        raise ValueError("max_chars must be positive")
     if len(text) <= max_chars:
         return [text]
 
-    sentences = re.split(r"(?<=[.!?\n])\s+", text)
+    sentences = re.split(r"(?<=[。！？；])|(?<=[.!?\n])(?=\s)", text)
     chunks: List[str] = []
-    current_chunk: List[str] = []
-    current_len = 0
-
-    for s in sentences:
-        if current_len + len(s) > max_chars and current_chunk:
-            chunks.append(" ".join(current_chunk))
-            current_chunk = [s]
-            current_len = len(s)
-        else:
-            current_chunk.append(s)
-            current_len += len(s)
-
+    current_chunk = ""
+    for sentence in sentences:
+        if len(current_chunk) + len(sentence) > max_chars and current_chunk:
+            chunks.append(current_chunk)
+            current_chunk = ""
+        while len(sentence) > max_chars:
+            breaks = list(re.finditer(r"\s+", sentence[:max_chars]))
+            end = breaks[-1].end() if breaks else max_chars
+            chunks.append(sentence[:end])
+            sentence = sentence[end:]
+        current_chunk += sentence
     if current_chunk:
-        chunks.append(" ".join(current_chunk))
+        chunks.append(current_chunk)
 
     return chunks or [text]
 
