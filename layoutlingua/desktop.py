@@ -253,7 +253,7 @@ def _smoke_test_executable(exe_path: Path, timeout: float = 180) -> None:
         try:
             try:
                 returncode = proc.wait(timeout=timeout)
-            except subprocess.TimeoutExpired as exc:
+            except BaseException as exc:
                 cleanup_error = None
                 try:
                     if sys.platform == "win32":
@@ -270,6 +270,8 @@ def _smoke_test_executable(exe_path: Path, timeout: float = 180) -> None:
                     if proc.poll() is None:
                         proc.kill()
                     proc.wait()
+                if not isinstance(exc, subprocess.TimeoutExpired):
+                    raise
                 detail = f" Process-tree cleanup failed: {cleanup_error}" if cleanup_error else ""
                 raise RuntimeError(
                     f"Offline runtime smoke test timed out after {timeout}s: {exe_path}."

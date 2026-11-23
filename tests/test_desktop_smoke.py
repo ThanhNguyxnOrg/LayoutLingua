@@ -127,3 +127,29 @@ def test_smoke_timeout_kills_real_process(tmp_path):
     executable.chmod(0o755)
     with pytest.raises(RuntimeError, match="smoke test timed out after 0.1s"):
         desktop._smoke_test_executable(executable, timeout=0.1)
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+@pytest.mark.parametrize("exception", [KeyboardInterrupt(), RuntimeError("wait failed")])
+def test_smoke_wait_exception_cleans_up_and_reraises(monkeypatch, platform, exception):
+    proc = Mock(pid=123)
+    proc.wait.side_effect = [exception, 1]
+    proc.poll.return_value = None
+    run = Mock()
+    killpg = Mock()
+    monkeypatch.setattr(desktop.sys, "platform", platform)
+    monkeypatch.setattr(desktop.subprocess, "Popen", Mock(return_value=proc))
+    monkeypatch.setattr(desktop.subprocess, "run", run)
+    monkeypatch.setattr(desktop.os, "killpg", killpg, raising=False)
+    monkeypatch.setattr(desktop.signal, "SIGKILL", 9, raising=False)
+    with pytest.raises(type(exception)) as error:
+        desktop._smoke_test_executable(Path("app"))
+    assert error.value is exception
+    proc.kill.assert_called_once_with()
+    assert proc.wait.call_count == 2
+    if platform == "win32":
+        run.assert_called_once_with(["taskkill", "/PID", "123", "/T", "/F"], check=True, timeout=30)
+        killpg.assert_not_called()
+    else:
+        killpg.assert_called_once_with(123, desktop.signal.SIGKILL)
+        run.assert_not_called()
