@@ -21,9 +21,11 @@ class LanguageRegistry:
     _STANDARD_TO_ARGOS: dict[str, str] = {
         "en": "en",
         "vi": "vi",
-        "zh-Hans": "zh",
+        "zh-hans": "zh",
         "zh": "zh",
-        "zh-Hant": "zt",
+        "zh-hant": "zt",
+        "zh-tw": "zt",
+        "zh-hk": "zt",
         "zt": "zt",
         "ja": "ja",
         "ko": "ko",
@@ -33,7 +35,7 @@ class LanguageRegistry:
         "ru": "ru",
         "it": "it",
         "pt": "pt",
-        "pt-BR": "pt",
+        "pt-br": "pt",
         "ar": "ar",
         "hi": "hi",
         "id": "id",
@@ -90,8 +92,8 @@ class LanguageRegistry:
     @classmethod
     def to_argos_code(cls, code: str) -> str:
         """Convert standard LayoutLingua language code to Argos internal code."""
-        normalized = code.strip()
-        return cls._STANDARD_TO_ARGOS.get(normalized, normalized.lower()[:2])
+        normalized = code.strip().lower()
+        return cls._STANDARD_TO_ARGOS.get(normalized, normalized[:2])
 
     @classmethod
     def from_argos_code(cls, code: str) -> str:

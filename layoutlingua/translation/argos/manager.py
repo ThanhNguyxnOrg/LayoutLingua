@@ -96,7 +96,8 @@ class ArgosModelManager:
 
     def list_available_models(self, refresh: bool = False) -> list[ArgosModelInfo]:
         """List available packages from curated manifest and dynamic index, with install flags."""
-        installed_pairs = {(m.from_code, m.to_code) for m in self.list_installed_models()}
+        installed_models = self.list_installed_models()
+        installed_pairs = {(m.from_code, m.to_code) for m in installed_models}
 
         # 1. Start with curated/pinned catalog
         available_map: dict[tuple[str, str], ArgosModelInfo] = {}
@@ -139,6 +140,9 @@ class ArgosModelManager:
                         )
             except Exception:
                 pass  # Fall back to pinned catalog on network/index failure
+
+        for model in installed_models:
+            available_map.setdefault((model.from_code, model.to_code), model)
 
         return list(available_map.values())
 
