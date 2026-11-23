@@ -37,7 +37,7 @@ All backend routes are served under `/api/*` by the LayoutLingua engine:
 Returns engine health and version metadata.
 
 ```json
-{ "status": "ok", "version": "2.1.0", "engine": "PyMuPDF" }
+{ "status": "ok", "version": "2.0.1", "engine": "PyMuPDF" }
 ```
 
 ### 2. `POST /api/upload`

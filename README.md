@@ -2,13 +2,13 @@
 
 <img src="public/logo.png" alt="LayoutLingua Logo" width="112" height="112" />
 
-# 🚀 LayoutLingua v2.0.0 🌟
+# 🚀 LayoutLingua v2.0.1 🌟
 
 ### **High-Precision Multilingual Academic & Technical PDF Translation Engine**
 *Strict Typographic Geometry Preservation 📐 • Sub-Line Formula Pinning 🧮 • 17-Language Neural Typesetting 🌍*
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.0.0-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.0.0" />
+  <img src="https://img.shields.io/badge/Version-2.0.1-0D9488?style=for-the-badge&logo=semanticrelease&logoColor=white" alt="Version 2.0.1" />
   <img src="https://img.shields.io/badge/Engine-PyMuPDF_Vector_Core-0284C7?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" alt="PyMuPDF Engine" />
   <img src="https://img.shields.io/badge/TypeScript-5.8%20Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 5.8" />
   <img src="https://img.shields.io/badge/React-19.0-149ECA?style=for-the-badge&logo=react&logoColor=white" alt="React 19" />
