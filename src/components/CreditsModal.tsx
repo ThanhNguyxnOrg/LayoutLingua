@@ -3,7 +3,7 @@ import { IconX, IconGitHub, IconBug, IconHeart } from './icons'
 
 const REPO = 'ThanhNguyxnOrg/LayoutLingua'
 const REPO_URL = `https://github.com/${REPO}`
-const APP_VERSION = '2.0.2'
+const APP_VERSION = '2.0.3'
 
 export default function CreditsModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
