@@ -98,3 +98,13 @@ All notable changes to **LayoutLingua** are documented in this file.
 
 - bundle the Argos offline runtime (#62) ([a1442c2](https://github.com/ThanhNguyxnOrg/LayoutLingua/commit/a1442c2b0b0805932f2e65b61aba710eeb88d9c6))
 
+## [2.0.2] - 2026-11-23
+
+### Bug Fixes and Performance
+
+- bound and diagnose frozen runtime smoke checks (#66) ([423f3e5](https://github.com/ThanhNguyxnOrg/LayoutLingua/commit/423f3e523978a5081dda765b35f11ba1fcd9eb1d))
+
+### Other changes
+
+- Fix multilingual prose detection, Argos routes, and translation chunking (#68) ([cf30615](https://github.com/ThanhNguyxnOrg/LayoutLingua/commit/cf306152130cdfdfb5ff4ddcae4789489e6635be))
+
