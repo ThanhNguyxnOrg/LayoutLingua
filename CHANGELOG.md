@@ -108,3 +108,9 @@ All notable changes to **LayoutLingua** are documented in this file.
 
 - Fix multilingual prose detection, Argos routes, and translation chunking (#68) ([cf30615](https://github.com/ThanhNguyxnOrg/LayoutLingua/commit/cf306152130cdfdfb5ff4ddcae4789489e6635be))
 
+## [2.0.3] - 2026-11-23
+
+### Bug Fixes and Performance
+
+- bundle sentencepiece binaries in Windows builds (#69) ([940c0cc](https://github.com/ThanhNguyxnOrg/LayoutLingua/commit/940c0cc4095bf1423223f2047abe238ae318277e))
+
