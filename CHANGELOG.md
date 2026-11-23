@@ -91,3 +91,10 @@ All notable changes to **LayoutLingua** are documented in this file.
 - Core PDF layout parser and bounding box extraction.
 - MuPDF vector rendering pipeline.
 - Cross-platform CLI with JSON-RPC stdio IPC.
+
+## [2.0.1] - 2026-11-23
+
+### Bug Fixes and Performance
+
+- bundle the Argos offline runtime (#62) ([a1442c2](https://github.com/ThanhNguyxnOrg/LayoutLingua/commit/a1442c2b0b0805932f2e65b61aba710eeb88d9c6))
+
