@@ -8,16 +8,17 @@ without opening a web browser tab or requiring a running Vite dev server.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from pathlib import Path
-
-from layoutlingua.server import start_server
 
 
 def _get_bundle_root() -> Path:
@@ -162,6 +163,8 @@ def _schedule_window_icon_setup(window_title: str) -> None:
 
 def launch_desktop_app(port: int | None = None) -> int:
     """Start the local engine and open the native LayoutLingua desktop window."""
+    from layoutlingua.server import start_server
+
     root_dir = _get_bundle_root()
     _ensure_frontend_built(root_dir)
 
@@ -238,6 +241,61 @@ def launch_desktop_app(port: int | None = None) -> int:
             server.shutdown()
         except Exception:
             pass
+
+
+def _smoke_test_executable(exe_path: Path, timeout: float = 180) -> None:
+    command = [str(exe_path), "--check-argos"]
+    print(f"[LayoutLingua Desktop] Checking offline runtime (timeout: {timeout}s)...", flush=True)
+    with tempfile.TemporaryDirectory(prefix="layoutlingua-smoke-") as directory:
+        log_path = Path(directory) / "argos.log"
+        env = {**os.environ, "LAYOUTLINGUA_SMOKE_LOG": str(log_path)}
+        proc = subprocess.Popen(command, env=env, start_new_session=sys.platform != "win32")
+        try:
+            try:
+                returncode = proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired as exc:
+                cleanup_error = None
+                try:
+                    if sys.platform == "win32":
+                        subprocess.run(
+                            ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                            check=True,
+                            timeout=30,
+                        )
+                    else:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                except (OSError, subprocess.SubprocessError) as error:
+                    cleanup_error = error
+                finally:
+                    if proc.poll() is None:
+                        proc.kill()
+                    proc.wait()
+                detail = f" Process-tree cleanup failed: {cleanup_error}" if cleanup_error else ""
+                raise RuntimeError(
+                    f"Offline runtime smoke test timed out after {timeout}s: {exe_path}."
+                    f" The smoke-test process was killed.{detail}"
+                ) from exc
+            if returncode:
+                raise subprocess.CalledProcessError(returncode, command)
+        finally:
+            if log_path.is_file():
+                print(log_path.read_text(encoding="utf-8"), end="", flush=True)
+
+
+def _check_argos() -> int:
+    log_path = os.environ.get("LAYOUTLINGUA_SMOKE_LOG")
+    with contextlib.ExitStack() as stack:
+        log = stack.enter_context(open(log_path or os.devnull, "w", encoding="utf-8"))
+        stack.enter_context(contextlib.redirect_stdout(log if log_path else sys.stdout or log))
+        stack.enter_context(contextlib.redirect_stderr(log if log_path else sys.stderr or log))
+        try:
+            from argostranslate import translate
+
+            translate.get_installed_languages()
+        except Exception:
+            traceback.print_exc()
+            return 1
+    return 0
 
 
 def build_desktop_executable(onefile: bool = False, output_name: str | None = None) -> int:
@@ -348,7 +406,7 @@ def build_desktop_executable(onefile: bool = False, output_name: str | None = No
             exe_path = release_dir / f"{app_name}{exe_ext}"
         else:
             exe_path = release_dir / app_name / f"{app_name}{exe_ext}"
-        subprocess.run([str(exe_path), "--check-argos"], check=True)
+        _smoke_test_executable(exe_path)
         print(f"\n[OK] Standalone Desktop App built successfully: {exe_path}")
     return res.returncode
 
@@ -389,10 +447,7 @@ def main(argv: list[str] | None = None) -> int:
         print(notice, end="")
         return 0
     if args.check_argos:
-        from argostranslate import translate
-
-        translate.get_installed_languages()
-        return 0
+        return _check_argos()
     if args.build_exe:
         return build_desktop_executable(onefile=args.onefile, output_name=args.output_name)
     return launch_desktop_app(port=args.port)

@@ -15,6 +15,7 @@ def test_build_bundles_desktop_licenses(monkeypatch, platform):
     monkeypatch.setattr(desktop.sys, "platform", platform)
     monkeypatch.setattr(desktop, "_ensure_frontend_built", lambda root: None)
     monkeypatch.setattr(desktop.shutil, "rmtree", lambda *args, **kwargs: None)
+    monkeypatch.setattr(desktop, "_smoke_test_executable", lambda path: None)
 
     def run(cmd, **kwargs):
         calls.append(cmd)
